@@ -7,6 +7,8 @@ import { modelRouter } from "../lib/modelRouter";
 import { runCoderAgent } from "../agents/coder";
 import { runArtAgent } from "../agents/art";
 import { eventBus } from "../lib/eventBus";
+import fs from "fs";
+import path from "path";
 import {
   type DepartmentId, type IntelligenceLevel, type TaskComplexity,
   DEPARTMENTS, getModel, getActiveSubAgents, estimateComplexity,
@@ -221,10 +223,24 @@ async function runArtistDept(
   totalTokens += artResult.usage.totalTokens;
 
   if (artResult.imageUrl) {
-    console.log("[Artist] Image URL length:", artResult.imageUrl.length, "starts with:", artResult.imageUrl.substring(0, 80));
+    let servedUrl = artResult.imageUrl;
+    // If base64, save to file and serve as static URL
+    if (artResult.imageUrl.startsWith("data:image/")) {
+      try {
+        const b64 = artResult.imageUrl.replace(/^data:image\/\w+;base64,/, "");
+        const imgDir = path.join(process.cwd(), "dist", "public", "generated");
+        if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
+        const imgName = `img_${parentJobId.slice(0, 8)}_${Date.now()}.png`;
+        fs.writeFileSync(path.join(imgDir, imgName), Buffer.from(b64, "base64"));
+        servedUrl = `/generated/${imgName}`;
+        console.log("[Artist] Image saved:", servedUrl);
+      } catch (e: any) { console.error("[Artist] Failed to save image:", e.message); }
+    }
     eventBus.emit(parentJobId, "agent_image", {
-      workerType: "artist", imageUrl: artResult.imageUrl, prompt: imagePrompt,
+      workerType: "artist", imageUrl: servedUrl, prompt: imagePrompt,
     });
+    // Also update the result so synthesis gets the small URL
+    artAgentResult.imageUrl = servedUrl;
   }
 
   eventBus.emit(parentJobId, "step_complete", {

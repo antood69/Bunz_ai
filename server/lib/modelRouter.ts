@@ -199,13 +199,12 @@ async function callOpenAIImage(opts: ChatOptions, apiKey?: string): Promise<Chat
     throw new Error(`OpenAI Images API error (${res.status}): ${errBody}`);
   }
   const data = await res.json();
-  const imageUrl = data.data?.[0]?.url || "";
   const imageB64 = data.data?.[0]?.b64_json || "";
-  if (!imageUrl && !imageB64) throw new Error("No image data in OpenAI Images API response");
+  if (!imageB64) throw new Error("No image data in OpenAI Images API response");
   return {
     content: prompt,
     type: "image",
-    imageUrl: imageUrl || `data:image/png;base64,${imageB64}`,
+    imageUrl: `data:image/png;base64,${imageB64}`,
     usage: { promptTokens: data.usage?.input_tokens || 0, completionTokens: data.usage?.output_tokens || 0, totalTokens: data.usage?.total_tokens || 0, model, provider: "openai" },
   };
 }
