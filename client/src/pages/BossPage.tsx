@@ -5,7 +5,7 @@ import {
   Loader2, CheckCircle, AlertCircle, Zap, Square, Layers,
   Paperclip, Download, Image as ImageIcon, X, Brain,
 } from "lucide-react";
-import ModelSelector from "@/components/ModelSelector";
+import IntelligencePicker, { type IntelligenceLevel } from "@/components/IntelligencePicker";
 import { useAgentStream, type WorkerStatus } from "@/hooks/useAgentStream";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -49,9 +49,11 @@ interface Conversation {
 // ─── Worker icon map ──────────────────────────────────────────────────────────
 
 const WORKER_ICONS: Record<string, React.ElementType> = {
+  research: Search,
   researcher: Search,
   coder: Code2,
   writer: FileText,
+  artist: Palette,
   analyst: BarChart3,
   reviewer: ShieldCheck,
   artgen: Palette,
@@ -62,9 +64,11 @@ const WORKER_ICONS: Record<string, React.ElementType> = {
 };
 
 const WORKER_LABELS: Record<string, string> = {
+  research: "Research Dept",
   researcher: "Researcher",
-  coder: "Coder",
-  writer: "Writer",
+  coder: "Coder Dept",
+  writer: "Writer Dept",
+  artist: "Artist Dept",
   analyst: "Analyst",
   reviewer: "Reviewer",
   artgen: "Art Gen",
@@ -124,8 +128,8 @@ function WorkflowProgress({
 }) {
   if (workers.length === 0) return null;
 
-  const isAgentDispatch = workers.some(w => ["coder", "art", "reasoning"].includes(w.type));
-  const pipelineLabel = isAgentDispatch ? "Agent Pipeline" : "Worker Pipeline";
+  const isDeptDispatch = workers.some(w => ["research", "coder", "artist", "writer"].includes(w.type));
+  const pipelineLabel = isDeptDispatch ? "Department Pipeline" : "Agent Pipeline";
 
   return (
     <div className="space-y-2 p-3 bg-card/50 border border-border rounded-xl">
@@ -645,7 +649,7 @@ export default function BossPage() {
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<{ provider: string; model: string } | null>(null);
+  const [selectedLevel, setSelectedLevel] = useState<IntelligenceLevel>("medium");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [serverConvId, setServerConvId] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<{ id: string; name: string; url: string; thumbnailUrl: string | null; mimeType: string }[]>([]);
@@ -867,7 +871,7 @@ export default function BossPage() {
           message: trimmed,
           conversationId: serverConvId || undefined,
           history,
-          ...(selectedModel ? { provider: selectedModel.provider, model: selectedModel.model } : {}),
+          level: selectedLevel,
         }),
       });
 
@@ -890,15 +894,13 @@ export default function BossPage() {
         : "";
 
       if (data.isDelegating) {
-        // Boss is dispatching to agents or delegating to workers — show planning message and connect SSE
         const planMsg: Message = {
           id: genId(),
           role: "assistant",
-          content: tierPrefix + data.reply,
+          content: data.reply,
           timestamp: new Date(),
           jobId: data.jobId,
-          workers: data.workers,
-          agentDispatches: data.agentDispatches,
+          agentDispatches: data.departments?.map((d: any) => ({ agent: d.id, task: d.task })),
           isDelegating: true,
           tokenCount: data.tokenCount,
         };
@@ -906,11 +908,11 @@ export default function BossPage() {
         setActiveJobId(data.jobId);
         // isLoading stays true until stream completes
       } else {
-        // Direct answer (may include image data)
+        // Direct answer
         const assistantMsg: Message = {
           id: genId(),
           role: "assistant",
-          content: tierPrefix + data.reply,
+          content: data.reply,
           timestamp: new Date(),
           tokenCount: data.tokenCount,
           type: data.type || "text",
@@ -1141,7 +1143,7 @@ export default function BossPage() {
             <div className="flex items-center justify-between mt-1.5 px-1">
               <p className="text-[10px] text-muted-foreground">Enter to send &middot; Shift+Enter for newline</p>
               <div className="flex items-center gap-2">
-                <ModelSelector value={selectedModel} onChange={setSelectedModel} compact />
+                <IntelligencePicker value={selectedLevel} onChange={setSelectedLevel} compact />
                 {charCount > 0 && (
                   <p className={`text-[10px] ${charCount > 2000 ? "text-destructive" : "text-muted-foreground"}`}>
                     {charCount.toLocaleString()}

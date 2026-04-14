@@ -1,5 +1,9 @@
 /**
- * Agent system index — exports all specialist agents and the dispatch function.
+ * Agent system — exports specialist agents and department types.
+ *
+ * v2: 4 departments (Research, Coder, Artist, Writer)
+ * Coder and Art have dedicated agent files with special handling.
+ * Research and Writer run through the department executor directly.
  */
 
 export { runCoderAgent, CODER_SYSTEM_PROMPT, CODER_DEFAULT_MODEL } from "./coder";
@@ -8,13 +12,11 @@ export type { CoderInput, AgentOutput } from "./coder";
 export { runArtAgent, ART_SYSTEM_PROMPT, ART_DEFAULT_MODEL } from "./art";
 export type { ArtInput, ArtOutput } from "./art";
 
-export { runReasoningAgent, REASONING_SYSTEM_PROMPT, REASONING_DEFAULT_MODEL } from "./reasoning";
-export type { ReasoningInput, ReasoningOutput } from "./reasoning";
+// Department system (v2)
+export { DEPARTMENTS, INTELLIGENCE_TIERS, detectDepartments, estimateComplexity, getModel, getActiveSubAgents } from "../departments/types";
+export type { DepartmentId, IntelligenceLevel, TaskComplexity, SubAgent, Department } from "../departments/types";
+export { executeDepartment } from "../departments/executor";
+export type { DepartmentTask, DepartmentResult, SubAgentResult } from "../departments/executor";
 
-export type AgentType = "coder" | "art" | "reasoning";
-
-export const AGENT_DEFAULTS: Record<AgentType, { model: string; label: string }> = {
-  coder: { model: "claude-sonnet-4-6", label: "Coder" },
-  art: { model: "gpt-image-1", label: "Art" },
-  reasoning: { model: "gpt-5.4", label: "Reasoning" },
-};
+// Legacy compat — some files may still reference AgentType
+export type AgentType = DepartmentId;

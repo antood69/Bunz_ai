@@ -1,73 +1,91 @@
-import type { Request, Response } from "express";
-import { createSubscriber } from "./lib/redis";
-
 /**
- * SSE endpoint handler: GET /api/agent/stream/:jobId
+ * SSE endpoint handler — uses in-memory EventBus instead of Redis pub/sub.
  *
- * Subscribes to Redis pub/sub channel `job:{jobId}:tokens` and forwards events
- * to the client as SSE. Event types: token, progress, step_complete, complete, error.
+ * GET /api/agent/stream/:jobId
+ *
+ * Subscribes to the job's event channel and forwards events to the client as SSE.
+ * Events are buffered so late-connecting clients get replay — no more dropped events.
  */
+
+import type { Request, Response } from "express";
+import { eventBus } from "./lib/eventBus";
+
 export function handleSSEStream(req: Request, res: Response) {
   const { jobId } = req.params;
   if (!jobId) {
     return res.status(400).json({ error: "jobId required" });
   }
 
+  // Check if job already completed before we even connect
+  const lastEvent = eventBus.getLastEvent(jobId);
+  if (lastEvent && ["complete", "cancelled", "error"].includes(lastEvent.event)) {
+    // Job already done — send the final state immediately and close
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.flushHeaders();
+    res.write(`event: connected\ndata: ${JSON.stringify({ jobId })}\n\n`);
+    // Subscribe will replay all buffered events including the terminal one
+    const unsub = eventBus.subscribe(jobId, (event, data) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    });
+    unsub();
+    setTimeout(() => res.end(), 100);
+    return;
+  }
+
   // Set SSE headers
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-    "X-Accel-Buffering": "no", // Disable nginx buffering
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
   });
   res.flushHeaders();
 
   // Send initial connection event
   res.write(`event: connected\ndata: ${JSON.stringify({ jobId })}\n\n`);
 
-  // Subscribe to the job's token channel
-  const subscriber = createSubscriber();
-  const channel = `job:${jobId}:tokens`;
-
-  subscriber.subscribe(channel, (err) => {
-    if (err) {
-      console.error(`[SSE] Subscribe error for ${channel}:`, err.message);
-      res.write(`event: error\ndata: ${JSON.stringify({ error: "Subscribe failed" })}\n\n`);
-      res.end();
-      return;
-    }
-  });
-
-  subscriber.on("message", (_ch: string, message: string) => {
+  // Subscribe — this replays any buffered events then listens for new ones
+  const unsub = eventBus.subscribe(jobId, (event, data) => {
     try {
-      const parsed = JSON.parse(message);
-      const eventType = parsed.event || "token";
-      const data = parsed.data || parsed;
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
-      res.write(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`);
-
-      // If this is a terminal event for the whole job, close the stream
-      if (eventType === "complete" || eventType === "cancelled" || (eventType === "error" && !data.workerType)) {
+      // Close stream on terminal events
+      if (event === "complete" || event === "cancelled" || (event === "error" && !data?.workerType)) {
         setTimeout(() => {
-          subscriber.unsubscribe(channel);
-          subscriber.quit();
+          unsub();
           res.end();
         }, 100);
       }
     } catch {
-      // Ignore malformed messages
+      // Client disconnected — clean up silently
+      unsub();
     }
   });
 
   // Heartbeat to keep connection alive
   const heartbeat = setInterval(() => {
-    res.write(`:heartbeat\n\n`);
+    try { res.write(`:heartbeat\n\n`); } catch { clearInterval(heartbeat); }
   }, 15000);
+
+  // Timeout: if job doesn't complete in 5 minutes, close the stream
+  const timeout = setTimeout(() => {
+    unsub();
+    clearInterval(heartbeat);
+    try {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: "Stream timeout — job may still be running" })}\n\n`);
+      res.end();
+    } catch {}
+  }, 5 * 60 * 1000);
 
   // Clean up on client disconnect
   req.on("close", () => {
+    unsub();
     clearInterval(heartbeat);
-    subscriber.unsubscribe(channel).catch(() => {});
-    subscriber.quit().catch(() => {});
+    clearTimeout(timeout);
   });
 }

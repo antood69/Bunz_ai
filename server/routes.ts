@@ -4,9 +4,7 @@ import { storage, sqlite } from "./storage";
 import { insertWorkflowSchema, insertAgentSchema, insertJobSchema, insertMessageSchema, insertAuditReviewSchema } from "@shared/schema";
 import { runAgentChat } from "./ai";
 import { registerStripeRoutes } from "./stripe";
-import { executeWorkflowRun } from "./orchestrator";
 import { createAuthRouter, createOwnerRouter, authMiddleware, ownerOnly, collectIntelligence } from "./auth";
-import { createMarketplaceRouter } from "./marketplace";
 import { createConnectorsRouter, createWebhookInboundRouter } from "./connectors";
 import githubRouter from "./routes/github";
 import cookieParser from "cookie-parser";
@@ -19,11 +17,7 @@ import { ART_SYSTEM_PROMPT } from "./agents/art";
 import { REASONING_SYSTEM_PROMPT } from "./agents/reasoning";
 import { classifyTier } from "./lib/tierClassifier";
 import { TIER_CREDIT_LIMITS, requireCredits, checkTokenBudget } from "./lib/rateLimiter";
-import { allQueues, QUEUE_NAMES } from "./queues";
-import { startAllWorkers } from "./workers";
-import { createBullBoard } from "@bull-board/api";
-import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
-import { ExpressAdapter } from "@bull-board/express";
+import { INTELLIGENCE_TIERS } from "./departments/types";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -40,7 +34,6 @@ export async function registerRoutes(
   app.use("/api/auth", createAuthRouter());
   app.use(authMiddleware);
   app.use("/api/owner", createOwnerRouter());
-  app.use("/api/marketplace", createMarketplaceRouter());
   app.use("/api/connectors", createConnectorsRouter());
   app.use("/api/webhooks/inbound", createWebhookInboundRouter());
   app.use("/api/github", githubRouter);
@@ -359,44 +352,27 @@ export async function registerRoutes(
     res.json(c);
   });
 
-  // === BOSS CHAT (Phase 2: orchestrator with delegation, model router, BYOK, kill switch) ===
+  // === BOSS CHAT (v2: intelligence levels + department dispatch) ===
   app.post("/api/boss/chat", requireCredits(), async (req, res) => {
-    const { message, conversationId, history, provider, model } = req.body as {
+    const { message, conversationId, history, level } = req.body as {
       message: string;
       conversationId?: string;
       history?: { role: "user" | "assistant"; content: string }[];
-      provider?: string;
-      model?: string;
+      level?: string;
     };
     if (!message) return res.status(400).json({ error: "message required" });
 
     try {
       const userId = req.user?.id || 1;
-      let encryptedApiKey: string | undefined;
-      let aiModel = model || "claude-sonnet-4-6";
-
-      // Resolve BYOK key — pass encrypted key directly to boss
-      if (provider && model) {
-        const keys = await storage.getUserApiKeys(userId);
-        const key = keys.find(k => k.provider === provider && k.isActive);
-        if (key && (key as any).encryptedKey) {
-          encryptedApiKey = (key as any).encryptedKey;
-          aiModel = model;
-        } else if (key && (key as any).apiKey) {
-          // Legacy unencrypted key — encrypt on the fly
-          encryptedApiKey = encrypt((key as any).apiKey);
-          aiModel = model;
-        }
-      }
+      const validLevels = ["entry", "medium", "max"];
+      const intelligenceLevel = validLevels.includes(level || "") ? level as any : "medium";
 
       const result = await handleBossChat({
         conversationId,
         message,
-        model: aiModel,
+        level: intelligenceLevel,
         userId,
         userEmail: req.user?.email,
-        provider,
-        encryptedApiKey,
         history: Array.isArray(history) ? history : [],
       });
 
@@ -2331,6 +2307,11 @@ Be concise, helpful, and actionable. Use plain text, not markdown.`,
     res.json(config);
   });
 
+  // === INTELLIGENCE LEVELS (v2 — replaces model picker) ===
+  app.get("/api/intelligence-levels", (_req, res) => {
+    res.json(INTELLIGENCE_TIERS);
+  });
+
   // === AGENT SYSTEM PROMPT DEFAULTS ===
   app.get("/api/agent-prompts/defaults", (_req, res) => {
     res.json({
@@ -3231,74 +3212,9 @@ Rules:
     }
   });
 
-  // === ACTIVE AGENTS (Dashboard Widget) ===
-  app.get("/api/dashboard/active-agents", async (req, res) => {
-    try {
-      const activeJobs: any[] = [];
-      for (const queue of allQueues) {
-        const jobs = await queue.getJobs(["active", "waiting", "delayed"], 0, 50);
-        for (const job of jobs) {
-          const queueName = queue.name;
-          const workerType = Object.entries(QUEUE_NAMES).find(([, v]) => v === queueName)?.[0] || "unknown";
-          activeJobs.push({
-            jobId: job.id,
-            type: workerType,
-            status: await job.getState(),
-            taskDescription: job.data?.task || job.data?.prompt || "Processing...",
-            workflowTitle: job.data?.workflowTitle || job.data?.conversationTitle || null,
-            startedAt: job.timestamp,
-            tokens: job.data?.tokenCount || 0,
-          });
-        }
-      }
-      res.json(activeJobs);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/dashboard/active-agents/:jobId/stop", async (req, res) => {
-    try {
-      for (const queue of allQueues) {
-        const job = await queue.getJob(req.params.jobId);
-        if (job) {
-          await job.moveToFailed(new Error("Stopped by user"), "0", true);
-          return res.json({ ok: true });
-        }
-      }
-      res.status(404).json({ error: "Job not found" });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/dashboard/active-agents/:jobId/clear", async (req, res) => {
-    try {
-      for (const queue of allQueues) {
-        const job = await queue.getJob(req.params.jobId);
-        if (job) {
-          await job.remove();
-          return res.json({ ok: true });
-        }
-      }
-      res.status(404).json({ error: "Job not found" });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // === BULL BOARD ADMIN ===
-  const bullBoardAdapter = new ExpressAdapter();
-  bullBoardAdapter.setBasePath("/admin/bull");
-  createBullBoard({
-    queues: allQueues.map((q) => new BullMQAdapter(q)),
-    serverAdapter: bullBoardAdapter,
-  });
-  // Mount behind auth + owner-only guard
-  app.use("/admin/bull", authMiddleware, ownerOnly, bullBoardAdapter.getRouter());
-
-  // === START WORKERS ===
-  startAllWorkers();
+  // === ACTIVE AGENTS — removed (was using deleted BullMQ queues) ===
+  // TODO: rebuild active agents dashboard using department system
 
   return httpServer;
 }
+
