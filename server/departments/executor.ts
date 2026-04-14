@@ -221,6 +221,7 @@ async function runArtistDept(
   totalTokens += artResult.usage.totalTokens;
 
   if (artResult.imageUrl) {
+    console.log("[Artist] Image URL length:", artResult.imageUrl.length, "starts with:", artResult.imageUrl.substring(0, 80));
     eventBus.emit(parentJobId, "agent_image", {
       workerType: "artist", imageUrl: artResult.imageUrl, prompt: imagePrompt,
     });

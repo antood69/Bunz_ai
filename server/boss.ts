@@ -437,7 +437,7 @@ Present each department's output clearly. For code, keep it in code blocks. For 
     let finalContent = synthesis.content;
     const imageResults = deptResults.filter(r => r.imageUrl);
     if (imageResults.length > 0) {
-      finalContent += imageResults.map(r => `<!--agent-image:${r.imageUrl}-->`).join("");
+      finalContent += "\n\n" + imageResults.map(r => `![Generated Image](${r.imageUrl})`).join("\n");
     }
 
     // Store final response
