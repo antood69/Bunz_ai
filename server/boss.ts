@@ -237,7 +237,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
             });
             eventBus.emit(parentJobId, "complete", { synthesis: finalContent, totalTokens: autoPlan.totalTokens, autonomous: true });
           })
-          .catch(err => { eventBus.emit(parentJobId, "error", { error: err.message }); })
+          .catch(async (err) => { console.error("[Autonomous] FAILED:", err.message, err.stack?.slice(0, 200)); try { await storage.createBossMessage({ id: uuidv4(), conversationId: conversationId!, role: "assistant", content: "Autonomous task failed: " + err.message, tokenCount: 0, model: null, createdAt: Date.now() }); } catch {} eventBus.emit(parentJobId, "error", { error: err.message }); eventBus.emit(parentJobId, "complete", { synthesis: "Autonomous task failed: " + err.message, totalTokens: 0 }); })
           .finally(() => activeAbortControllers.delete(conversationId!));
 
         return {

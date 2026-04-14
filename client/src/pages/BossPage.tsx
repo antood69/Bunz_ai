@@ -807,29 +807,6 @@ export default function BossPage() {
 
   // Check for completed results when returning to conversation
   useEffect(() => {
-    if (!serverConvId) return;
-    // Refetch messages in case results arrived while we were away
-    fetch(`/api/conversations/${serverConvId}/messages`)
-      .then(r => r.ok ? r.json() : [])
-      .then((msgs: any[]) => {
-        if (msgs.length > 0) {
-          const lastLocal = messages[messages.length - 1];
-          const lastServer = msgs[msgs.length - 1];
-          if (lastLocal && lastServer && lastLocal.id !== lastServer.id) {
-            // New messages arrived — add them
-            const localIds = new Set(messages.map(m => m.id));
-            const newMsgs = msgs.filter((m: any) => !localIds.has(m.id) && (m.role === "user" || m.role === "assistant"))
-              .map((m: any) => ({ id: m.id, role: m.role, content: m.content, timestamp: new Date(m.createdAt), tokenCount: m.tokenCount }));
-            if (newMsgs.length > 0) {
-              setMessages(prev => [...prev, ...newMsgs]);
-              setIsLoading(false);
-              setActiveJobId(null);
-            }
-          }
-        }
-      })
-      .catch(() => {});
-  }, [serverConvId]);
 
   // Check for running jobs on page load / conversation switch
   useEffect(() => {
