@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Workflow } from "@shared/schema";
-import SellOnMarketplace from "@/components/SellOnMarketplace";
+// SellOnMarketplace removed
 import { useAuth } from "@/hooks/useAuth";
 
 const presetIconMap: Record<string, React.ElementType> = {
@@ -265,7 +265,6 @@ export default function WorkflowsPage() {
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                      <SellOnMarketplace itemName={w.name} itemDescription={w.description || ""} listingType="workflow" attachedItemId={String(w.id)} attachedItemData={{ name: w.name, description: w.description, canvasState: (w as any).canvasState }} />
                     </div>
                   </div>
                 </div>
