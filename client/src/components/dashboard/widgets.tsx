@@ -290,14 +290,14 @@ export function QuickActionsWidget() {
             <Bot className="w-4 h-4" /> New Chat
           </Button>
         </Link>
-        <Link href="/workflows">
+        <Link href="/boss">
           <Button variant="outline" size="sm" className="w-full justify-start gap-2 bg-violet-500/5 hover:bg-violet-500/10 border-violet-500/20 text-violet-400">
-            <GitBranch className="w-4 h-4" /> New Workflow
+            <Zap className="w-4 h-4" /> Autonomous Task
           </Button>
         </Link>
-        <Link href="/fiverr">
+        <Link href="/settings">
           <Button variant="outline" size="sm" className="w-full justify-start gap-2 bg-emerald-500/5 hover:bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
-            <Briefcase className="w-4 h-4" /> New Fiverr Order
+            <Eye className="w-4 h-4" /> API Keys
           </Button>
         </Link>
       </div>
@@ -801,8 +801,8 @@ export interface WidgetDefinition {
 export const WIDGET_REGISTRY: WidgetDefinition[] = [
   { id: "kpi-agents", name: "Active Agents", description: "Shows count of currently running agents with period delta \u2014 click to manage", category: "stats", icon: Bot, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: ClickableAgentsKPI },
   { id: "kpi-tokens", name: "Tokens Used (Live)", description: "7-day token consumption with real-time updates", category: "stats", icon: Coins, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: KPICardWidget, props: { variant: "tokens" } },
-  { id: "kpi-workflows", name: "Workflows Run", description: "30-day workflow execution count with trend", category: "stats", icon: GitBranch, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: KPICardWidget, props: { variant: "workflows" } },
-  { id: "kpi-revenue", name: "Revenue", description: "This month's Fiverr revenue with delta (admin)", category: "stats", icon: DollarSign, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: KPICardWidget, props: { variant: "revenue" } },
+  { id: "kpi-workflows", name: "Tasks Run", description: "Department tasks executed (30d)", category: "stats", icon: GitBranch, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: KPICardWidget, props: { variant: "workflows" } },
+  { id: "kpi-revenue", name: "Conversations", description: "Boss conversations this month", category: "stats", icon: DollarSign, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: KPICardWidget, props: { variant: "revenue" } },
   { id: "active-workflows", name: "Active Workflows", description: "Live view of running workflows with inspect button", category: "workflows", icon: Play, defaultW: 6, defaultH: 5, minW: 4, minH: 3, component: ActiveWorkflowsWidget },
   { id: "inactive-workflows", name: "Inactive Workflows", description: "Stopped workflows with run and edit buttons", category: "workflows", icon: Clock, defaultW: 6, defaultH: 5, minW: 4, minH: 3, component: InactiveWorkflowsWidget },
   { id: "agent-status", name: "Agent Status", description: "Live status of all 7 agent types", category: "activity", icon: Cpu, defaultW: 3, defaultH: 4, minW: 2, minH: 3, component: AgentStatusListWidget },
@@ -822,11 +822,10 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
 export const DEFAULT_LAYOUT = [
   { i: "kpi-agents", x: 0, y: 0, w: 4, h: 2 },
   { i: "kpi-tokens", x: 4, y: 0, w: 4, h: 2 },
-  { i: "kpi-workflows", x: 8, y: 0, w: 4, h: 2 },
-  { i: "active-workflows", x: 0, y: 2, w: 6, h: 5 },
-  { i: "inactive-workflows", x: 6, y: 2, w: 6, h: 5 },
-  { i: "token-chart", x: 0, y: 7, w: 6, h: 4 },
-  { i: "quick-actions", x: 6, y: 7, w: 3, h: 3 },
-  { i: "system-health", x: 9, y: 7, w: 3, h: 4 },
-  { i: "upcoming-scheduled", x: 6, y: 10, w: 3, h: 3 },
+  { i: "kpi-revenue", x: 8, y: 0, w: 4, h: 2 },
+  { i: "recent-activity", x: 0, y: 2, w: 6, h: 5 },
+  { i: "token-chart", x: 6, y: 2, w: 6, h: 4 },
+  { i: "quick-actions", x: 0, y: 7, w: 4, h: 3 },
+  { i: "model-usage", x: 4, y: 7, w: 4, h: 4 },
+  { i: "system-health", x: 8, y: 7, w: 4, h: 4 },
 ];

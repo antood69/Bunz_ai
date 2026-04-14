@@ -37,8 +37,6 @@ const ICON_MAP: Record<string, React.ElementType> = {
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/boss", label: "Chat", icon: MessageSquare },
-  { href: "/workflows", label: "Visual Editor", icon: GitBranch },
-  { href: "/workshop", label: "Workshop", icon: Package },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -202,8 +200,8 @@ export default function AppLayout({ children, allowPublic = false }: { children:
             );
           })}
 
-          {/* Installed mods section */}
-          {installedMods.length > 0 && (
+          {/* Mods removed */}
+          {false && installedMods.length > 0 && (
             <>
               {!sidebarCollapsed && (
                 <div className="px-3 pt-3 pb-1">

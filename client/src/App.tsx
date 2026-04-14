@@ -6,10 +6,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
-import WorkflowsPage from "@/pages/WorkflowsPage";
 import AgentsPage from "@/pages/AgentsPage";
 import AgentChatPage from "@/pages/AgentChatPage";
-import WorkflowDetailPage from "@/pages/WorkflowDetailPage";
 import AuditPage from "@/pages/AuditPage";
 import PricingPage from "@/pages/PricingPage";
 import SettingsPage from "@/pages/SettingsPage";
@@ -22,7 +20,6 @@ import BossPage from "@/pages/BossPage";
 import CustomizationPage from "@/pages/CustomizationPage";
 import AnalyticsStubPage from "@/pages/AnalyticsStubPage";
 import NotificationsPage from "@/pages/NotificationsPage";
-import WorkshopPage from "@/pages/WorkshopPage";
 import AppLayout from "@/components/AppLayout";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -40,8 +37,8 @@ function AppRouter() {
           <Switch>
             <Route path="/" component={Dashboard} />
             <Route path="/boss" component={BossPage} />
-            <Route path="/workflows" component={WorkflowsPage} />
-            <Route path="/workflows/:id" component={WorkflowDetailPage} />
+            {/* workflows removed */}
+
             <Route path="/agents" component={AgentsPage} />
             <Route path="/agents/:id/chat" component={AgentChatPage} />
             <Route path="/audit" component={AuditPage} />
@@ -49,7 +46,7 @@ function AppRouter() {
             <Route path="/admin" component={AdminPage} />
             <Route path="/connectors" component={ConnectorsPage} />
             <Route path="/tools" component={ToolsPage} />
-            <Route path="/workshop" component={WorkshopPage} />
+
 
             {/* Redirects */}
             <Route path="/customize">{() => <Redirect to="/settings?tab=appearance" />}</Route>
