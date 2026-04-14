@@ -3403,9 +3403,9 @@ export class DatabaseStorage implements IStorage {
     const wfExecPrev = (sqlite.prepare("SELECT COUNT(*) as c FROM workflow_executions WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, sixtyDaysAgo, thirtyDaysAgo) as any)?.c || 0;
     const workflowsPrev30d = wfRunsPrev + wfExecPrev;
 
-    // Revenue this month - from fiverr_orders
-    const revenueThisMonth = (sqlite.prepare("SELECT COALESCE(SUM(COALESCE(revenue, amount, 0)), 0) as r FROM fiverr_orders WHERE user_id = ? AND status = 'delivered' AND delivered_at >= ?").get(userId, startOfMonthTs) as any)?.r || 0;
-    const revenuePrevMonth = (sqlite.prepare("SELECT COALESCE(SUM(COALESCE(revenue, amount, 0)), 0) as r FROM fiverr_orders WHERE user_id = ? AND status = 'delivered' AND delivered_at >= ? AND delivered_at < ?").get(userId, startOfPrevMonthTs, startOfMonthTs) as any)?.r || 0;
+    // Boss conversations this month
+    const revenueThisMonth = (sqlite.prepare("SELECT COUNT(*) as r FROM boss_conversations WHERE user_id = ? AND created_at >= ?").get(userId, startOfMonthTs) as any)?.r || 0;
+    const revenuePrevMonth = (sqlite.prepare("SELECT COUNT(*) as r FROM boss_conversations WHERE user_id = ? AND created_at >= ? AND created_at < ?").get(userId, startOfPrevMonthTs, startOfMonthTs) as any)?.r || 0;
 
     // Compute deltas as percentage
     const computeDelta = (curr: number, prev: number) => {

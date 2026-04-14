@@ -80,7 +80,7 @@ export function KPICardWidget({ variant, onClick }: { variant: "agents" | "token
     agents: { icon: Bot, label: "Active Agents", value: stats?.activeAgents ?? 0, delta: stats?.deltas.activeAgentsDelta ?? 0, sub: "currently running", color: "text-indigo-400", bg: "bg-indigo-500/10" },
     tokens: { icon: Coins, label: "Tokens Used (7d)", value: formatTokens(stats?.tokensUsed7d ?? 0), delta: stats?.deltas.tokensDelta ?? 0, sub: "live — last 7 days", color: "text-amber-400", bg: "bg-amber-500/10" },
     workflows: { icon: GitBranch, label: "Workflows Run (30d)", value: stats?.workflowsRun30d ?? 0, delta: stats?.deltas.workflowsDelta ?? 0, sub: "last 30 days", color: "text-violet-400", bg: "bg-violet-500/10" },
-    revenue: { icon: DollarSign, label: "Revenue This Month", value: formatCurrency(stats?.revenueThisMonth ?? 0), delta: stats?.deltas.revenueDelta ?? 0, sub: "Fiverr deliveries", color: "text-emerald-400", bg: "bg-emerald-500/10" },
+    revenue: { icon: DollarSign, label: "Conversations", value: stats?.revenueThisMonth ?? 0, delta: stats?.deltas.revenueDelta ?? 0, sub: "this month", color: "text-emerald-400", bg: "bg-emerald-500/10" },
   };
 
   const c = configs[variant];

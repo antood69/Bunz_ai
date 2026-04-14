@@ -3208,8 +3208,42 @@ Rules:
     }
   });
 
-  // === ACTIVE AGENTS — removed (was using deleted BullMQ queues) ===
-  // TODO: rebuild active agents dashboard using department system
+  // === ACTIVE AGENTS (v2: from database, not BullMQ) ===
+  app.get("/api/dashboard/active-agents", async (req, res) => {
+    try {
+      const userId = req.user?.id || 1;
+      const jobs = await storage.getRunningJobsByUser(userId);
+      const activeJobs = jobs.map((j: any) => ({
+        jobId: j.id,
+        type: j.type || "boss",
+        status: j.status,
+        taskDescription: (() => { try { const d = JSON.parse(j.input || "{}"); return d.message || d.task || "Processing..."; } catch { return "Processing..."; } })(),
+        startedAt: j.createdAt,
+        tokens: j.tokenCount || 0,
+      }));
+      res.json(activeJobs);
+    } catch (err: any) {
+      res.json([]);
+    }
+  });
+
+  app.post("/api/dashboard/active-agents/:jobId/stop", async (req, res) => {
+    try {
+      await storage.updateAgentJob(req.params.jobId, { status: "failed", output: JSON.stringify({ error: "Stopped by user" }), completedAt: Date.now() });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/dashboard/active-agents/:jobId/clear", async (req, res) => {
+    try {
+      await storage.updateAgentJob(req.params.jobId, { status: "failed", output: JSON.stringify({ error: "Cleared" }), completedAt: Date.now() });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   return httpServer;
 }

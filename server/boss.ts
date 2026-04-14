@@ -262,6 +262,12 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       };
     }
 
+    // ── Log activity event
+      try {
+        const { v4: actId } = await import("uuid");
+        storage.insertActivityEvent({ id: actId(), userId, type: plan ? "department_dispatch" : "boss_direct", title: plan ? `Dispatched to ${plan.departments.map((d:any) => d.id).join(", ")}` : `Boss answered: ${message.slice(0, 60)}...`, description: message.slice(0, 200), metadata: { level, departments: plan?.departments?.map((d:any) => d.id) } });
+      } catch {}
+
     // ── DIRECT MODE: Boss answers directly ──────────────────────────────
     await storage.createBossMessage({
       id: uuidv4(), conversationId, role: "assistant", content: bossResult.content,
