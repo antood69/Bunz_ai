@@ -181,32 +181,32 @@ async function callOpenAIImage(opts: ChatOptions, apiKey?: string): Promise<Chat
   if (!key) throw new Error("OpenAI API key not configured");
   const lastUserMsg = [...opts.messages].reverse().find(m => m.role === "user");
   const prompt = lastUserMsg?.content || "";
-  const res = await fetch("https://api.openai.com/v1/responses", {
+  // Use Images API (v1/images/generations) — NOT Responses API
+  const model = opts.model.startsWith("gpt-image") ? opts.model : "gpt-image-1";
+  const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: opts.model,
-      input: prompt,
-      tools: [{ type: "image_generation", quality: "medium", size: "1024x1024" }],
+      model,
+      prompt,
+      n: 1,
+      size: "1024x1024",
+      quality: "medium",
     }),
   });
   if (!res.ok) {
     const errBody = await res.text();
-    throw new Error(`OpenAI Responses API error (${res.status}): ${errBody}`);
+    throw new Error(`OpenAI Images API error (${res.status}): ${errBody}`);
   }
   const data = await res.json();
-  let imageBase64 = "";
-  if (data.output && Array.isArray(data.output)) {
-    for (const item of data.output) {
-      if (item.type === "image_generation_call" && item.result) { imageBase64 = item.result; break; }
-    }
-  }
-  if (!imageBase64) throw new Error("No image data in OpenAI Responses API response");
+  const imageB64 = data.data?.[0]?.b64_json || "";
+  const imageUrl = data.data?.[0]?.url || "";
+  if (!imageB64 && !imageUrl) throw new Error("No image data in OpenAI Images API response");
   return {
     content: prompt,
     type: "image",
-    imageUrl: `data:image/png;base64,${imageBase64}`,
-    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, model: opts.model, provider: "openai" },
+    imageUrl: imageB64 ? `data:image/png;base64,${imageB64}` : imageUrl,
+    usage: { promptTokens: data.usage?.input_tokens || 0, completionTokens: data.usage?.output_tokens || 0, totalTokens: data.usage?.total_tokens || 0, model, provider: "openai" },
   };
 }
 
