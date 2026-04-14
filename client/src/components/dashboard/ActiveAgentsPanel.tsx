@@ -89,7 +89,12 @@ export function ActiveAgentsPanel({
   const queryClient = useQueryClient();
 
   const { data: agents = [], isLoading } = useQuery<ActiveAgent[]>({
-    queryKey: ["/api/dashboard/active-agents?status=all"],
+    queryKey: ["active-agents-all"],
+    queryFn: async () => {
+      const r = await fetch("/api/dashboard/active-agents?status=all");
+      if (!r.ok) return [];
+      return r.json();
+    },
     enabled: open,
     refetchInterval: open ? 5000 : false,
   });
@@ -100,7 +105,7 @@ export function ActiveAgentsPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["/api/dashboard/active-agents?status=all"],
+        queryKey: ["active-agents-all"],
       });
     },
   });
@@ -111,14 +116,14 @@ export function ActiveAgentsPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["/api/dashboard/active-agents?status=all"],
+        queryKey: ["active-agents-all"],
       });
     },
   });
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col gap-0 p-0">
+      <DialogContent className="sm:max-w-[90vw] md:max-w-[80vw] lg:max-w-5xl max-h-[90vh] min-h-[500px] flex flex-col gap-0 p-0">
         <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-primary" />
