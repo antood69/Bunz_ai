@@ -804,10 +804,6 @@ export default function BossPage() {
     if (isMobile) setSidebarOpen(false);
     setTimeout(() => textareaRef.current?.focus(), 50);
   };
-
-  // Check for completed results when returning to conversation
-  useEffect(() => {
-
   // Check for running jobs on page load / conversation switch
   useEffect(() => {
     if (!serverConvId) return;
