@@ -19,6 +19,8 @@ import {
   INTELLIGENCE_TIERS, DEPARTMENTS, detectDepartments, estimateComplexity,
 } from "./departments/types";
 import { executeDepartment, type DepartmentTask, type DepartmentResult } from "./departments/executor";
+import { runAutonomous } from "./departments/autonomous";
+import { runAutonomous, type AutonomousPlan } from "./departments/autonomous";
 
 // ── Boss System Prompt ──────────────────────────────────────────────────────
 
@@ -29,6 +31,8 @@ DEPARTMENTS:
 - coder: Programming, debugging, code review, GitHub operations, file access
 - artist: Image generation, visual content, design, illustrations
 - writer: Content creation, copywriting, documentation, emails, articles
+- autonomous: Complex multi-step projects needing research + writing + coding combined. Use when task has 3+ phases.
+- autonomous: Complex multi-step projects that need research + writing + coding combined. Use when the task has 3+ distinct phases (e.g. "research competitors, write a report, and build a dashboard")
 
 DECISION RULES:
 1. Simple questions, greetings, quick facts → answer directly (NO dispatch)
@@ -216,6 +220,49 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
         input: JSON.stringify({ message, departments: plan.departments }),
         createdAt: Date.now(),
       });
+
+      // Check if any department is "autonomous" — run the autonomous loop instead
+      const hasAutonomous = plan.departments.some((d: any) => d.id === "autonomous");
+      if (hasAutonomous) {
+        const autoTask = plan.departments.find((d: any) => d.id === "autonomous");
+        runAutonomous(parentJobId, autoTask?.task || message, level, abortController.signal)
+          .then(async (autoPlan) => {
+            const finalContent = autoPlan.finalOutput || "Autonomous task completed.";
+            await storage.createBossMessage({
+              id: uuidv4(), conversationId: conversationId!, role: "assistant", content: finalContent,
+              tokenCount: autoPlan.totalTokens, model: bossModel, createdAt: Date.now(),
+            });
+            await storage.updateAgentJob(parentJobId, {
+              status: "complete", output: JSON.stringify({ autonomous: true, steps: autoPlan.steps.length, totalTokens: autoPlan.totalTokens }),
+              tokenCount: autoPlan.totalTokens, completedAt: Date.now(),
+            });
+            eventBus.emit(parentJobId, "complete", { synthesis: finalContent, totalTokens: autoPlan.totalTokens, autonomous: true });
+          })
+          .catch(err => { eventBus.emit(parentJobId, "error", { error: err.message }); })
+          .finally(() => activeAbortControllers.delete(conversationId!));
+
+        return {
+          conversationId, reply: bossMessage, jobId: parentJobId,
+          isDelegating: true, departments: plan.departments,
+          tokenCount: bossTokens, level,
+        };
+      }
+
+      // Autonomous department check
+      const hasAutonomous = plan.departments.some((d: any) => d.id === "autonomous");
+      if (hasAutonomous) {
+        const autoTask = plan.departments.find((d: any) => d.id === "autonomous");
+        runAutonomous(parentJobId, autoTask?.task || message, level, abortController.signal)
+          .then(async (autoPlan) => {
+            const finalContent = autoPlan.finalOutput || "Autonomous task completed.";
+            await storage.createBossMessage({ id: uuidv4(), conversationId: conversationId!, role: "assistant", content: finalContent, tokenCount: autoPlan.totalTokens, model: bossModel, createdAt: Date.now() });
+            await storage.updateAgentJob(parentJobId, { status: "complete", output: JSON.stringify({ autonomous: true, steps: autoPlan.steps.length }), tokenCount: autoPlan.totalTokens, completedAt: Date.now() });
+            eventBus.emit(parentJobId, "complete", { synthesis: finalContent, totalTokens: autoPlan.totalTokens, autonomous: true });
+          })
+          .catch(err => { eventBus.emit(parentJobId, "error", { error: err.message }); })
+          .finally(() => activeAbortControllers.delete(conversationId!));
+        return { conversationId, reply: bossMessage, jobId: parentJobId, isDelegating: true, departments: plan.departments, tokenCount: bossTokens, level };
+      }
 
       // Execute departments asynchronously — results flow back via eventBus
       executeDepartments(parentJobId, conversationId, userId, level, message, plan.departments, abortController.signal)
