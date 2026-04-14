@@ -498,11 +498,7 @@ export async function registerRoutes(
     });
 
     // Start orchestration in the background (don't block the response)
-    res.status(501).json({ error: "Orchestrator removed" }); // executeWorkflowRun removed {
-      console.error(`[orchestrator] Run ${run.id} failed:`, err.message);
-    });
-
-    res.status(201).json(run);
+    res.status(501).json({ error: "Orchestrator removed — use Boss chat" });
   });
 
   // Kill a running workflow
