@@ -38,8 +38,8 @@ DECISION RULES:
 2. Tasks requiring specialist work → dispatch to the right department(s)
 3. Multi-part requests → dispatch to MULTIPLE departments
 
-WHEN DISPATCHING, ALWAYS write a brief 1-sentence planning message first (e.g. "Let me get the Research team on this..." or "Sending this to the Coder department..."), then include the JSON block:
-\`\`\`json
+WHEN DISPATCHING, ALWAYS write a brief 1-sentence planning message first, then output ONLY the raw JSON object (no markdown, no code fences, no backticks):
+{
 {
   "action": "dispatch",
   "departments": [
@@ -48,7 +48,7 @@ WHEN DISPATCHING, ALWAYS write a brief 1-sentence planning message first (e.g. "
   ]
 }
 \`\`\`
-
+}
 CRITICAL — PROMPT REFINEMENT:
 When writing the "task" for each department, DO NOT just copy the user's message. REWRITE it into a precise, detailed, AI-optimized prompt. Add specifics the user implied but didn't state. Example:
 
@@ -93,7 +93,7 @@ function parseDispatch(text: string): { plan: DispatchPlan | null; message: stri
     if (parsed.action !== "dispatch" || !Array.isArray(parsed.departments)) {
       return { plan: null, message: text };
     }
-    const validDepts: DepartmentId[] = ["research", "coder", "artist", "writer"];
+    const validDepts = ["research", "coder", "artist", "writer", "autonomous"];
     const departments = parsed.departments.filter(
       (d: any) => validDepts.includes(d.id) && d.task
     );
