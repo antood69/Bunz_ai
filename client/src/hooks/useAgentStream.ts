@@ -128,8 +128,8 @@ export function useAgentStream(jobId: string | null): StreamState {
         const data = JSON.parse(e.data);
         setState((prev) => {
           const workers = [...prev.workers];
-          const idx = data.workerIndex ?? workers.findIndex((w) => w.type === data.workerType);
-          if (idx >= 0 && idx < workers.length) {
+          const idx = workers.findIndex((w) => w.type === data.workerType);
+          if (idx >= 0) {
             workers[idx] = { ...workers[idx], status: data.status === "synthesizing" ? "running" : data.status };
           } else if (data.workerType && data.workerType !== "boss") {
             workers.push({
@@ -154,8 +154,8 @@ export function useAgentStream(jobId: string | null): StreamState {
         const data = JSON.parse(e.data);
         setState((prev) => {
           const workers = [...prev.workers];
-          const idx = data.workerIndex ?? workers.findIndex((w) => w.type === data.workerType);
-          if (idx >= 0 && idx < workers.length) {
+          const idx = workers.findIndex((w) => w.type === data.workerType);
+          if (idx >= 0) {
             workers[idx] = {
               ...workers[idx],
               status: data.status === "error" ? "error" : "complete",
