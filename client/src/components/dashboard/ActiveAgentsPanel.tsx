@@ -91,9 +91,9 @@ export function ActiveAgentsPanel({
   const queryClient = useQueryClient();
 
   const { data: agents = [], isLoading } = useQuery<ActiveAgent[]>({
-    queryKey: ["active-agents-all"],
+    queryKey: ["active-agents-running"],
     queryFn: async () => {
-      const r = await fetch("/api/dashboard/active-agents?status=all");
+      const r = await fetch("/api/dashboard/active-agents?status=running");
       if (!r.ok) return [];
       return r.json();
     },
@@ -107,7 +107,7 @@ export function ActiveAgentsPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["active-agents-all"],
+        queryKey: ["active-agents-running"],
       });
     },
   });
@@ -118,7 +118,7 @@ export function ActiveAgentsPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["active-agents-all"],
+        queryKey: ["active-agents-running"],
       });
     },
   });

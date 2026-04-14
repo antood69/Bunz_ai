@@ -1065,7 +1065,7 @@ export async function registerRoutes(
 
   app.post("/api/dashboard/active-agents/:jobId/clear", async (req, res) => {
     try {
-      await storage.updateAgentJob(req.params.jobId, { status: "failed", output: JSON.stringify({ error: "Cleared" }), completedAt: Date.now() });
+      try { sqlite.prepare("DELETE FROM agent_jobs WHERE id = ?").run(req.params.jobId); } catch {}
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

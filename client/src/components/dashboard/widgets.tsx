@@ -113,7 +113,7 @@ export function ClickableTasksKPI() {
   return (
     <>
       <KPICardWidget variant="workflows" onClick={() => setPanelOpen(true)} />
-      <ActiveAgentsPanel open={panelOpen} onClose={() => setPanelOpen(false)} />
+      <TaskHistoryPanel open={panelOpen} onClose={() => setPanelOpen(false)} />
     </>
   );
 }
