@@ -192,21 +192,20 @@ async function callOpenAIImage(opts: ChatOptions, apiKey?: string): Promise<Chat
       n: 1,
       size: "1024x1024",
       quality: "medium",
-      output_format: "png",
-    }),
+      }),
   });
   if (!res.ok) {
     const errBody = await res.text();
     throw new Error(`OpenAI Images API error (${res.status}): ${errBody}`);
   }
   const data = await res.json();
-  const imageB64 = data.data?.[0]?.b64_json || "";
   const imageUrl = data.data?.[0]?.url || "";
-  if (!imageB64 && !imageUrl) throw new Error("No image data in OpenAI Images API response");
+  const imageB64 = data.data?.[0]?.b64_json || "";
+  if (!imageUrl && !imageB64) throw new Error("No image data in OpenAI Images API response");
   return {
     content: prompt,
     type: "image",
-    imageUrl: imageB64 ? `data:image/png;base64,${imageB64}` : imageUrl,
+    imageUrl: imageUrl || `data:image/png;base64,${imageB64}`,
     usage: { promptTokens: data.usage?.input_tokens || 0, completionTokens: data.usage?.output_tokens || 0, totalTokens: data.usage?.total_tokens || 0, model, provider: "openai" },
   };
 }
