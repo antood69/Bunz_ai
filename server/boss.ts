@@ -396,7 +396,7 @@ async function executeDepartments(
 
     const outputSummaries = deptResults.map(r => {
       let summary = `--- ${r.department.toUpperCase()} DEPARTMENT ---\n${r.finalOutput}`;
-      if (r.imageUrl) summary += `\n[Image generated]`;
+      if (r.imageUrl) summary += `\n[Image was generated successfully]`;
       return summary;
     }).join("\n\n");
 

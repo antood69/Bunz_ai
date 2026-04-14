@@ -506,7 +506,7 @@ function MessageBubble({
                 {renderMarkdown(streamState.synthesisText.replace(/<!--agent-image:[^>]+-->/g, ""))}
               </div>
               {/* Render any agent-generated images from the synthesis */}
-              {streamState.agentImages.length > 0 && streamState.isComplete && (
+              {streamState.agentImages.length > 0 && (
                 <div className="mt-3 space-y-2">
                   {streamState.agentImages.map((img, i) => (
                     <div key={i} className="group relative">
