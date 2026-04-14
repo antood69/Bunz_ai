@@ -498,7 +498,7 @@ export async function registerRoutes(
     });
 
     // Start orchestration in the background (don't block the response)
-    executeWorkflowRun(run.id, prompt, model || "claude-sonnet").catch(err => {
+    res.status(501).json({ error: "Orchestrator removed" }); // executeWorkflowRun removed {
       console.error(`[orchestrator] Run ${run.id} failed:`, err.message);
     });
 
@@ -825,7 +825,7 @@ export async function registerRoutes(
       return res.status(400).json({ error: "Broker, API key, and secret are required" });
     }
     try {
-      const { getBroker } = await import("./broker");
+      const { getBroker } = { getBroker: () => { throw new Error("Broker removed"); } };
       const b = getBroker({ broker, apiKey, apiSecret, isPaper: isPaper ? 1 : 0 });
       const account = await b.getAccount();
 
@@ -863,7 +863,7 @@ export async function registerRoutes(
     const conn = await storage.getBrokerConnection(req.params.id);
     if (!conn || conn.userId !== userId) return res.status(404).json({ error: "Not found" });
     try {
-      const { getBroker } = await import("./broker");
+      const { getBroker } = { getBroker: () => { throw new Error("Broker removed"); } };
       const broker = getBroker(conn);
       const account = await broker.getAccount();
       res.json(account);
@@ -878,7 +878,7 @@ export async function registerRoutes(
     const conn = await storage.getBrokerConnection(req.params.id);
     if (!conn || conn.userId !== userId) return res.status(404).json({ error: "Not found" });
     try {
-      const { getBroker } = await import("./broker");
+      const { getBroker } = { getBroker: () => { throw new Error("Broker removed"); } };
       const broker = getBroker(conn);
       const positions = await broker.getPositions();
       res.json(positions);
@@ -893,7 +893,7 @@ export async function registerRoutes(
     const conn = await storage.getBrokerConnection(req.params.id);
     if (!conn || conn.userId !== userId) return res.status(404).json({ error: "Not found" });
     try {
-      const { getBroker } = await import("./broker");
+      const { getBroker } = { getBroker: () => { throw new Error("Broker removed"); } };
       const broker = getBroker(conn);
       const order = await broker.placeOrder(req.body);
       res.json(order);
@@ -908,7 +908,7 @@ export async function registerRoutes(
     const conn = await storage.getBrokerConnection(req.params.id);
     if (!conn || conn.userId !== userId) return res.status(404).json({ error: "Not found" });
     try {
-      const { getBroker } = await import("./broker");
+      const { getBroker } = { getBroker: () => { throw new Error("Broker removed"); } };
       const broker = getBroker(conn);
       const result = await broker.closePosition(req.params.symbol);
       res.json(result);
@@ -923,7 +923,7 @@ export async function registerRoutes(
     const conn = await storage.getBrokerConnection(req.params.id);
     if (!conn || conn.userId !== userId) return res.status(404).json({ error: "Not found" });
     try {
-      const { syncTrades } = await import("./broker");
+      const { syncTrades } = { syncTrades: () => { throw new Error("Broker removed"); } };
       const result = await syncTrades(req.params.id, userId);
       res.json(result);
     } catch (err: any) {
@@ -1821,7 +1821,7 @@ export async function registerRoutes(
     const order = await storage.getFiverrOrderV2(req.params.id);
     if (!order || order.userId !== userId) return res.status(404).json({ error: "Not found" });
     try {
-      const { fiverrGenerationQueue } = await import("./workers/fiverrGeneration.worker");
+      const fiverrGenerationQueue = { add: () => { throw new Error("Fiverr worker removed"); } };
       const job = await fiverrGenerationQueue.add("generate", {
         orderId: order.id,
         templateId: req.body.templateId || order.templateId,
@@ -1871,7 +1871,7 @@ export async function registerRoutes(
     const feedback = req.body.feedback || "Please improve the output.";
     await storage.updateFiverrOrderV2(req.params.id, { reviewNote: feedback, status: "generation" });
     try {
-      const { fiverrGenerationQueue } = await import("./workers/fiverrGeneration.worker");
+      const fiverrGenerationQueue = { add: () => { throw new Error("Fiverr worker removed"); } };
       const job = await fiverrGenerationQueue.add("regenerate", {
         orderId: order.id,
         templateId: order.templateId,
@@ -2034,7 +2034,7 @@ Be concise, helpful, and actionable. Use plain text, not markdown.`,
     if (autoTemplate) {
       try {
         await storage.updateFiverrOrderV2(order.id, { templateId: autoTemplate.id });
-        const { fiverrGenerationQueue } = await import("./workers/fiverrGeneration.worker");
+        const fiverrGenerationQueue = { add: () => { throw new Error("Fiverr worker removed"); } };
         await fiverrGenerationQueue.add("auto-generate", {
           orderId: order.id,
           templateId: autoTemplate.id,
@@ -2376,7 +2376,7 @@ Be concise, helpful, and actionable. Use plain text, not markdown.`,
           startedAt: Date.now(),
         });
 
-        const { executeWorkflow } = await import("./workflowEngine");
+        const executeWorkflow = () => { throw new Error("Workflow engine removed — rebuild in Phase 10"); };
         const canvasState = JSON.parse(workflow.canvasState!);
         const nodes = canvasState.nodes || [];
         const edges = canvasState.edges || [];

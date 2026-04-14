@@ -1,4 +1,5 @@
-import type { WorkerType } from "../queues";
+// Worker types (previously imported from deleted queues module)
+export type WorkerType = "boss" | "researcher" | "coder" | "writer" | "analyst" | "reviewer" | "artgen" | "browser";
 
 /**
  * Default model assignment per agent/worker type.
