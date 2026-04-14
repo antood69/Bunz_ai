@@ -20,6 +20,7 @@ export interface AutonomousStep {
   tokens?: number;
   durationMs?: number;
   imageUrl?: string;
+  error?: string;
 }
 
 export interface AutonomousPlan {
@@ -27,25 +28,18 @@ export interface AutonomousPlan {
   steps: AutonomousStep[];
   currentStep: number;
   totalTokens: number;
-  status: "planning" | "executing" | "evaluating" | "complete" | "failed" | "cancelled";
+  status: "planning" | "executing" | "complete" | "failed" | "cancelled";
   finalOutput?: string;
 }
 
 const OPS_PLAN_PROMPT = `You are the Ops Manager. Break complex goals into executable steps.
 
-DEPARTMENTS: research, coder, artist, writer
+DEPARTMENTS: research (web research/data), coder (programming), artist (images), writer (content/docs)
 
-Respond with ONLY valid JSON:
+Respond with ONLY valid JSON — no other text:
 {"steps":[{"department":"research","task":"Detailed task"},{"department":"writer","task":"Detailed task"}]}
 
-RULES: 2-6 steps max. Each step builds on the previous. Be specific. Order logically.`;
-
-const OPS_EVAL_PROMPT = `You are the Ops Manager evaluating a step result.
-
-Respond with ONLY valid JSON:
-{"decision":"continue|adjust|retry|complete","reason":"Brief explanation"}
-
-continue = next step (DEFAULT). adjust = change remaining steps. retry = redo step. Always continue unless step completely failed.`;
+RULES: 2-6 steps max. Each builds on previous. Be specific. Order logically.`;
 
 export async function runAutonomous(
   parentJobId: string,
@@ -60,8 +54,9 @@ export async function runAutonomous(
 
   try {
     // Phase 1: Generate the plan
-    eventBus.emit(parentJobId, "autonomous_status", {
-      status: "planning", message: "Ops Manager creating execution plan...",
+    eventBus.emit(parentJobId, "progress", {
+      workerType: "boss", status: "running",
+      message: "Ops Manager creating execution plan...",
     });
 
     const planResult = await modelRouter.chat({
@@ -87,16 +82,15 @@ export async function runAutonomous(
 
     if (plan.steps.length === 0) throw new Error("Ops Manager created an empty plan");
 
-    eventBus.emit(parentJobId, "autonomous_plan", {
-      goal,
-      steps: plan.steps.map(s => ({
-        stepNumber: s.stepNumber, department: s.department,
-        task: s.task.slice(0, 200), status: s.status,
-      })),
-      totalSteps: plan.steps.length,
+    // Emit plan summary as a token so user sees it
+    const planSummary = plan.steps.map(s =>
+      `**Step ${s.stepNumber}** [${s.department}]: ${s.task.slice(0, 100)}`
+    ).join("\n");
+    eventBus.emit(parentJobId, "token", {
+      workerType: "boss", text: `\n📋 **Execution Plan** (${plan.steps.length} steps):\n${planSummary}\n\n---\n`,
     });
 
-    // Phase 2: Execute each step
+    // Phase 2: Execute each step sequentially
     plan.status = "executing";
     let previousOutput = "";
 
@@ -106,18 +100,29 @@ export async function runAutonomous(
       plan.currentStep = i + 1;
       step.status = "running";
 
-      eventBus.emit(parentJobId, "autonomous_step", {
-        stepNumber: step.stepNumber, totalSteps: plan.steps.length,
-        department: step.department, task: step.task.slice(0, 200),
+      // Emit progress event that the CLIENT understands
+      eventBus.emit(parentJobId, "progress", {
+        workerType: step.department,
+        subAgent: `Step ${step.stepNumber}`,
+        workerIndex: i,
         status: "running",
-        message: `Step ${step.stepNumber}/${plan.steps.length}: ${step.department} department working...`,
+        message: `Step ${step.stepNumber}/${plan.steps.length}: ${step.department} working...`,
+      });
+
+      // Also stream a header so user sees what's happening
+      eventBus.emit(parentJobId, "token", {
+        workerType: step.department,
+        text: `\n🔄 **Step ${step.stepNumber}: ${step.department.toUpperCase()}**\n`,
+        isAutonomous: true,
       });
 
       const stepStart = Date.now();
       try {
         const taskWithContext = previousOutput
-          ? `${step.task}\n\nContext from previous steps:\n${previousOutput.slice(0, 3000)}`
+          ? `${step.task}\n\nContext from previous steps:\n${previousOutput.slice(0, 2000)}`
           : step.task;
+
+        console.log(`[Autonomous] Starting step ${step.stepNumber}: ${step.department} - ${step.task.slice(0, 80)}`);
 
         const result: DepartmentResult = await executeDepartment(
           parentJobId, { department: step.department, task: taskWithContext },
@@ -132,72 +137,56 @@ export async function runAutonomous(
         plan.totalTokens += result.totalTokens;
         previousOutput = result.finalOutput;
 
-        const chunks = chunkText(result.finalOutput, 40);
-        for (const chunk of chunks) {
-          eventBus.emit(parentJobId, "token", {
-            workerType: step.department, text: chunk,
-            isAutonomous: true, stepNumber: step.stepNumber,
-          });
-        }
-
-        eventBus.emit(parentJobId, "autonomous_step", {
-          stepNumber: step.stepNumber, totalSteps: plan.steps.length,
-          department: step.department, status: "complete",
-          tokens: result.totalTokens, durationMs: step.durationMs,
-          outputPreview: result.finalOutput.slice(0, 300),
-          imageUrl: result.imageUrl,
+        // Emit step_complete that the CLIENT understands
+        eventBus.emit(parentJobId, "step_complete", {
+          workerType: step.department,
+          subAgent: `Step ${step.stepNumber}`,
+          workerIndex: i,
+          output: result.finalOutput.slice(0, 500),
+          tokens: result.totalTokens,
+          durationMs: step.durationMs,
         });
+
+        console.log(`[Autonomous] Step ${step.stepNumber} complete: ${result.totalTokens} tokens`);
 
       } catch (err: any) {
         if (err?.name === "AbortError") throw err;
         step.status = "failed";
+        step.error = err.message;
         step.durationMs = Date.now() - stepStart;
-        eventBus.emit(parentJobId, "autonomous_step", {
-          stepNumber: step.stepNumber, totalSteps: plan.steps.length,
-          department: step.department, status: "failed", error: err.message,
-        });
-        console.warn(`[Autonomous] Step ${step.stepNumber} failed: ${err.message}`);
-        continue;
-      }
 
-      // Phase 3: Evaluate after each step (except last)
-      if (i < plan.steps.length - 1) {
-        plan.status = "evaluating";
-        eventBus.emit(parentJobId, "autonomous_status", {
-          status: "evaluating", message: "Ops Manager evaluating results...",
+        console.error(`[Autonomous] Step ${step.stepNumber} FAILED: ${err.message}`);
+
+        // Emit the error so client sees it
+        eventBus.emit(parentJobId, "step_complete", {
+          workerType: step.department,
+          subAgent: `Step ${step.stepNumber}`,
+          workerIndex: i,
+          status: "error",
+          error: err.message,
+          durationMs: step.durationMs,
         });
-        try {
-          const evalResult = await modelRouter.chat({
-            model: bossModel,
-            messages: [{
-              role: "user",
-              content: `Goal: ${goal}\n\nCompleted step ${step.stepNumber}: ${step.task}\n\nResult:\n${(step.result || "").slice(0, 2000)}\n\nRemaining steps: ${plan.steps.slice(i + 1).map(s => `${s.stepNumber}. [${s.department}] ${s.task}`).join("\n")}`,
-            }],
-            systemPrompt: OPS_EVAL_PROMPT,
-            signal,
-          });
-          plan.totalTokens += evalResult.usage.totalTokens;
-          const evalJson = extractJson(evalResult.content);
-          if (evalJson) {
-            eventBus.emit(parentJobId, "autonomous_evaluation", {
-              decision: evalJson.decision, reason: evalJson.reason, stepNumber: step.stepNumber,
-            });
-            // Log decision but always continue — all planned steps run
-          }
-        } catch { /* evaluation failed, continue */ }
-        plan.status = "executing";
+
+        eventBus.emit(parentJobId, "token", {
+          workerType: step.department,
+          text: `\n❌ Step ${step.stepNumber} failed: ${err.message}\n`,
+        });
+
+        // Continue to next step despite failure
+        continue;
       }
     }
 
-    // Phase 4: Synthesize final output
+    // Phase 3: Synthesize final output
     plan.status = "complete";
     const completedSteps = plan.steps.filter(s => s.status === "complete");
     const stepOutputs = completedSteps
       .map(s => `--- STEP ${s.stepNumber} [${s.department}] ---\n${s.result || "(no output)"}`)
       .join("\n\n");
 
-    eventBus.emit(parentJobId, "autonomous_status", {
-      status: "synthesizing", message: "Ops Manager compiling final deliverable...",
+    eventBus.emit(parentJobId, "progress", {
+      workerType: "boss", status: "running",
+      message: "Ops Manager compiling final deliverable...",
     });
 
     const synthesisResult = await modelRouter.chat({
@@ -235,7 +224,13 @@ function extractJson(text: string): any | null {
     let depth = 0;
     for (let i = firstBrace; i < text.length; i++) {
       if (text[i] === "{") depth++;
-      else if (text[i] === "}") { depth--; if (depth === 0) { try { return JSON.parse(text.slice(firstBrace, i + 1)); } catch {} break; } }
+      else if (text[i] === "}") {
+        depth--;
+        if (depth === 0) {
+          try { return JSON.parse(text.slice(firstBrace, i + 1)); } catch {}
+          break;
+        }
+      }
     }
   }
   return null;
