@@ -285,7 +285,9 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     if (err?.name === "AbortError") {
       return { conversationId, reply: "Request cancelled.", isDelegating: false, tokenCount: 0, level };
     }
-    throw err;
+    console.error("[Boss] Chat error:", err.message);
+    const errorMsg = "Error: " + err.message + ". Try switching intelligence level.";
+    return { conversationId: conversationId || "", reply: errorMsg, isDelegating: false, tokenCount: 0, level };
   }
 }
 
