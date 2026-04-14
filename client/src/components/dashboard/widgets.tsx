@@ -107,6 +107,7 @@ export function KPICardWidget({ variant, onClick }: { variant: "agents" | "token
 
 // ── 1b. Clickable Active Agents KPI ─────────────────────────────────────
 import { ActiveAgentsPanel } from "./ActiveAgentsPanel";
+import { TaskHistoryPanel } from "./TaskHistoryPanel";
 
 export function ClickableTasksKPI() {
   const [panelOpen, setPanelOpen] = useState(false);
