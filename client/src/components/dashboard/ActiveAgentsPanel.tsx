@@ -69,7 +69,9 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function formatElapsed(startedAt: number): string {
+  if (!startedAt || isNaN(startedAt)) return "—";
   const seconds = Math.floor((Date.now() - startedAt) / 1000);
+  if (isNaN(seconds) || seconds < 0) return "—";
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
