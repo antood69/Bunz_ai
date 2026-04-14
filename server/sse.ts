@@ -77,10 +77,10 @@ export function handleSSEStream(req: Request, res: Response) {
     unsub();
     clearInterval(heartbeat);
     try {
-      res.write(`event: error\ndata: ${JSON.stringify({ error: "Stream timeout — job may still be running" })}\n\n`);
+      res.write(`event: error\ndata: ${JSON.stringify({ error: "Stream timeout (15min) — job may still be running" })}\n\n`);
       res.end();
     } catch {}
-  }, 5 * 60 * 1000);
+  }, 15 * 60 * 1000);
 
   // Clean up on client disconnect
   req.on("close", () => {
