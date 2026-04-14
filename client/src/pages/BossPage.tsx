@@ -551,7 +551,7 @@ const SUGGESTIONS = [
 
 const STORAGE_KEY = "boss_conversations";
 
-function loadConversations(): Conversation[] {
+function loadConversationsFromLocal(): Conversation[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
@@ -570,10 +570,74 @@ function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+/** Fetch conversations + messages from the server and merge with localStorage cache */
+async function loadConversationsFromServer(): Promise<Conversation[]> {
+  try {
+    const res = await fetch("/api/conversations");
+    if (!res.ok) return [];
+    const serverConvs: Array<{
+      id: string;
+      title: string;
+      model: string | null;
+      createdAt: number;
+      updatedAt: number;
+    }> = await res.json();
+
+    if (!serverConvs.length) return [];
+
+    // Load messages for each conversation (limit to most recent 20)
+    const hydrated: Conversation[] = await Promise.all(
+      serverConvs.slice(0, 20).map(async (sc) => {
+        try {
+          const msgRes = await fetch(`/api/conversations/${sc.id}/messages`);
+          const rawMsgs: Array<{
+            id: string;
+            role: string;
+            content: string;
+            tokenCount: number | null;
+            model: string | null;
+            createdAt: number;
+          }> = msgRes.ok ? await msgRes.json() : [];
+
+          const messages: Message[] = rawMsgs
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              timestamp: new Date(m.createdAt),
+              tokenCount: m.tokenCount ?? undefined,
+            }));
+
+          return {
+            id: sc.id,
+            title: sc.title || "New conversation",
+            messages,
+            createdAt: new Date(sc.createdAt).toISOString(),
+            serverId: sc.id,
+          };
+        } catch {
+          return {
+            id: sc.id,
+            title: sc.title || "New conversation",
+            messages: [],
+            createdAt: new Date(sc.createdAt).toISOString(),
+            serverId: sc.id,
+          };
+        }
+      })
+    );
+
+    return hydrated.filter((c) => c.messages.length > 0);
+  } catch {
+    return [];
+  }
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function BossPage() {
-  const [conversations, setConversations] = useState<Conversation[]>(() => loadConversations());
+  const [conversations, setConversations] = useState<Conversation[]>(() => loadConversationsFromLocal());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -589,6 +653,28 @@ export default function BossPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // On mount: fetch conversation history from server and merge with localStorage
+  useEffect(() => {
+    loadConversationsFromServer().then((serverConvs) => {
+      if (serverConvs.length === 0) return;
+      setConversations((prev) => {
+        // Merge: server conversations take precedence over local ones with same serverId
+        const merged = [...serverConvs];
+        // Add local-only conversations (no serverId or serverId not in server list)
+        const serverIds = new Set(serverConvs.map(c => c.serverId));
+        for (const local of prev) {
+          if (!local.serverId || !serverIds.has(local.serverId)) {
+            merged.push(local);
+          }
+        }
+        // Sort by most recent first
+        merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        saveConversations(merged);
+        return merged;
+      });
+    });
+  }, []);
 
   // Agent stream hook
   const streamState = useAgentStream(activeJobId);

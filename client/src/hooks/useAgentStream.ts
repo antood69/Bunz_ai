@@ -195,16 +195,21 @@ export function useAgentStream(jobId: string | null): StreamState {
         const data = JSON.parse(e.data);
         // Flush any remaining tokens
         flushTokenBuffer();
-        setState((prev) => ({
-          ...prev,
-          isStreaming: false,
-          isComplete: true,
-          isSynthesizing: false,
-          synthesisText: prev.synthesisText + (synthesisBufferRef.current || ""),
-          currentStep: "Complete",
-          totalTokens: data.totalTokens || prev.totalTokens,
-          agentOutputs: data.agentOutputs || prev.agentOutputs,
-        }));
+        setState((prev) => {
+          // Use the authoritative synthesis from the server if our streamed buffer is empty/incomplete
+          const buffered = prev.synthesisText + (synthesisBufferRef.current || "");
+          const finalSynthesis = buffered.trim() ? buffered : (data.synthesis || buffered);
+          return {
+            ...prev,
+            isStreaming: false,
+            isComplete: true,
+            isSynthesizing: false,
+            synthesisText: finalSynthesis,
+            currentStep: "Complete",
+            totalTokens: data.totalTokens || prev.totalTokens,
+            agentOutputs: data.agentOutputs || prev.agentOutputs,
+          };
+        });
         synthesisBufferRef.current = "";
       } catch {}
       es.close();

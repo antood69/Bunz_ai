@@ -552,8 +552,8 @@ export async function registerRoutes(
   // === TOKEN ECONOMY ===
 
   // Get current user's plan + usage summary
-  app.get("/api/tokens/status", async (_req, res) => {
-    const userId = 1; // placeholder until auth
+  app.get("/api/tokens/status", async (req, res) => {
+    const userId = req.user?.id || 1;
     let plan = await storage.getUserPlan(userId);
     if (!plan) {
       // Auto-create free plan
@@ -601,15 +601,15 @@ export async function registerRoutes(
   });
 
   // Get usage history
-  app.get("/api/tokens/usage", async (_req, res) => {
-    const userId = 1;
+  app.get("/api/tokens/usage", async (req, res) => {
+    const userId = req.user?.id || 1;
     const usage = await storage.getTokenUsageByUser(userId);
     res.json(usage);
   });
 
   // Get usage summary (current period)
-  app.get("/api/tokens/summary", async (_req, res) => {
-    const userId = 1;
+  app.get("/api/tokens/summary", async (req, res) => {
+    const userId = req.user?.id || 1;
     const plan = await storage.getUserPlan(userId);
     const since = plan?.periodStart || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
     const summary = await storage.getTokenUsageSummary(userId, since);

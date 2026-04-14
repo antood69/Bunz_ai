@@ -3388,9 +3388,11 @@ export class DatabaseStorage implements IStorage {
     const activeAgents = (sqlite.prepare("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND status = 'running'").get(userId) as any)?.c || 0;
     const prevActiveAgents = (sqlite.prepare("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND status = 'complete' AND completed_at > ? AND completed_at <= ?").get(userId, fourteenDaysAgo, sevenDaysAgo) as any)?.c || 0;
 
-    // Tokens used (7d) - from agent_jobs token_count
-    const tokensUsed7d = (sqlite.prepare("SELECT COALESCE(SUM(token_count), 0) as t FROM agent_jobs WHERE user_id = ? AND created_at > ?").get(userId, sevenDaysAgo) as any)?.t || 0;
-    const tokensPrev7d = (sqlite.prepare("SELECT COALESCE(SUM(token_count), 0) as t FROM agent_jobs WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, fourteenDaysAgo, sevenDaysAgo) as any)?.t || 0;
+    // Tokens used (7d) - from token_usage table (authoritative record for all AI calls)
+    const sevenDaysAgoISO = new Date(sevenDaysAgo).toISOString();
+    const fourteenDaysAgoISO = new Date(fourteenDaysAgo).toISOString();
+    const tokensUsed7d = (sqlite.prepare("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ?").get(userId, sevenDaysAgoISO) as any)?.t || 0;
+    const tokensPrev7d = (sqlite.prepare("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, fourteenDaysAgoISO, sevenDaysAgoISO) as any)?.t || 0;
 
     // Workflows run (30d) - combine workflow_runs + workflow_executions
     const wfRuns30d = (sqlite.prepare("SELECT COUNT(*) as c FROM workflow_runs WHERE user_id = ? AND created_at > ?").get(userId, new Date(thirtyDaysAgo).toISOString()) as any)?.c || 0;
@@ -3433,7 +3435,10 @@ export class DatabaseStorage implements IStorage {
     for (let i = days - 1; i >= 0; i--) {
       const dayStart = now - (i + 1) * 86400000;
       const dayEnd = now - i * 86400000;
-      const row = sqlite.prepare("SELECT COALESCE(SUM(token_count), 0) as t FROM agent_jobs WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, dayStart, dayEnd) as any;
+      // Query token_usage table (the authoritative record for all AI calls)
+      const dateStart = new Date(dayStart).toISOString();
+      const dateEnd = new Date(dayEnd).toISOString();
+      const row = sqlite.prepare("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, dateStart, dateEnd) as any;
       const date = new Date(dayEnd).toISOString().slice(0, 10);
       result.push({ date, tokens: row?.t || 0 });
     }
@@ -3459,7 +3464,7 @@ export class DatabaseStorage implements IStorage {
 
   // ── Phase 3 Dashboard: Model Usage Breakdown ──────────────────────────────
   getModelUsageBreakdown(userId: number): { model: string; tokens: number }[] {
-    const rows = sqlite.prepare("SELECT COALESCE(type, 'unknown') as model, SUM(COALESCE(token_count, 0)) as tokens FROM agent_jobs WHERE user_id = ? GROUP BY type ORDER BY tokens DESC").all(userId) as any[];
+    const rows = sqlite.prepare("SELECT COALESCE(model, 'unknown') as model, SUM(COALESCE(total_tokens, 0)) as tokens FROM token_usage WHERE user_id = ? GROUP BY model ORDER BY tokens DESC").all(userId) as any[];
     return rows.map(r => ({ model: r.model || 'unknown', tokens: r.tokens || 0 }));
   }
 
