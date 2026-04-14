@@ -290,7 +290,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     return { conversationId: conversationId || "", reply: errorMsg, isDelegating: false, tokenCount: 0, level };
   }
 }
-
+}
 // ── Art Short-Circuit (skip Boss routing for obvious image requests) ─────────
 
 async function handleArtShortCircuit(
