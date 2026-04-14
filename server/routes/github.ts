@@ -54,10 +54,10 @@ router.get("/repos/:owner/:repo/tree", requireGitHub, async (req: Request, res: 
 });
 
 // ── List files at a path ────────────────────────────────────────────────────
-router.get("/repos/:owner/:repo/contents/*", requireGitHub, async (req: Request, res: Response) => {
+router.get("/repos/:owner/:repo/contents/*path", requireGitHub, async (req: Request, res: Response) => {
   try {
     const fullName = `${req.params.owner}/${req.params.repo}`;
-    const path = req.params[0] || "";
+    const path = req.params.path || "";
     const ref = req.query.ref as string | undefined;
     const files = await gh.listFiles((req as any).githubToken, fullName, path, ref);
     res.json(files);
@@ -68,10 +68,10 @@ router.get("/repos/:owner/:repo/contents/*", requireGitHub, async (req: Request,
 });
 
 // ── Read a single file ──────────────────────────────────────────────────────
-router.get("/repos/:owner/:repo/file/*", requireGitHub, async (req: Request, res: Response) => {
+router.get("/repos/:owner/:repo/file/*path", requireGitHub, async (req: Request, res: Response) => {
   try {
     const fullName = `${req.params.owner}/${req.params.repo}`;
-    const path = req.params[0] || "";
+    const path = req.params.path || "";
     const ref = req.query.ref as string | undefined;
     const file = await gh.readFile((req as any).githubToken, fullName, path, ref);
     res.json(file);
@@ -82,10 +82,10 @@ router.get("/repos/:owner/:repo/file/*", requireGitHub, async (req: Request, res
 });
 
 // ── Write / create a file ───────────────────────────────────────────────────
-router.put("/repos/:owner/:repo/file/*", requireGitHub, async (req: Request, res: Response) => {
+router.put("/repos/:owner/:repo/file/*path", requireGitHub, async (req: Request, res: Response) => {
   try {
     const fullName = `${req.params.owner}/${req.params.repo}`;
-    const path = req.params[0] || "";
+    const path = req.params.path || "";
     const { content, message, branch, sha } = req.body;
     if (!content || !message) {
       return res.status(400).json({ error: "content and message are required" });
