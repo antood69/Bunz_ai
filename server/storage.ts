@@ -3394,18 +3394,13 @@ export class DatabaseStorage implements IStorage {
     const tokensUsed7d = (sqlite.prepare("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ?").get(userId, sevenDaysAgoISO) as any)?.t || 0;
     const tokensPrev7d = (sqlite.prepare("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, fourteenDaysAgoISO, sevenDaysAgoISO) as any)?.t || 0;
 
-    // Workflows run (30d) - combine workflow_runs + workflow_executions
-    const wfRuns30d = (sqlite.prepare("SELECT COUNT(*) as c FROM workflow_runs WHERE user_id = ? AND created_at > ?").get(userId, new Date(thirtyDaysAgo).toISOString()) as any)?.c || 0;
-    const wfExec30d = (sqlite.prepare("SELECT COUNT(*) as c FROM workflow_executions WHERE user_id = ? AND created_at > ?").get(userId, thirtyDaysAgo) as any)?.c || 0;
-    const workflowsRun30d = wfRuns30d + wfExec30d;
-
-    const wfRunsPrev = (sqlite.prepare("SELECT COUNT(*) as c FROM workflow_runs WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, new Date(sixtyDaysAgo).toISOString(), new Date(thirtyDaysAgo).toISOString()) as any)?.c || 0;
-    const wfExecPrev = (sqlite.prepare("SELECT COUNT(*) as c FROM workflow_executions WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, sixtyDaysAgo, thirtyDaysAgo) as any)?.c || 0;
-    const workflowsPrev30d = wfRunsPrev + wfExecPrev;
+    // Tasks run (30d) - count agent_jobs (department tasks)
+    const workflowsRun30d = (sqlite.prepare("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND created_at > ?").get(userId, thirtyDaysAgo) as any)?.c || 0;
+    const workflowsPrev30d = (sqlite.prepare("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, sixtyDaysAgo, thirtyDaysAgo) as any)?.c || 0;
 
     // Boss conversations this month
-    const revenueThisMonth = (sqlite.prepare("SELECT COUNT(*) as r FROM boss_conversations WHERE user_id = ? AND created_at >= ?").get(userId, startOfMonthTs) as any)?.r || 0;
-    const revenuePrevMonth = (sqlite.prepare("SELECT COUNT(*) as r FROM boss_conversations WHERE user_id = ? AND created_at >= ? AND created_at < ?").get(userId, startOfPrevMonthTs, startOfMonthTs) as any)?.r || 0;
+    const revenueThisMonth = (sqlite.prepare("SELECT COUNT(*) as r FROM conversations WHERE user_id = ? AND created_at >= ?").get(userId, startOfMonthTs) as any)?.r || 0;
+    const revenuePrevMonth = (sqlite.prepare("SELECT COUNT(*) as r FROM conversations WHERE user_id = ? AND created_at >= ? AND created_at < ?").get(userId, startOfPrevMonthTs, startOfMonthTs) as any)?.r || 0;
 
     // Compute deltas as percentage
     const computeDelta = (curr: number, prev: number) => {
