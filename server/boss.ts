@@ -262,8 +262,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       };
     }
 
-    // ── Log activity event
-      try {
+    // Log activity event
       try {
         storage.insertActivityEvent({ id: uuidv4(), userId, type: plan ? "department_dispatch" : "boss_direct", title: plan ? "Dispatched to " + plan.departments.map((d:any) => d.id).join(", ") : "Boss answered: " + message.slice(0, 60), description: message.slice(0, 200), metadata: { level } });
       } catch {}
