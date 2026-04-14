@@ -14,7 +14,7 @@ import { encrypt, decrypt, maskKey } from "./lib/crypto";
 import { MODEL_DEFAULTS, FALLBACK_CHAINS } from "./lib/modelDefaults";
 import { CODER_SYSTEM_PROMPT } from "./agents/coder";
 import { ART_SYSTEM_PROMPT } from "./agents/art";
-import { REASONING_SYSTEM_PROMPT } from "./agents/reasoning";
+const REASONING_SYSTEM_PROMPT = "You are a reasoning agent. Think step by step.";
 import { classifyTier } from "./lib/tierClassifier";
 import { TIER_CREDIT_LIMITS, requireCredits, checkTokenBudget } from "./lib/rateLimiter";
 import { INTELLIGENCE_TIERS } from "./departments/types";
