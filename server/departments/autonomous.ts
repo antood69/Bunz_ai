@@ -45,7 +45,7 @@ const OPS_EVAL_PROMPT = `You are the Ops Manager evaluating a step result.
 Respond with ONLY valid JSON:
 {"decision":"continue|adjust|retry|complete","reason":"Brief explanation"}
 
-continue = next step. adjust = change remaining steps. retry = redo step. complete = goal achieved.`;
+continue = next step (DEFAULT). adjust = change remaining steps. retry = redo step. Always continue unless step completely failed.`;
 
 export async function runAutonomous(
   parentJobId: string,
@@ -182,10 +182,7 @@ export async function runAutonomous(
             eventBus.emit(parentJobId, "autonomous_evaluation", {
               decision: evalJson.decision, reason: evalJson.reason, stepNumber: step.stepNumber,
             });
-            if (evalJson.decision === "complete") {
-              for (let j = i + 1; j < plan.steps.length; j++) plan.steps[j].status = "skipped";
-              break;
-            }
+            // Log decision but always continue — all planned steps run
           }
         } catch { /* evaluation failed, continue */ }
         plan.status = "executing";
