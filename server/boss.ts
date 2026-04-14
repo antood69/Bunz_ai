@@ -35,7 +35,7 @@ DECISION RULES:
 2. Tasks requiring specialist work → dispatch to the right department(s)
 3. Multi-part requests → dispatch to MULTIPLE departments
 
-WHEN DISPATCHING, respond with ONLY this JSON (no other text):
+WHEN DISPATCHING, ALWAYS write a brief 1-sentence planning message first (e.g. "Let me get the Research team on this..." or "Sending this to the Coder department..."), then include the JSON block:
 \`\`\`json
 {
   "action": "dispatch",
@@ -62,12 +62,31 @@ interface DispatchPlan {
 }
 
 function parseDispatch(text: string): { plan: DispatchPlan | null; message: string } {
-  const jsonMatch = text.match(/```json\s*([\s\S]*?)```/) ||
-    text.match(/(\{[\s\S]*?"action"\s*:\s*"dispatch"[\s\S]*?\})/);
-  if (!jsonMatch) return { plan: null, message: text };
+  // Extract JSON from markdown code fences or raw JSON
+  let jsonStr: string | null = null;
+  let jsonStart = -1;
+
+  // Try ```json ... ``` first
+  const fenceMatch = text.match(/```json\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    jsonStr = fenceMatch[1];
+    jsonStart = text.indexOf(fenceMatch[0]);
+  } else {
+    // Try to find raw JSON object by brace matching
+    const firstBrace = text.indexOf("{");
+    if (firstBrace !== -1) {
+      let depth = 0;
+      for (let i = firstBrace; i < text.length; i++) {
+        if (text[i] === "{") depth++;
+        else if (text[i] === "}") { depth--; if (depth === 0) { jsonStr = text.slice(firstBrace, i + 1); jsonStart = firstBrace; break; } }
+      }
+    }
+  }
+
+  if (!jsonStr) return { plan: null, message: text };
 
   try {
-    const parsed = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+    const parsed = JSON.parse(jsonStr);
     if (parsed.action !== "dispatch" || !Array.isArray(parsed.departments)) {
       return { plan: null, message: text };
     }
@@ -77,7 +96,7 @@ function parseDispatch(text: string): { plan: DispatchPlan | null; message: stri
     );
     if (departments.length === 0) return { plan: null, message: text };
 
-    const planningMessage = text.slice(0, text.indexOf(jsonMatch[0])).trim() ||
+    const planningMessage = (jsonStart > 0 ? text.slice(0, jsonStart).trim() : `) ||
       `Dispatching to ${departments.map((d: any) => d.id).join(", ")}...`;
 
     return { plan: { departments }, message: planningMessage };

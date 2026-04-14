@@ -1047,7 +1047,7 @@ export default function BossPage() {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto overscroll-contain px-4 md:px-8 py-6 space-y-2">
-            <div className="max-w-3xl mx-auto space-y-2">
+            <div className="max-w-5xl mx-auto space-y-2">
               {messages.map((msg) => (
                 <MessageBubble
                   key={msg.id}
@@ -1072,7 +1072,7 @@ export default function BossPage() {
 
         {/* ── Input area ── */}
         <div className="border-t border-border bg-background px-4 md:px-8 py-4">
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-5xl mx-auto">
             {/* Attached files preview */}
             {attachedFiles.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-2">
