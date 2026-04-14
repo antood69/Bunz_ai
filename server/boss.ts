@@ -20,7 +20,6 @@ import {
 } from "./departments/types";
 import { executeDepartment, type DepartmentTask, type DepartmentResult } from "./departments/executor";
 import { runAutonomous } from "./departments/autonomous";
-import { runAutonomous, type AutonomousPlan } from "./departments/autonomous";
 
 // ── Boss System Prompt ──────────────────────────────────────────────────────
 
@@ -246,22 +245,6 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
           isDelegating: true, departments: plan.departments,
           tokenCount: bossTokens, level,
         };
-      }
-
-      // Autonomous department check
-      const hasAutonomous = plan.departments.some((d: any) => d.id === "autonomous");
-      if (hasAutonomous) {
-        const autoTask = plan.departments.find((d: any) => d.id === "autonomous");
-        runAutonomous(parentJobId, autoTask?.task || message, level, abortController.signal)
-          .then(async (autoPlan) => {
-            const finalContent = autoPlan.finalOutput || "Autonomous task completed.";
-            await storage.createBossMessage({ id: uuidv4(), conversationId: conversationId!, role: "assistant", content: finalContent, tokenCount: autoPlan.totalTokens, model: bossModel, createdAt: Date.now() });
-            await storage.updateAgentJob(parentJobId, { status: "complete", output: JSON.stringify({ autonomous: true, steps: autoPlan.steps.length }), tokenCount: autoPlan.totalTokens, completedAt: Date.now() });
-            eventBus.emit(parentJobId, "complete", { synthesis: finalContent, totalTokens: autoPlan.totalTokens, autonomous: true });
-          })
-          .catch(err => { eventBus.emit(parentJobId, "error", { error: err.message }); })
-          .finally(() => activeAbortControllers.delete(conversationId!));
-        return { conversationId, reply: bossMessage, jobId: parentJobId, isDelegating: true, departments: plan.departments, tokenCount: bossTokens, level };
       }
 
       // Execute departments asynchronously — results flow back via eventBus
