@@ -96,7 +96,7 @@ function parseDispatch(text: string): { plan: DispatchPlan | null; message: stri
     );
     if (departments.length === 0) return { plan: null, message: text };
 
-    const planningMessage = (jsonStart > 0 ? text.slice(0, jsonStart).trim() : `) ||
+    const planningMessage = (jsonStart > 0 ? text.slice(0, jsonStart).trim() : "") ||
       `Dispatching to ${departments.map((d: any) => d.id).join(", ")}...`;
 
     return { plan: { departments }, message: planningMessage };
