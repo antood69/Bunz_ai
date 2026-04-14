@@ -1,0 +1,385 @@
+import { storage } from "../storage";
+import { decryptCredentials } from "./connectorCrypto";
+import type { Connector } from "@shared/schema";
+
+export interface ConnectorAction {
+  name: string;
+  description: string;
+  params: Record<string, { type: string; required?: boolean; description?: string }>;
+}
+
+interface ExecuteResult {
+  ok: boolean;
+  data?: any;
+  error?: string;
+}
+
+// Pre-built actions per connector provider
+const PROVIDER_ACTIONS: Record<string, ConnectorAction[]> = {
+  github: [
+    { name: "list_repos", description: "List authenticated user's repositories", params: { per_page: { type: "number", description: "Items per page (max 100)" } } },
+    { name: "get_file", description: "Get file content from a repository", params: { owner: { type: "string", required: true }, repo: { type: "string", required: true }, path: { type: "string", required: true } } },
+    { name: "create_issue", description: "Create an issue in a repository", params: { owner: { type: "string", required: true }, repo: { type: "string", required: true }, title: { type: "string", required: true }, body: { type: "string" } } },
+    { name: "create_pr", description: "Create a pull request", params: { owner: { type: "string", required: true }, repo: { type: "string", required: true }, title: { type: "string", required: true }, head: { type: "string", required: true }, base: { type: "string", required: true }, body: { type: "string" } } },
+  ],
+  slack: [
+    { name: "send_message", description: "Send a message to a Slack channel", params: { channel: { type: "string", required: true }, text: { type: "string", required: true } } },
+    { name: "list_channels", description: "List Slack channels", params: { limit: { type: "number" } } },
+  ],
+  stripe: [
+    { name: "list_customers", description: "List Stripe customers", params: { limit: { type: "number" } } },
+    { name: "create_invoice", description: "Create a Stripe invoice", params: { customer: { type: "string", required: true }, description: { type: "string" } } },
+  ],
+  google: [
+    { name: "list_emails", description: "List recent Gmail messages", params: { maxResults: { type: "number" } } },
+    { name: "list_files", description: "List Google Drive files", params: { pageSize: { type: "number" } } },
+    { name: "list_events", description: "List Google Calendar events", params: { maxResults: { type: "number" } } },
+  ],
+  notion: [
+    { name: "list_pages", description: "Search Notion pages", params: { query: { type: "string" } } },
+    { name: "create_page", description: "Create a new Notion page", params: { parentId: { type: "string", required: true }, title: { type: "string", required: true }, content: { type: "string" } } },
+    { name: "query_database", description: "Query a Notion database", params: { databaseId: { type: "string", required: true } } },
+  ],
+  custom_rest: [
+    { name: "get", description: "HTTP GET request", params: { path: { type: "string", required: true }, query: { type: "object" } } },
+    { name: "post", description: "HTTP POST request", params: { path: { type: "string", required: true }, body: { type: "object" } } },
+    { name: "put", description: "HTTP PUT request", params: { path: { type: "string", required: true }, body: { type: "object" } } },
+    { name: "delete", description: "HTTP DELETE request", params: { path: { type: "string", required: true } } },
+  ],
+};
+
+// Test connection per provider
+async function testApiKey(provider: string, config: Record<string, any>): Promise<{ ok: boolean; error?: string }> {
+  try {
+    switch (provider) {
+      case "openai": {
+        const res = await fetch("https://api.openai.com/v1/models", {
+          headers: { Authorization: `Bearer ${config.apiKey}` },
+        });
+        if (!res.ok) return { ok: false, error: `OpenAI API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "anthropic": {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": config.apiKey,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 10,
+            messages: [{ role: "user", content: "hi" }],
+          }),
+        });
+        if (!res.ok) return { ok: false, error: `Anthropic API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "github": {
+        const res = await fetch("https://api.github.com/user", {
+          headers: { Authorization: `token ${config.apiKey}` },
+        });
+        if (!res.ok) return { ok: false, error: `GitHub API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "slack": {
+        const res = await fetch("https://slack.com/api/auth.test", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${config.apiKey}` },
+        });
+        const data = await res.json() as any;
+        if (!data.ok) return { ok: false, error: data.error || "Slack auth failed" };
+        return { ok: true };
+      }
+      case "stripe": {
+        const res = await fetch("https://api.stripe.com/v1/balance", {
+          headers: { Authorization: `Bearer ${config.apiKey}` },
+        });
+        if (!res.ok) return { ok: false, error: `Stripe API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "custom_rest": {
+        if (!config.testEndpoint) return { ok: true };
+        const url = `${config.baseUrl}${config.testEndpoint}`;
+        const headers: Record<string, string> = {};
+        if (config.authType === "bearer") headers["Authorization"] = `Bearer ${config.authValue}`;
+        else if (config.authType === "api_key") headers["X-API-Key"] = config.authValue;
+        else if (config.authType === "basic") headers["Authorization"] = `Basic ${Buffer.from(config.authValue).toString("base64")}`;
+        if (config.headers) {
+          const parsed = typeof config.headers === "string" ? JSON.parse(config.headers) : config.headers;
+          Object.assign(headers, parsed);
+        }
+        const res = await fetch(url, { headers });
+        if (!res.ok) return { ok: false, error: `Endpoint returned ${res.status}` };
+        return { ok: true };
+      }
+      default:
+        return { ok: true };
+    }
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Connection test failed" };
+  }
+}
+
+// Test OAuth2 connections
+async function testOAuth2(provider: string, config: Record<string, any>): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const accessToken = config.accessToken;
+    if (!accessToken) return { ok: false, error: "No access token" };
+
+    switch (provider) {
+      case "google": {
+        const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok) return { ok: false, error: `Google API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "notion": {
+        const res = await fetch("https://api.notion.com/v1/users/me", {
+          headers: { Authorization: `Bearer ${accessToken}`, "Notion-Version": "2022-06-28" },
+        });
+        if (!res.ok) return { ok: false, error: `Notion API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "hubspot": {
+        const res = await fetch("https://api.hubapi.com/crm/v3/objects/contacts?limit=1", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok) return { ok: false, error: `HubSpot API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "discord": {
+        const res = await fetch("https://discord.com/api/v10/users/@me", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok) return { ok: false, error: `Discord API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "dropbox": {
+        const res = await fetch("https://api.dropboxapi.com/2/users/get_current_account", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok) return { ok: false, error: `Dropbox API returned ${res.status}` };
+        return { ok: true };
+      }
+      default:
+        return { ok: true };
+    }
+  } catch (err: any) {
+    return { ok: false, error: err.message || "OAuth test failed" };
+  }
+}
+
+// Execute an action on a connector
+async function executeAction(connector: Connector, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  try {
+    const config = decryptCredentials(connector.config);
+
+    switch (connector.provider) {
+      case "github":
+        return executeGitHub(config, action, params);
+      case "slack":
+        return executeSlack(config, action, params);
+      case "stripe":
+        return executeStripe(config, action, params);
+      case "google":
+        return executeGoogle(config, action, params);
+      case "notion":
+        return executeNotion(config, action, params);
+      case "custom_rest":
+        return executeCustomRest(config, action, params);
+      default:
+        return { ok: false, error: `No executor for provider: ${connector.provider}` };
+    }
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  }
+}
+
+async function executeGitHub(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const headers = { Authorization: `token ${config.apiKey}`, Accept: "application/vnd.github.v3+json" };
+  switch (action) {
+    case "list_repos": {
+      const res = await fetch(`https://api.github.com/user/repos?per_page=${params.per_page || 30}`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "get_file": {
+      const res = await fetch(`https://api.github.com/repos/${params.owner}/${params.repo}/contents/${params.path}`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "create_issue": {
+      const res = await fetch(`https://api.github.com/repos/${params.owner}/${params.repo}/issues`, {
+        method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ title: params.title, body: params.body }),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "create_pr": {
+      const res = await fetch(`https://api.github.com/repos/${params.owner}/${params.repo}/pulls`, {
+        method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ title: params.title, head: params.head, base: params.base, body: params.body }),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    default:
+      return { ok: false, error: `Unknown GitHub action: ${action}` };
+  }
+}
+
+async function executeSlack(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const headers = { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" };
+  switch (action) {
+    case "send_message": {
+      const res = await fetch("https://slack.com/api/chat.postMessage", {
+        method: "POST", headers, body: JSON.stringify({ channel: params.channel, text: params.text }),
+      });
+      const data = await res.json() as any;
+      return { ok: data.ok, data, error: data.error };
+    }
+    case "list_channels": {
+      const res = await fetch(`https://slack.com/api/conversations.list?limit=${params.limit || 100}`, { headers });
+      const data = await res.json() as any;
+      return { ok: data.ok, data: data.channels, error: data.error };
+    }
+    default:
+      return { ok: false, error: `Unknown Slack action: ${action}` };
+  }
+}
+
+async function executeStripe(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const headers = { Authorization: `Bearer ${config.apiKey}` };
+  switch (action) {
+    case "list_customers": {
+      const res = await fetch(`https://api.stripe.com/v1/customers?limit=${params.limit || 10}`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "create_invoice": {
+      const body = new URLSearchParams({ customer: params.customer });
+      if (params.description) body.set("description", params.description);
+      const res = await fetch("https://api.stripe.com/v1/invoices", {
+        method: "POST", headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    default:
+      return { ok: false, error: `Unknown Stripe action: ${action}` };
+  }
+}
+
+async function executeGoogle(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const headers = { Authorization: `Bearer ${config.accessToken}` };
+  switch (action) {
+    case "list_emails": {
+      const res = await fetch(`https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=${params.maxResults || 10}`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "list_files": {
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?pageSize=${params.pageSize || 10}`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "list_events": {
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=${params.maxResults || 10}`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    default:
+      return { ok: false, error: `Unknown Google action: ${action}` };
+  }
+}
+
+async function executeNotion(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const headers = { Authorization: `Bearer ${config.accessToken}`, "Notion-Version": "2022-06-28", "Content-Type": "application/json" };
+  switch (action) {
+    case "list_pages": {
+      const res = await fetch("https://api.notion.com/v1/search", {
+        method: "POST", headers, body: JSON.stringify({ query: params.query || "", filter: { property: "object", value: "page" } }),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "create_page": {
+      const res = await fetch("https://api.notion.com/v1/pages", {
+        method: "POST", headers,
+        body: JSON.stringify({
+          parent: { page_id: params.parentId },
+          properties: { title: { title: [{ text: { content: params.title } }] } },
+          children: params.content ? [{ object: "block", type: "paragraph", paragraph: { rich_text: [{ type: "text", text: { content: params.content } }] } }] : [],
+        }),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "query_database": {
+      const res = await fetch(`https://api.notion.com/v1/databases/${params.databaseId}/query`, {
+        method: "POST", headers, body: JSON.stringify({}),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    default:
+      return { ok: false, error: `Unknown Notion action: ${action}` };
+  }
+}
+
+async function executeCustomRest(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const method = action.toUpperCase();
+  if (!["GET", "POST", "PUT", "DELETE"].includes(method)) return { ok: false, error: `Invalid method: ${method}` };
+
+  const url = `${config.baseUrl}${params.path || ""}`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+
+  if (config.authType === "bearer") headers["Authorization"] = `Bearer ${config.authValue}`;
+  else if (config.authType === "api_key") headers["X-API-Key"] = config.authValue;
+  else if (config.authType === "basic") headers["Authorization"] = `Basic ${Buffer.from(config.authValue).toString("base64")}`;
+
+  if (config.headers) {
+    const parsed = typeof config.headers === "string" ? JSON.parse(config.headers) : config.headers;
+    Object.assign(headers, parsed);
+  }
+
+  const fetchOpts: RequestInit = { method, headers };
+  if (params.body && ["POST", "PUT"].includes(method)) {
+    fetchOpts.body = JSON.stringify(params.body);
+  }
+
+  const res = await fetch(url, fetchOpts);
+  const text = await res.text();
+  let data: any;
+  try { data = JSON.parse(text); } catch { data = text; }
+  return { ok: res.ok, data };
+}
+
+// Public API
+export const connectorRegistry = {
+  listActions(provider: string): ConnectorAction[] {
+    return PROVIDER_ACTIONS[provider] || [];
+  },
+
+  async testConnection(connectorId: number): Promise<{ ok: boolean; error?: string }> {
+    const connector = await storage.getConnector(connectorId);
+    if (!connector) return { ok: false, error: "Connector not found" };
+
+    const config = decryptCredentials(connector.config);
+
+    if (connector.type === "oauth2") {
+      return testOAuth2(connector.provider, config);
+    }
+    return testApiKey(connector.provider, config);
+  },
+
+  async execute(connectorId: number, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+    const connector = await storage.getConnector(connectorId);
+    if (!connector) return { ok: false, error: "Connector not found" };
+
+    const result = await executeAction(connector, action, params);
+
+    // Update last used timestamp
+    await storage.updateConnector(connectorId, {
+      lastUsedAt: new Date().toISOString(),
+      status: result.ok ? "connected" : "error",
+      lastError: result.error || null,
+    } as any);
+
+    return result;
+  },
+};
