@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { DEFAULT_LAYOUT } from "./widgets";
+import { DEFAULT_LAYOUT, WIDGET_REGISTRY } from "./widgets";
 
 interface LayoutItem {
   i: string;
@@ -52,7 +52,10 @@ export function useDashboardLayout() {
   }, [savedData]);
 
   // The active layout: local override > server saved > default
-  const layout: LayoutItem[] = localLayout || savedData?.layout || DEFAULT_LAYOUT;
+  // Filter out widgets that no longer exist in the registry
+  const validIds = new Set(WIDGET_REGISTRY.map(w => w.id));
+  const rawLayout: LayoutItem[] = localLayout || savedData?.layout || DEFAULT_LAYOUT;
+  const layout: LayoutItem[] = rawLayout.filter(l => validIds.has(l.i));
 
   // Save mutation
   const saveMutation = useMutation({

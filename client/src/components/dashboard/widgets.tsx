@@ -295,9 +295,9 @@ export function QuickActionsWidget() {
             <Zap className="w-4 h-4" /> Autonomous Task
           </Button>
         </Link>
-        <Link href="/settings">
+        <Link href="/settings?tab=ai-preferences">
           <Button variant="outline" size="sm" className="w-full justify-start gap-2 bg-emerald-500/5 hover:bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
-            <Eye className="w-4 h-4" /> API Keys
+            <Eye className="w-4 h-4" /> AI Settings & Keys
           </Button>
         </Link>
       </div>
