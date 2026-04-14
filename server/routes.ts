@@ -1033,7 +1033,13 @@ export async function registerRoutes(
   app.get("/api/dashboard/active-agents", async (req, res) => {
     try {
       const userId = req.user?.id || 1;
-      const jobs = await storage.getRunningJobsByUser(userId);
+      const showAll = req.query.status === "all";
+      let jobs: any[];
+      if (showAll) {
+        try { jobs = await storage.getRecentJobsByUser(userId, 30); } catch { jobs = await storage.getRunningJobsByUser(userId); }
+      } else {
+        jobs = await storage.getRunningJobsByUser(userId);
+      }
       const activeJobs = jobs.map((j: any) => ({
         jobId: j.id,
         type: j.type || "boss",
