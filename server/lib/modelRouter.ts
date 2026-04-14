@@ -192,6 +192,7 @@ async function callOpenAIImage(opts: ChatOptions, apiKey?: string): Promise<Chat
       n: 1,
       size: "1024x1024",
       quality: "medium",
+      output_format: "png",
     }),
   });
   if (!res.ok) {
