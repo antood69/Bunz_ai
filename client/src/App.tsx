@@ -17,7 +17,6 @@ import AdminPage from "@/pages/AdminPage";
 import ToolsPage from "@/pages/ToolsPage";
 import ConnectorsPage from "@/pages/ConnectorsPage";
 import BossPage from "@/pages/BossPage";
-import CustomizationPage from "@/pages/CustomizationPage";
 import AnalyticsStubPage from "@/pages/AnalyticsStubPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import AppLayout from "@/components/AppLayout";

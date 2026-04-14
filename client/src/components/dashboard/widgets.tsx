@@ -71,7 +71,7 @@ function EmptyState({ message }: { message: string }) {
 export function KPICardWidget({ variant, onClick }: { variant: "agents" | "tokens" | "workflows" | "revenue"; onClick?: () => void }) {
   const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
-    refetchInterval: variant === "tokens" ? 5000 : 30000,
+    refetchInterval: variant === "agents" ? 3000 : variant === "tokens" ? 5000 : 15000,
   });
 
   if (isLoading) return <WidgetSkeleton />;
