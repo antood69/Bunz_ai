@@ -89,7 +89,7 @@ export function ActiveAgentsPanel({
   const queryClient = useQueryClient();
 
   const { data: agents = [], isLoading } = useQuery<ActiveAgent[]>({
-    queryKey: ["/api/dashboard/active-agents"],
+    queryKey: ["/api/dashboard/active-agents?status=all"],
     enabled: open,
     refetchInterval: open ? 5000 : false,
   });
@@ -100,7 +100,7 @@ export function ActiveAgentsPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["/api/dashboard/active-agents"],
+        queryKey: ["/api/dashboard/active-agents?status=all"],
       });
     },
   });
@@ -111,14 +111,14 @@ export function ActiveAgentsPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["/api/dashboard/active-agents"],
+        queryKey: ["/api/dashboard/active-agents?status=all"],
       });
     },
   });
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col gap-0 p-0">
+      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col gap-0 p-0">
         <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-primary" />
@@ -139,7 +139,7 @@ export function ActiveAgentsPanel({
           <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
             <Bot className="h-10 w-10 text-muted-foreground/50 mb-3" />
             <p className="text-sm text-muted-foreground">
-              No active agents. Start a workflow or chat to see AI activity
+              No active agents. Start a chat with Boss to see AI activity
               here.
             </p>
           </div>

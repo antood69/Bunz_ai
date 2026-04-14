@@ -3261,6 +3261,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(agentJobs).where(and(eq(agentJobs.userId, userId), eq(agentJobs.status, "running"))).all();
   }
 
+  async getRecentJobsByUser(userId: number, limit: number = 30): Promise<AgentJob[]> {
+    return sqlite.prepare("SELECT * FROM agent_jobs WHERE user_id = ? ORDER BY created_at DESC LIMIT ?").all(userId, limit) as AgentJob[];
+  }
+
   async updateAgentJob(id: string, data: Partial<AgentJob>): Promise<AgentJob | undefined> {
     const updates: any = { ...data };
     return db.update(agentJobs).set(updates).where(eq(agentJobs.id, id)).returning().get();

@@ -108,6 +108,16 @@ export function KPICardWidget({ variant, onClick }: { variant: "agents" | "token
 // ── 1b. Clickable Active Agents KPI ─────────────────────────────────────
 import { ActiveAgentsPanel } from "./ActiveAgentsPanel";
 
+export function ClickableTasksKPI() {
+  const [panelOpen, setPanelOpen] = useState(false);
+  return (
+    <>
+      <KPICardWidget variant="workflows" onClick={() => setPanelOpen(true)} />
+      <ActiveAgentsPanel open={panelOpen} onClose={() => setPanelOpen(false)} />
+    </>
+  );
+}
+
 export function ClickableAgentsKPI() {
   const [panelOpen, setPanelOpen] = useState(false);
   return (
@@ -801,7 +811,7 @@ export interface WidgetDefinition {
 export const WIDGET_REGISTRY: WidgetDefinition[] = [
   { id: "kpi-agents", name: "Active Agents", description: "Shows count of currently running agents with period delta \u2014 click to manage", category: "stats", icon: Bot, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: ClickableAgentsKPI },
   { id: "kpi-tokens", name: "Tokens Used (Live)", description: "7-day token consumption with real-time updates", category: "stats", icon: Coins, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: KPICardWidget, props: { variant: "tokens" } },
-  { id: "kpi-workflows", name: "Tasks Run", description: "Department tasks executed (30d)", category: "stats", icon: GitBranch, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: KPICardWidget, props: { variant: "workflows" } },
+  { id: "kpi-workflows", name: "Tasks Run", description: "Department tasks executed (30d) - click to view history", category: "stats", icon: Zap, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: ClickableTasksKPI },
   { id: "kpi-revenue", name: "Conversations", description: "Boss conversations this month", category: "stats", icon: DollarSign, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: KPICardWidget, props: { variant: "revenue" } },
   { id: "active-workflows", name: "Active Workflows", description: "Live view of running workflows with inspect button", category: "workflows", icon: Play, defaultW: 6, defaultH: 5, minW: 4, minH: 3, component: ActiveWorkflowsWidget },
   { id: "inactive-workflows", name: "Inactive Workflows", description: "Stopped workflows with run and edit buttons", category: "workflows", icon: Clock, defaultW: 6, defaultH: 5, minW: 4, minH: 3, component: InactiveWorkflowsWidget },
