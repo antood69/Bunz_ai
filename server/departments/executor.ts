@@ -233,7 +233,6 @@ async function runArtistDept(
         const imgName = `img_${parentJobId.slice(0, 8)}_${Date.now()}.png`;
         fs.writeFileSync(path.join(imgDir, imgName), Buffer.from(b64, "base64"));
         servedUrl = `/generated/${imgName}`;
-        console.log("[Artist] Image saved:", servedUrl);
       } catch (e: any) { console.error("[Artist] Failed to save image:", e.message); }
     }
     eventBus.emit(parentJobId, "agent_image", {

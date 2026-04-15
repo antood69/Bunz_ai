@@ -78,8 +78,6 @@ export async function autoLinkNote(notePath: string, noteContent: string): Promi
     const updatedContent = noteContent + linkSection;
 
     await obsExec(obs.id, "write_note", { path: notePath, content: updatedContent });
-    console.log(`[VaultBrain] Auto-linked ${notePath} to ${relatedPaths.length} notes`);
-
     return relatedPaths;
   } catch (e: any) {
     console.error(`[VaultBrain] Auto-link failed:`, e.message);
@@ -148,7 +146,6 @@ Be specific, not generic. Reference actual content from the notes.`,
       content: header + reflection.content,
     });
 
-    console.log(`[VaultBrain] Reflection saved: ${reflectionPath}`);
     return reflectionPath;
   } catch (e: any) {
     console.error(`[VaultBrain] Reflection failed:`, e.message);

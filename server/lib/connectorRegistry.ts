@@ -389,7 +389,6 @@ async function executeNotion(config: Record<string, any>, action: string, params
 async function executeObsidian(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
   const apiUrl = config.apiUrl || "http://127.0.0.1:27123";
   const apiKey = config.apiKey;
-  console.log(`[Obsidian] execute action="${action}" apiUrl="${apiUrl}" hasKey=${!!apiKey}`);
   if (!apiKey) return { ok: false, error: "No Obsidian API key" };
   const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}` };
 
@@ -414,16 +413,13 @@ async function executeObsidian(config: Record<string, any>, action: string, para
       }
       case "write_note": {
         const writeUrl = `${apiUrl}/vault/${encodeURIComponent(params.path)}`;
-        console.log(`[Obsidian] PUT ${writeUrl} (${params.content?.length || 0} bytes)`);
         const res = await fetch(writeUrl, {
           method: "PUT",
           headers: { ...headers, "Content-Type": "text/markdown" },
           body: params.content,
         });
-        console.log(`[Obsidian] write response: ${res.status} ${res.statusText}`);
         if (!res.ok) {
           const errBody = await res.text().catch(() => "");
-          console.error(`[Obsidian] write error body: ${errBody}`);
           return { ok: false, error: `Write failed: ${res.status} ${errBody}` };
         }
         return { ok: true, data: { path: params.path, written: true } };

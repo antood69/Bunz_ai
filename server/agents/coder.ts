@@ -498,11 +498,7 @@ async function runCoderPlainChat(input: CoderInput): Promise<AgentOutput> {
 export async function runCoderAgent(input: CoderInput): Promise<AgentOutput> {
   // If GitHub context is provided, use the agentic tool-use loop
   if (input.github?.token && input.github?.repo) {
-    console.log(`[CoderAgent] Running with GitHub tools on ${input.github.repo}`);
     return runCoderWithTools(input);
   }
-
-  // Otherwise fall back to plain chat
-  console.log("[CoderAgent] Running in plain chat mode (no GitHub context)");
   return runCoderPlainChat(input);
 }

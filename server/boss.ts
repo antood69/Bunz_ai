@@ -23,27 +23,17 @@ import { storage } from "./storage";
 /** Returns a DB connector record, or a synthetic { id: "env" } object when env vars are set */
 async function getOwnerObsidianConnector(): Promise<any | null> {
   try {
-    // Try DB connector first (any user)
     const allUsers = await storage.getAllUsers();
     for (const u of allUsers) {
       const connectors = await storage.getConnectorsByUser(u.id);
       const obs = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
-      if (obs) {
-        console.log(`[Obsidian] Found DB connector id=${obs.id} for user ${u.id}`);
-        return obs;
-      }
+      if (obs) return obs;
     }
-    // Fallback: env vars
     if (process.env.OBSIDIAN_API_URL && process.env.OBSIDIAN_API_KEY) {
-      console.log(`[Obsidian] Using env var connector: ${process.env.OBSIDIAN_API_URL}`);
       return { id: "env", provider: "obsidian", status: "connected" };
     }
-    console.log(`[Obsidian] No connector found (DB or env)`);
     return null;
-  } catch (err: any) {
-    console.error(`[Obsidian lookup] ERROR: ${err.message}`);
-    return null;
-  }
+  } catch { return null; }
 }
 
 /** Execute an Obsidian action — uses DB connector or env var fallback */
@@ -338,7 +328,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
             });
             eventBus.emit(parentJobId, "complete", { synthesis: finalContent, totalTokens: autoPlan.totalTokens, autonomous: true });
           })
-          .catch(async (err) => { console.error("[Autonomous] FAILED:", err.message, err.stack?.slice(0, 200)); try { await storage.createBossMessage({ id: uuidv4(), conversationId: conversationId!, role: "assistant", content: "Autonomous task failed: " + err.message, tokenCount: 0, model: null, createdAt: Date.now() }); } catch {} eventBus.emit(parentJobId, "error", { error: err.message }); eventBus.emit(parentJobId, "complete", { synthesis: "Autonomous task failed: " + err.message, totalTokens: 0 }); })
+          .catch(async (err) => { console.error("[Autonomous] FAILED:", err.message); try { await storage.createBossMessage({ id: uuidv4(), conversationId: conversationId!, role: "assistant", content: "Autonomous task failed: " + err.message, tokenCount: 0, model: null, createdAt: Date.now() }); } catch {} eventBus.emit(parentJobId, "error", { error: err.message }); eventBus.emit(parentJobId, "complete", { synthesis: "Autonomous task failed: " + err.message, totalTokens: 0 }); })
           .finally(() => activeAbortControllers.delete(conversationId!));
 
         return {
@@ -382,15 +372,13 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     // Auto-save Boss direct answers to owner's Obsidian vault
     try {
       const obsConnector = await getOwnerObsidianConnector();
-      console.log(`[Boss] Obsidian connector for auto-save: ${obsConnector ? `id=${obsConnector.id}` : "NOT FOUND"}`);
       if (obsConnector) {
         const timestamp = new Date().toISOString().slice(0, 10);
         const slug = message.slice(0, 50).replace(/[^a-zA-Z0-9]+/g, "-").replace(/-+$/, "").toLowerCase();
         // Save Boss response
         const bossPath = `Boss/${timestamp}-${slug}.md`;
         const header = `# ${message.slice(0, 80)}\n*${new Date().toLocaleString()} | Boss Direct | Level: ${level} | User: ${userEmail || "unknown"}*\n\n---\n\n`;
-        const writeResult = await obsidianExec(obsConnector.id, "write_note", { path: bossPath, content: header + bossResult.content });
-        console.log(`[Boss] Vault write result for ${bossPath}:`, writeResult.ok ? "OK" : writeResult.error);
+        await obsidianExec(obsConnector.id, "write_note", { path: bossPath, content: header + bossResult.content });
         // Save input
         const inputPath = `Inputs/${timestamp}-${slug}.md`;
         const inputContent = `# Prompt\n*${new Date().toLocaleString()} | Level: ${level} | Direct (Boss) | User: ${userEmail || "unknown"}*\n\n---\n\n${message}`;
@@ -567,11 +555,8 @@ Present each department's output clearly. For code, keep it in code blocks. For 
     }
 
     // ── Post-synthesis: auto-save to owner's Obsidian vault by department ──
-    console.log("[Boss] Starting vault save for department synthesis...");
-    console.log(`[Boss] userEmail=${userEmail}, departments=${departments.map(d => d.id).join(",")}`);
     try {
       const obsConnector = await getOwnerObsidianConnector();
-      console.log(`[Boss] Obsidian connector: ${obsConnector ? `id=${obsConnector.id}, status=${obsConnector.status}` : "NOT FOUND"}`);
 
       if (obsConnector) {
         // Check if user specified a custom path
@@ -596,9 +581,7 @@ Present each department's output clearly. For code, keep it in code blocks. For 
               const imgUrl = r.imageUrl.startsWith("/") ? `${process.env.APP_URL || "http://localhost:3000"}${r.imageUrl}` : r.imageUrl;
               body += `\n\n## Generated Image\n![Generated Image](${imgUrl})\n`;
             }
-            console.log(`[Boss] Writing dept note: ${notePath}`);
             const result = await obsidianExec(obsConnector.id, "write_note", { path: notePath, content: header + body });
-            console.log(`[Boss] Write result for ${notePath}: ${result.ok ? "OK" : result.error}`);
             if (result.ok) savedPaths.push(notePath);
           }
 
@@ -628,7 +611,6 @@ Present each department's output clearly. For code, keep it in code blocks. For 
         }
 
         if (savedPaths.length > 0) {
-          console.log(`[Boss] Auto-saved to Obsidian: ${savedPaths.join(", ")}`);
           const pathList = savedPaths.map(p => `\`${p}\``).join(", ");
           eventBus.emit(parentJobId, "token", { workerType: "boss", text: `\n\n📁 *Saved to Obsidian vault: ${pathList}*`, isSynthesis: true });
 
@@ -647,7 +629,6 @@ Present each department's output clearly. For code, keep it in code blocks. For 
             const { runReflection } = await import("./lib/vaultBrain.js");
             const taskCount = await storage.getDepartmentStats(userId).reduce((sum, d) => sum + d.total, 0);
             if (taskCount > 0 && taskCount % 5 === 0) {
-              console.log(`[VaultBrain] Auto-reflection triggered (task #${taskCount})`);
               runReflection().catch(() => {});
             }
           } catch {}
@@ -668,14 +649,13 @@ Present each department's output clearly. For code, keep it in code blocks. For 
               parentId, title, content: synthesis.content.slice(0, 2000),
             });
             if (writeResult.ok) {
-              console.log(`[Boss] Created Notion page: ${title}`);
               eventBus.emit(parentJobId, "token", { workerType: "boss", text: `\n\n✅ *Created Notion page: ${title}*`, isSynthesis: true });
             }
           }
         }
       }
     } catch (e: any) {
-      console.error("[Boss] Connector write-back failed:", e.message, e.stack?.slice(0, 300));
+      console.error("[Boss] Connector write-back failed:", e.message);
     }
 
     // Build final content with image markers

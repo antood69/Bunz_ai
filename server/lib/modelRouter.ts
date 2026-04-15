@@ -591,8 +591,6 @@ export const modelRouter = {
         const result = await callProvider({ ...opts, model: currentModel });
 
         if (i > 0) {
-          // Fallback was used
-          console.log(`[modelRouter] Fallback: ${opts.model} → ${currentModel} (attempt ${i + 1})`);
           result.fallbackUsed = currentModel;
         }
 

@@ -9,7 +9,6 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-// ModelSelector removed
 import { findModel, BADGE_CONFIG, COST_TIER_CONFIG } from "@/lib/ai-providers";
 import type { ModelBadge, CostTier } from "@/lib/ai-providers";
 
@@ -167,7 +166,6 @@ function AgentCard({
         )}
         {showPicker ? (
           <div className="relative">
-            {/* ModelSelector removed */}
             <button
               onClick={() => setShowPicker(false)}
               className="absolute -top-1 -right-1 p-0.5 rounded-full bg-card border border-border text-muted-foreground hover:text-foreground"

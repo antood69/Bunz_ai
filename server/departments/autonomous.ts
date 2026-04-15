@@ -123,8 +123,6 @@ export async function runAutonomous(
           ? `${step.task}\n\nContext from previous steps:\n${previousOutput.slice(0, 2000)}`
           : step.task;
 
-        console.log(`[Autonomous] Starting step ${step.stepNumber}: ${step.department} - ${step.task.slice(0, 80)}`);
-
         const result: DepartmentResult = await executeDepartment(
           parentJobId, { department: step.department, task: taskWithContext },
           level, estimateComplexity(taskWithContext), signal,
@@ -148,8 +146,6 @@ export async function runAutonomous(
           tokens: result.totalTokens,
           durationMs: step.durationMs,
         });
-
-        console.log(`[Autonomous] Step ${step.stepNumber} complete: ${result.totalTokens} tokens`);
 
       } catch (err: any) {
         if (err?.name === "AbortError") throw err;

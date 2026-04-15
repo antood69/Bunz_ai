@@ -58,8 +58,6 @@ async function executePipeline(
         prompt: prompt.slice(0, 200),
       });
 
-      console.log(`[Pipeline] Step ${i + 1}/${steps.length}: ${stepLabel} — ${prompt.slice(0, 80)}`);
-
       let stepOutput = "";
       let stepTokens = 0;
       const stepStart = Date.now();
