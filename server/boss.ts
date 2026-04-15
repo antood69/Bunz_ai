@@ -559,16 +559,32 @@ Present each department's output clearly. For code, keep it in code blocks. For 
           for (const r of deptResults) {
             const deptFolder = r.department.charAt(0).toUpperCase() + r.department.slice(1);
             const notePath = `${deptFolder}/${timestamp}-${slug}.md`;
-            const header = `# ${originalMessage.slice(0, 80)}\n*Generated: ${new Date().toLocaleString()} | Department: ${deptFolder}*\n\n---\n\n`;
-            const result = await connectorRegistry.execute(obsConnector.id, "write_note", { path: notePath, content: header + r.finalOutput });
+            const header = `# ${originalMessage.slice(0, 80)}\n*Generated: ${new Date().toLocaleString()} | Department: ${deptFolder} | User: ${userEmail || "unknown"}*\n\n---\n\n`;
+            let body = r.finalOutput;
+            // Embed image if Artist department produced one
+            if (r.imageUrl) {
+              const imgUrl = r.imageUrl.startsWith("/") ? `${process.env.APP_URL || "http://localhost:3000"}${r.imageUrl}` : r.imageUrl;
+              body += `\n\n## Generated Image\n![Generated Image](${imgUrl})\n`;
+            }
+            const result = await connectorRegistry.execute(obsConnector.id, "write_note", { path: notePath, content: header + body });
             if (result.ok) savedPaths.push(notePath);
           }
 
-          // Save the full synthesis
+          // Save the full synthesis with embedded images and source links
           const synthPath = deptResults.length > 1 ? `Synthesis/${timestamp}-${slug}.md` : `${deptResults[0].department.charAt(0).toUpperCase() + deptResults[0].department.slice(1)}/${timestamp}-${slug}.md`;
           if (deptResults.length > 1) {
-            const header = `# ${originalMessage.slice(0, 80)}\n*Synthesized: ${new Date().toLocaleString()} | Departments: ${departments.map(d => d.id).join(", ")}*\n\n---\n\n`;
-            const result = await connectorRegistry.execute(obsConnector.id, "write_note", { path: synthPath, content: header + synthesis.content });
+            const header = `# ${originalMessage.slice(0, 80)}\n*Synthesized: ${new Date().toLocaleString()} | Departments: ${departments.map(d => d.id).join(", ")} | User: ${userEmail || "unknown"}*\n\n---\n\n`;
+            let synthBody = synthesis.content;
+            // Append any generated images
+            const imageResults = deptResults.filter(r => r.imageUrl);
+            if (imageResults.length > 0) {
+              synthBody += "\n\n## Generated Images\n";
+              for (const img of imageResults) {
+                const imgUrl = img.imageUrl!.startsWith("/") ? `${process.env.APP_URL || "http://localhost:3000"}${img.imageUrl}` : img.imageUrl;
+                synthBody += `![${img.department} output](${imgUrl})\n`;
+              }
+            }
+            const result = await connectorRegistry.execute(obsConnector.id, "write_note", { path: synthPath, content: header + synthBody });
             if (result.ok) savedPaths.push(synthPath);
           }
 
