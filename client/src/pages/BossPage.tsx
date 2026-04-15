@@ -924,6 +924,7 @@ export default function BossPage() {
           conversationId: serverConvId || undefined,
           history,
           level: selectedLevel,
+          attachments: currentAttachments?.map(a => ({ id: a.id, url: a.url, mimeType: a.mimeType, name: a.name })),
         }),
       });
 

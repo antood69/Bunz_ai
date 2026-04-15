@@ -20,7 +20,13 @@ import { decrypt } from "./crypto";
 
 export interface ChatMessage {
   role: "user" | "assistant";
-  content: string;
+  content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+}
+
+/** Extract plain text from a ChatMessage content (handles both string and multimodal) */
+function textContent(content: ChatMessage["content"]): string {
+  if (typeof content === "string") return content;
+  return content.filter(p => p.type === "text").map(p => (p as any).text).join("\n");
 }
 
 export interface Usage {
@@ -180,7 +186,7 @@ async function callOpenAIImage(opts: ChatOptions, apiKey?: string): Promise<Chat
   const key = apiKey || process.env.OPENAI_API_KEY;
   if (!key) throw new Error("OpenAI API key not configured");
   const lastUserMsg = [...opts.messages].reverse().find(m => m.role === "user");
-  const prompt = lastUserMsg?.content || "";
+  const prompt = lastUserMsg ? textContent(lastUserMsg.content) : "";
   // Use Images API (v1/images/generations) — NOT Responses API
   const model = opts.model.startsWith("gpt-image") ? opts.model : "gpt-image-1";
   const res = await fetch("https://api.openai.com/v1/images/generations", {
@@ -214,7 +220,7 @@ async function callGoogleImagen(opts: ChatOptions, apiKey?: string): Promise<Cha
   const key = apiKey || process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_AI_KEY;
   if (!key) throw new Error("Google AI API key not configured");
   const lastUserMsg = [...opts.messages].reverse().find(m => m.role === "user");
-  const prompt = lastUserMsg?.content || "";
+  const prompt = lastUserMsg ? textContent(lastUserMsg.content) : "";
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${opts.model}:predict?key=${key}`,
     {
@@ -244,7 +250,7 @@ async function callGoogleImagen(opts: ChatOptions, apiKey?: string): Promise<Cha
 async function callOpenRouterImage(opts: ChatOptions, apiKey?: string): Promise<ChatResult> {
   const client = openrouterClient(apiKey);
   const lastUserMsg = [...opts.messages].reverse().find(m => m.role === "user");
-  const prompt = lastUserMsg?.content || "";
+  const prompt = lastUserMsg ? textContent(lastUserMsg.content) : "";
   const response = await client.chat.completions.create({
     model: opts.model,
     max_tokens: opts.maxTokens || 4096,
@@ -278,7 +284,25 @@ async function callOpenRouterImage(opts: ChatOptions, apiKey?: string): Promise<
 async function callAnthropic(opts: ChatOptions, apiKey?: string): Promise<ChatResult> {
   const client = anthropicClient(apiKey);
   const system = opts.systemPrompt?.trim() || SYSTEM_DEFAULT;
-  const msgs = opts.messages.map((m) => ({ role: m.role, content: m.content }));
+
+  // Convert messages — handle multimodal content for Anthropic's format
+  const msgs = opts.messages.map((m) => {
+    if (typeof m.content === "string") return { role: m.role, content: m.content };
+    // Convert array content to Anthropic format
+    const parts: any[] = m.content.map((part: any) => {
+      if (part.type === "text") return { type: "text", text: part.text };
+      if (part.type === "image_url" && part.image_url?.url) {
+        const url = part.image_url.url;
+        if (url.startsWith("data:")) {
+          const match = url.match(/^data:(image\/\w+);base64,(.+)$/);
+          if (match) return { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } };
+        }
+        return { type: "text", text: `[Image: ${url}]` };
+      }
+      return { type: "text", text: JSON.stringify(part) };
+    });
+    return { role: m.role, content: parts };
+  });
 
   const response = await client.messages.create({
     model: opts.model,
@@ -317,7 +341,7 @@ async function callOpenAI(opts: ChatOptions, apiKey?: string): Promise<ChatResul
     ...tokenParam,
     messages: [
       { role: "system", content: system },
-      ...opts.messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      ...opts.messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content as any })),
     ],
   });
 
@@ -342,7 +366,7 @@ async function callPerplexity(opts: ChatOptions, apiKey?: string): Promise<ChatR
   for (const m of opts.messages) {
     const last = dedupedMsgs[dedupedMsgs.length - 1];
     if (last && last.role === m.role) {
-      last.content += "\n" + m.content;
+      last.content += "\n" + textContent(m.content);
     } else {
       dedupedMsgs.push({ ...m });
     }
@@ -354,7 +378,7 @@ async function callPerplexity(opts: ChatOptions, apiKey?: string): Promise<ChatR
     max_tokens: opts.maxTokens || 4096,
     messages: [
       { role: "system", content: system },
-      ...dedupedMsgs.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      ...dedupedMsgs.map((m) => ({ role: m.role as "user" | "assistant", content: textContent(m.content) })),
     ],
   } as any);
 
@@ -377,12 +401,12 @@ async function callGoogle(opts: ChatOptions, apiKey?: string): Promise<ChatResul
 
   const chatHistory = opts.messages.slice(0, -1).map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
+    parts: [{ text: textContent(m.content) }],
   }));
 
   const lastMsg = opts.messages[opts.messages.length - 1];
   const chat = genModel.startChat({ history: chatHistory });
-  const result = await chat.sendMessage(lastMsg?.content || "");
+  const result = await chat.sendMessage(lastMsg ? textContent(lastMsg.content) : "");
   const content = result.response.text();
   const usage = result.response.usageMetadata;
 
@@ -421,7 +445,7 @@ async function callGroq(opts: ChatOptions, apiKey?: string): Promise<ChatResult>
     max_completion_tokens: opts.maxTokens || 4096,
     messages: [
       { role: "system", content: system },
-      ...opts.messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      ...opts.messages.map((m) => ({ role: m.role as "user" | "assistant", content: textContent(m.content) })),
     ],
   } as any);
 
@@ -446,7 +470,7 @@ async function callMistral(opts: ChatOptions, apiKey?: string): Promise<ChatResu
     max_tokens: opts.maxTokens || 4096,
     messages: [
       { role: "system", content: system },
-      ...opts.messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      ...opts.messages.map((m) => ({ role: m.role as "user" | "assistant", content: textContent(m.content) })),
     ],
   } as any);
 
@@ -477,7 +501,7 @@ async function callOpenRouter(opts: ChatOptions, apiKey?: string): Promise<ChatR
     ...tokenParam,
     messages: [
       { role: "system", content: system },
-      ...opts.messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      ...opts.messages.map((m) => ({ role: m.role as "user" | "assistant", content: textContent(m.content) })),
     ],
   } as any);
 

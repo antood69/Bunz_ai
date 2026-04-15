@@ -36,12 +36,12 @@ export const INTELLIGENCE_TIERS: Record<IntelligenceLevel, {
   entry: {
     label: "Entry", description: "Fast responses, lower cost",
     bossModel: "gpt-5.4-mini", costMultiplier: 1,
-    models: { research: "gpt-5.4-mini", coder: "gpt-5.4-mini", artist: "gpt-image-1", writer: "gpt-5.4-mini" },
+    models: { research: "gemma-4-31b", coder: "gpt-5.4-mini", artist: "gpt-image-1", writer: "gpt-5.4-mini" },
   },
   medium: {
     label: "Medium", description: "Balanced speed and quality",
     bossModel: "gpt-5.4", costMultiplier: 3,
-    models: { research: "sonar-pro", coder: "claude-sonnet-4-6", artist: "gpt-image-1", writer: "claude-sonnet-4-6" },
+    models: { research: "sonar-pro", coder: "claude-sonnet-4-6", artist: "gpt-image-1", writer: "gemini-2.5-pro" },
   },
   max: {
     label: "Max", description: "Highest quality output",

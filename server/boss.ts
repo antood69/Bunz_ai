@@ -154,6 +154,7 @@ export interface BossChatInput {
   userId: number;
   userEmail?: string;
   history?: Array<{ role: "user" | "assistant"; content: string }>;
+  imageContents?: Array<{ type: "image_url"; image_url: { url: string } }>;
 }
 
 export interface BossChatResult {
@@ -263,11 +264,17 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     }
 
     // ── Call Boss AI to decide: direct answer or dispatch ─────────────────
+    // Build user message content — include images if attached
+    const imageContents = input.imageContents || [];
+    const userContent: any = imageContents.length > 0
+      ? [{ type: "text", text: message }, ...imageContents]
+      : message;
+
     const bossResult = await modelRouter.chat({
       model: bossModel,
       messages: [
         ...history.slice(-20).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
-        { role: "user" as const, content: message },
+        { role: "user" as const, content: userContent },
       ],
       systemPrompt: systemPrompt + vaultContext,
       signal: abortController.signal,

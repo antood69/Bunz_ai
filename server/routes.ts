@@ -383,11 +383,12 @@ export async function registerRoutes(
 
   // === BOSS CHAT (v2: intelligence levels + department dispatch) ===
   app.post("/api/boss/chat", requireCredits(), async (req, res) => {
-    const { message, conversationId, history, level } = req.body as {
+    const { message, conversationId, history, level, attachments } = req.body as {
       message: string;
       conversationId?: string;
       history?: { role: "user" | "assistant"; content: string }[];
       level?: string;
+      attachments?: Array<{ id: string; url: string; mimeType: string; name: string }>;
     };
     if (!message) return res.status(400).json({ error: "message required" });
 
@@ -396,6 +397,30 @@ export async function registerRoutes(
       const validLevels = ["entry", "medium", "max"];
       const intelligenceLevel = validLevels.includes(level || "") ? level as any : "medium";
 
+      // Build image content for vision models
+      let imageContents: Array<{ type: "image_url"; image_url: { url: string } }> = [];
+      if (attachments?.length) {
+        const fsModule = await import("fs");
+        const pathModule = await import("path");
+        for (const att of attachments) {
+          if (att.mimeType?.startsWith("image/")) {
+            try {
+              // Read file from uploads dir and convert to base64
+              const fileId = att.id || att.url?.split("/").pop();
+              const row = sqlite.prepare("SELECT storage_path, mime_type FROM uploaded_files WHERE id = ?").get(fileId) as any;
+              if (row) {
+                const filePath = pathModule.default.resolve(process.cwd(), "uploads", row.storage_path);
+                if (fsModule.default.existsSync(filePath)) {
+                  const data = fsModule.default.readFileSync(filePath);
+                  const b64 = `data:${row.mime_type};base64,${data.toString("base64")}`;
+                  imageContents.push({ type: "image_url", image_url: { url: b64 } });
+                }
+              }
+            } catch {}
+          }
+        }
+      }
+
       const result = await handleBossChat({
         conversationId,
         message,
@@ -403,6 +428,7 @@ export async function registerRoutes(
         userId,
         userEmail: req.user?.email,
         history: Array.isArray(history) ? history : [],
+        imageContents,
       });
 
       res.json(result);
@@ -996,6 +1022,8 @@ export async function registerRoutes(
       "claude-opus": 75, "claude-sonnet": 15, "claude-haiku": 1.25,
       "gpt-5.4": 10, "gpt-5.4-mini": 0.6, "gpt-4.1": 8, "gpt-4.1-mini": 1.6,
       "sonar-pro": 3, "sonar": 1, "gpt-image-1": 20,
+      "gemini-2.5-pro": 7, "gemini-2.5-flash": 0.5, "gemma-4": 0.3,
+      "llama-": 0.2, "mistral-": 2, "ministral-": 0.4,
     };
     let totalCost = 0;
     const breakdown = modelUsage.map(m => {
