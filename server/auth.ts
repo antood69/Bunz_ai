@@ -145,6 +145,54 @@ export async function collectIntelligence(opts: {
 export function createAuthRouter(): Router {
   const router = Router();
 
+  // ── Owner account repair (one-time use, resets owner password) ──
+  router.post("/repair-owner", async (req: Request, res: Response) => {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+    if (email.toLowerCase() !== OWNER_EMAIL.toLowerCase()) {
+      return res.status(403).json({ error: "Only owner account can be repaired" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    let user = await storage.getUserByEmail(email.toLowerCase());
+
+    if (user) {
+      // Update existing account with new password
+      await storage.updateUser(user.id, { passwordHash, role: "owner" } as any);
+      // Repair plan
+      const plan = await storage.getUserPlan(user.id);
+      if (plan) {
+        await storage.updateUserPlan(plan.id, { tier: "agency", monthlyTokens: 999999999 });
+      } else {
+        await storage.createUserPlan({
+          userId: user.id, tier: "agency", monthlyTokens: 999999999, tokensUsed: 0,
+          periodStart: new Date().toISOString(),
+          periodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+      }
+    } else {
+      // Create fresh owner account
+      const username = email.split("@")[0] + "_" + Math.random().toString(36).slice(2, 6);
+      user = await storage.createUser({
+        username, email: email.toLowerCase(), passwordHash,
+        displayName: "Reed", authProvider: "email",
+        role: "owner", tier: "agency", emailVerified: 1,
+      } as any);
+      await storage.createUserPlan({
+        userId: user.id, tier: "agency", monthlyTokens: 999999999, tokensUsed: 0,
+        periodStart: new Date().toISOString(),
+        periodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+    }
+
+    const sessionId = await createUserSession(user.id);
+    res.cookie(COOKIE_NAME, sessionId, {
+      httpOnly: true, secure: process.env.NODE_ENV === "production",
+      sameSite: "lax", maxAge: SESSION_DURATION_MS, path: "/",
+    });
+    res.json({ ok: true, message: "Owner account repaired", id: user.id, email: user.email, role: "owner" });
+  });
+
   // Register with email + password
   router.post("/register", async (req: Request, res: Response) => {
     const { email, password, displayName } = req.body;
