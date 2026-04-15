@@ -826,6 +826,20 @@ export function createOwnerRouter(): Router {
   });
 
   // Audit log
+  // Obsidian vault status (env-var based)
+  router.get("/obsidian/status", async (_req: Request, res: Response) => {
+    const hasEnv = !!(process.env.OBSIDIAN_API_URL && process.env.OBSIDIAN_API_KEY);
+    if (!hasEnv) return res.json({ connected: false, reason: "OBSIDIAN_API_URL / OBSIDIAN_API_KEY not set" });
+    try {
+      const r = await fetch(`${process.env.OBSIDIAN_API_URL}/`, {
+        headers: { Authorization: `Bearer ${process.env.OBSIDIAN_API_KEY}` },
+      });
+      res.json({ connected: r.ok, url: process.env.OBSIDIAN_API_URL });
+    } catch (e: any) {
+      res.json({ connected: false, reason: e.message });
+    }
+  });
+
   router.get("/audit", async (req: Request, res: Response) => {
     const limit = Number(req.query.limit) || 50;
     const events = await storage.getActivityEvents(req.user!.id, limit);

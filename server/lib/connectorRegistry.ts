@@ -498,4 +498,12 @@ export const connectorRegistry = {
 
     return result;
   },
+
+  /** Execute an Obsidian action directly using env vars (no DB connector needed) */
+  async executeObsidianDirect(action: string, params: Record<string, any>): Promise<ExecuteResult> {
+    const apiUrl = process.env.OBSIDIAN_API_URL;
+    const apiKey = process.env.OBSIDIAN_API_KEY;
+    if (!apiUrl || !apiKey) return { ok: false, error: "OBSIDIAN_API_URL or OBSIDIAN_API_KEY not set" };
+    return executeObsidian({ apiUrl, apiKey }, action, params);
+  },
 };

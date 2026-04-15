@@ -1124,53 +1124,8 @@ function AuditTab() {
 // Obsidian Vault Tab (Owner-only)
 // ---------------------------------------------------------------------------
 function ObsidianTab() {
-  const [apiKey, setApiKey] = useState("");
-  const [apiUrl, setApiUrl] = useState("http://127.0.0.1:27123");
-  const [status, setStatus] = useState<"idle" | "testing" | "connected" | "error">("idle");
-  const [error, setError] = useState("");
-  const { toast } = useToast();
-
-  // Load existing config
-  const { data: connectors = [], refetch } = useQuery<any[]>({ queryKey: ["/api/connectors"] });
-  const obsConnector = connectors.find((c: any) => c.provider === "obsidian");
-
-  useEffect(() => {
-    if (obsConnector) {
-      setStatus(obsConnector.status === "connected" ? "connected" : "error");
-    }
-  }, [obsConnector]);
-
-  const handleConnect = async () => {
-    if (!apiKey.trim()) return;
-    setStatus("testing"); setError("");
-    try {
-      // Delete old one if exists
-      if (obsConnector) await fetch(`/api/connectors/${obsConnector.id}`, { method: "DELETE", credentials: "include" });
-      // Create new
-      const res = await fetch("/api/connectors", {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-        body: JSON.stringify({ type: "api_key", provider: "obsidian", name: "Obsidian Vault", config: { apiKey: apiKey.trim(), apiUrl } }),
-      });
-      const connector = await res.json();
-      // Test
-      const testRes = await fetch(`/api/connectors/${connector.id}/test`, { method: "POST", credentials: "include" });
-      const result = await testRes.json();
-      if (result.ok) {
-        setStatus("connected"); toast({ title: "Obsidian vault connected!" }); refetch();
-      } else {
-        setStatus("error"); setError(result.error || "Connection failed");
-        await fetch(`/api/connectors/${connector.id}`, { method: "DELETE", credentials: "include" });
-      }
-    } catch (e: any) { setStatus("error"); setError(e.message); }
-  };
-
-  const handleDisconnect = async () => {
-    if (obsConnector) {
-      await fetch(`/api/connectors/${obsConnector.id}`, { method: "DELETE", credentials: "include" });
-      setStatus("idle"); setApiKey(""); refetch();
-      toast({ title: "Obsidian disconnected" });
-    }
-  };
+  const { data: obsStatus } = useQuery<any>({ queryKey: ["/api/owner/obsidian/status"], refetchInterval: 30000 });
+  const connected = obsStatus?.connected;
 
   return (
     <div className="space-y-4">
@@ -1181,33 +1136,28 @@ function ObsidianTab() {
             <h3 className="text-sm font-semibold">Obsidian Vault</h3>
             <p className="text-xs text-muted-foreground">All user inputs and outputs are saved to your vault</p>
           </div>
-          {status === "connected" && <span className="ml-auto text-xs text-emerald-500 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Connected</span>}
+          <span className={`ml-auto text-xs flex items-center gap-1 ${connected ? "text-emerald-500" : "text-red-400"}`}>
+            <span className={`w-2 h-2 rounded-full ${connected ? "bg-emerald-500" : "bg-red-400"}`} />
+            {connected ? "Connected" : "Disconnected"}
+          </span>
         </div>
 
-        {status === "connected" ? (
+        {connected ? (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">Your Obsidian vault is receiving all platform activity — every user's inputs, outputs, and department results are auto-saved and organized by folder.</p>
             <div className="text-xs text-muted-foreground">
               <p><strong>Folders:</strong> Boss/, Research/, Coder/, Writer/, Artist/, Inputs/, Synthesis/, Workflows/, Bots/</p>
             </div>
-            <Button variant="destructive" size="sm" className="text-xs" onClick={handleDisconnect}>Disconnect</Button>
           </div>
         ) : (
           <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground">API Key (from Obsidian Local REST API plugin)</label>
-              <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Your API key..."
-                className="w-full mt-1 bg-secondary border border-border rounded-xl px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">API URL</label>
-              <input value={apiUrl} onChange={(e) => setApiUrl(e.target.value)}
-                className="w-full mt-1 bg-secondary border border-border rounded-xl px-3 py-2 text-sm" />
-            </div>
-            {error && <p className="text-xs text-red-500">{error}</p>}
-            <Button size="sm" onClick={handleConnect} disabled={!apiKey.trim() || status === "testing"}>
-              {status === "testing" ? "Testing..." : "Connect Vault"}
-            </Button>
+            <p className="text-xs text-muted-foreground">Obsidian vault is not reachable. Make sure:</p>
+            <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
+              <li>Obsidian is open with the Local REST API plugin enabled</li>
+              <li>Your Cloudflare tunnel is running</li>
+              <li>OBSIDIAN_API_URL and OBSIDIAN_API_KEY are set in Railway env vars</li>
+            </ul>
+            {obsStatus?.reason && <p className="text-xs text-red-500">{obsStatus.reason}</p>}
           </div>
         )}
       </div>

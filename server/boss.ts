@@ -20,34 +20,38 @@ import { storage } from "./storage";
  * Get the owner's Obsidian connector — all user outputs route to the owner's vault.
  * Tries owner email first, then falls back to any user with an Obsidian connector.
  */
+/** Returns a DB connector record, or a synthetic { id: "env" } object when env vars are set */
 async function getOwnerObsidianConnector(): Promise<any | null> {
   try {
-    // Try owner email first
-    const ownerUser = await storage.getUserByEmail("reederb46@gmail.com");
-    console.log(`[Obsidian lookup] ownerUser by email: ${ownerUser ? `id=${ownerUser.id}, role=${(ownerUser as any).role}` : "NOT FOUND"}`);
-    if (ownerUser) {
-      const connectors = await storage.getConnectorsByUser(ownerUser.id);
-      console.log(`[Obsidian lookup] connectors for user ${ownerUser.id}: ${connectors.length} total, providers: [${connectors.map((c: any) => `${c.provider}(${c.status})`).join(", ")}]`);
-      const obs = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
-      if (obs) return obs;
-    }
-    // Fallback: find any user with Obsidian connected (for dev/test accounts)
+    // Try DB connector first (any user)
     const allUsers = await storage.getAllUsers();
-    console.log(`[Obsidian lookup] fallback: checking ${allUsers.length} users`);
     for (const u of allUsers) {
       const connectors = await storage.getConnectorsByUser(u.id);
-      if (connectors.length > 0) {
-        console.log(`[Obsidian lookup] user ${u.id} (${(u as any).email}): [${connectors.map((c: any) => `${c.provider}(${c.status})`).join(", ")}]`);
-      }
       const obs = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
-      if (obs) return obs;
+      if (obs) {
+        console.log(`[Obsidian] Found DB connector id=${obs.id} for user ${u.id}`);
+        return obs;
+      }
     }
-    console.log(`[Obsidian lookup] NO obsidian connector found in any user`);
+    // Fallback: env vars
+    if (process.env.OBSIDIAN_API_URL && process.env.OBSIDIAN_API_KEY) {
+      console.log(`[Obsidian] Using env var connector: ${process.env.OBSIDIAN_API_URL}`);
+      return { id: "env", provider: "obsidian", status: "connected" };
+    }
+    console.log(`[Obsidian] No connector found (DB or env)`);
     return null;
   } catch (err: any) {
-    console.error(`[Obsidian lookup] ERROR: ${err.message}`, err.stack);
+    console.error(`[Obsidian lookup] ERROR: ${err.message}`);
     return null;
   }
+}
+
+/** Execute an Obsidian action — uses DB connector or env var fallback */
+async function obsidianExec(connectorId: any, action: string, params: Record<string, any>) {
+  if (connectorId === "env") {
+    return connectorRegistry.executeObsidianDirect(action, params);
+  }
+  return connectorRegistry.execute(connectorId, action, params);
 }
 
 // Load Boss operating instructions from WAT framework
@@ -385,12 +389,12 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
         // Save Boss response
         const bossPath = `Boss/${timestamp}-${slug}.md`;
         const header = `# ${message.slice(0, 80)}\n*${new Date().toLocaleString()} | Boss Direct | Level: ${level} | User: ${userEmail || "unknown"}*\n\n---\n\n`;
-        const writeResult = await connectorRegistry.execute(obsConnector.id, "write_note", { path: bossPath, content: header + bossResult.content });
+        const writeResult = await obsidianExec(obsConnector.id, "write_note", { path: bossPath, content: header + bossResult.content });
         console.log(`[Boss] Vault write result for ${bossPath}:`, writeResult.ok ? "OK" : writeResult.error);
         // Save input
         const inputPath = `Inputs/${timestamp}-${slug}.md`;
         const inputContent = `# Prompt\n*${new Date().toLocaleString()} | Level: ${level} | Direct (Boss) | User: ${userEmail || "unknown"}*\n\n---\n\n${message}`;
-        await connectorRegistry.execute(obsConnector.id, "write_note", { path: inputPath, content: inputContent });
+        await obsidianExec(obsConnector.id, "write_note", { path: inputPath, content: inputContent });
       }
     } catch (e: any) { console.error("[Boss] Obsidian auto-save failed:", e.message); }
 
@@ -578,7 +582,7 @@ Present each department's output clearly. For code, keep it in code blocks. For 
 
         if (customPath) {
           // User specified exact path — save full synthesis there
-          const result = await connectorRegistry.execute(obsConnector.id, "write_note", { path: customPath, content: synthesis.content });
+          const result = await obsidianExec(obsConnector.id, "write_note", { path: customPath, content: synthesis.content });
           if (result.ok) savedPaths.push(customPath);
         } else {
           // Auto-organize: save each department's output to its own folder
@@ -593,7 +597,7 @@ Present each department's output clearly. For code, keep it in code blocks. For 
               body += `\n\n## Generated Image\n![Generated Image](${imgUrl})\n`;
             }
             console.log(`[Boss] Writing dept note: ${notePath}`);
-            const result = await connectorRegistry.execute(obsConnector.id, "write_note", { path: notePath, content: header + body });
+            const result = await obsidianExec(obsConnector.id, "write_note", { path: notePath, content: header + body });
             console.log(`[Boss] Write result for ${notePath}: ${result.ok ? "OK" : result.error}`);
             if (result.ok) savedPaths.push(notePath);
           }
@@ -612,14 +616,14 @@ Present each department's output clearly. For code, keep it in code blocks. For 
                 synthBody += `![${img.department} output](${imgUrl})\n`;
               }
             }
-            const result = await connectorRegistry.execute(obsConnector.id, "write_note", { path: synthPath, content: header + synthBody });
+            const result = await obsidianExec(obsConnector.id, "write_note", { path: synthPath, content: header + synthBody });
             if (result.ok) savedPaths.push(synthPath);
           }
 
           // Save the user's original prompt to an Inputs log
           const inputPath = `Inputs/${timestamp}-${slug}.md`;
           const inputContent = `# Prompt\n*${new Date().toLocaleString()} | Level: ${level} | Departments: ${departments.map(d => d.id).join(", ")}*\n\n---\n\n${originalMessage}`;
-          const inputResult = await connectorRegistry.execute(obsConnector.id, "write_note", { path: inputPath, content: inputContent });
+          const inputResult = await obsidianExec(obsConnector.id, "write_note", { path: inputPath, content: inputContent });
           if (inputResult.ok) savedPaths.push(inputPath);
         }
 
@@ -631,7 +635,7 @@ Present each department's output clearly. For code, keep it in code blocks. For 
           // Auto-link notes to related vault content (runs in background)
           for (const sp of savedPaths) {
             if (!sp.startsWith("Inputs/")) {
-              const readResult = await connectorRegistry.execute(obsConnector.id, "read_note", { path: sp });
+              const readResult = await obsidianExec(obsConnector.id, "read_note", { path: sp });
               if (readResult.ok && readResult.data?.content) {
                 autoLinkNote(sp, readResult.data.content).catch(() => {});
               }

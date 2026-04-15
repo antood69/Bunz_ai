@@ -10,15 +10,27 @@ import { connectorRegistry } from "./connectorRegistry";
 import { modelRouter } from "../ai";
 
 /**
- * Get the owner's Obsidian connector
+ * Get the owner's Obsidian connector (DB or env var fallback)
  */
 async function getObsConnector(): Promise<any | null> {
   try {
-    const owner = await storage.getUserByEmail("reederb46@gmail.com");
-    if (!owner) return null;
-    const connectors = await storage.getConnectorsByUser(owner.id);
-    return connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected") || null;
+    const allUsers = await storage.getAllUsers();
+    for (const u of allUsers) {
+      const connectors = await storage.getConnectorsByUser(u.id);
+      const obs = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
+      if (obs) return obs;
+    }
+    if (process.env.OBSIDIAN_API_URL && process.env.OBSIDIAN_API_KEY) {
+      return { id: "env", provider: "obsidian", status: "connected" };
+    }
+    return null;
   } catch { return null; }
+}
+
+/** Execute an Obsidian action — uses DB connector or env var fallback */
+async function obsExec(connectorId: any, action: string, params: Record<string, any>) {
+  if (connectorId === "env") return connectorRegistry.executeObsidianDirect(action, params);
+  return connectorRegistry.execute(connectorId, action, params);
 }
 
 /**
@@ -43,7 +55,7 @@ export async function autoLinkNote(notePath: string, noteContent: string): Promi
     // Search vault for related notes
     const relatedPaths: string[] = [];
     for (const topic of topics.slice(0, 5)) {
-      const searchResult = await connectorRegistry.execute(obs.id, "search_notes", { query: topic });
+      const searchResult = await obsExec(obs.id, "search_notes", { query: topic });
       if (searchResult.ok && Array.isArray(searchResult.data)) {
         for (const r of searchResult.data) {
           if (r.path !== notePath && !relatedPaths.includes(r.path)) {
@@ -65,7 +77,7 @@ export async function autoLinkNote(notePath: string, noteContent: string): Promi
     const linkSection = `\n\n---\n## Related Notes\n${links.join("\n")}\n`;
     const updatedContent = noteContent + linkSection;
 
-    await connectorRegistry.execute(obs.id, "write_note", { path: notePath, content: updatedContent });
+    await obsExec(obs.id, "write_note", { path: notePath, content: updatedContent });
     console.log(`[VaultBrain] Auto-linked ${notePath} to ${relatedPaths.length} notes`);
 
     return relatedPaths;
@@ -89,7 +101,7 @@ export async function runReflection(): Promise<string | null> {
     const recentNotes: Array<{ path: string; content: string }> = [];
 
     for (const folder of folders) {
-      const listResult = await connectorRegistry.execute(obs.id, "list_notes", { folder });
+      const listResult = await obsExec(obs.id, "list_notes", { folder });
       if (!listResult.ok || !Array.isArray(listResult.data?.files)) continue;
 
       // Get the 3 most recent files per folder
@@ -98,7 +110,7 @@ export async function runReflection(): Promise<string | null> {
         .slice(-3);
 
       for (const file of files) {
-        const readResult = await connectorRegistry.execute(obs.id, "read_note", { path: `${folder}/${file}` });
+        const readResult = await obsExec(obs.id, "read_note", { path: `${folder}/${file}` });
         if (readResult.ok && readResult.data?.content) {
           recentNotes.push({ path: `${folder}/${file}`, content: readResult.data.content.slice(0, 1000) });
         }
@@ -131,7 +143,7 @@ Be specific, not generic. Reference actual content from the notes.`,
     const reflectionPath = `Reflections/${timestamp}-${time.replace(/[: ]/g, "")}.md`;
     const header = `# Vault Reflection\n*${new Date().toLocaleString()} | Analyzed ${recentNotes.length} recent notes*\n\n---\n\n`;
 
-    await connectorRegistry.execute(obs.id, "write_note", {
+    await obsExec(obs.id, "write_note", {
       path: reflectionPath,
       content: header + reflection.content,
     });
@@ -154,12 +166,12 @@ export async function contextSearch(query: string, maxResults = 5): Promise<Arra
 
   try {
     // Direct search
-    const directResult = await connectorRegistry.execute(obs.id, "search_notes", { query });
+    const directResult = await obsExec(obs.id, "search_notes", { query });
     const directMatches: Array<{ path: string; content: string }> = [];
 
     if (directResult.ok && Array.isArray(directResult.data)) {
       for (const r of directResult.data.slice(0, maxResults)) {
-        const readResult = await connectorRegistry.execute(obs.id, "read_note", { path: r.path });
+        const readResult = await obsExec(obs.id, "read_note", { path: r.path });
         if (readResult.ok) {
           directMatches.push({ path: r.path, content: readResult.data.content?.slice(0, 1500) || "" });
         }
@@ -175,7 +187,7 @@ export async function contextSearch(query: string, maxResults = 5): Promise<Arra
       for (const link of wikilinks) {
         const name = link.replace(/\[\[|\]\]/g, "");
         // Search for the linked note
-        const linkSearch = await connectorRegistry.execute(obs.id, "search_notes", { query: name });
+        const linkSearch = await obsExec(obs.id, "search_notes", { query: name });
         if (linkSearch.ok && Array.isArray(linkSearch.data) && linkSearch.data.length > 0) {
           linkedPaths.add(linkSearch.data[0].path);
         }
@@ -186,7 +198,7 @@ export async function contextSearch(query: string, maxResults = 5): Promise<Arra
     const linkedMatches: Array<{ path: string; content: string }> = [];
     for (const path of Array.from(linkedPaths)) {
       if (directMatches.some(m => m.path === path)) continue;
-      const readResult = await connectorRegistry.execute(obs.id, "read_note", { path });
+      const readResult = await obsExec(obs.id, "read_note", { path });
       if (readResult.ok) {
         linkedMatches.push({ path, content: readResult.data.content?.slice(0, 1000) || "" });
       }

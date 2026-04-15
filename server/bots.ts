@@ -156,6 +156,12 @@ If nothing needs to be done right now, use action "none".`;
           path: `Bots/${bot.name}/${timestamp}.md`,
           content: `# Bot: ${bot.name}\n*${new Date().toLocaleString()} | Action: ${decision.action}*\n\n${decision.reasoning || ""}\n\n${result.content}`,
         });
+      } else if (!obs && decision.action !== "none" && process.env.OBSIDIAN_API_URL) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        await connectorRegistry.executeObsidianDirect("write_note", {
+          path: `Bots/${bot.name}/${timestamp}.md`,
+          content: `# Bot: ${bot.name}\n*${new Date().toLocaleString()} | Action: ${decision.action}*\n\n${decision.reasoning || ""}\n\n${result.content}`,
+        });
       }
     } catch {}
 
