@@ -24,6 +24,7 @@ import WorkflowsPage from "@/pages/WorkflowsPage";
 import EditorPage from "@/pages/EditorPage";
 import BotsPage from "@/pages/BotsPage";
 import WorkshopPage from "@/pages/WorkshopPage";
+import ServicesPage from "@/pages/ServicesPage";
 import AppLayout from "@/components/AppLayout";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -55,6 +56,7 @@ function AppRouter() {
             <Route path="/editor" component={EditorPage} />
             <Route path="/bots" component={BotsPage} />
             <Route path="/workshop" component={WorkshopPage} />
+            <Route path="/services" component={ServicesPage} />
 
 
             {/* Redirects */}

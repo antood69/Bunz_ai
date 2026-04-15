@@ -123,6 +123,31 @@ export function registerStripeRoutes(app: Express) {
           const session = event.data.object as Stripe.Checkout.Session;
           const customerId = session.customer as string;
           const subscriptionId = session.subscription as string;
+
+          // ── Handle service order payments ─────────────────────────
+          if (session.metadata?.orderId) {
+            const orderId = session.metadata.orderId;
+            try {
+              await storage.updateFiverrOrder(orderId, { status: "pending", stripePaymentId: session.payment_intent } as any);
+              // Auto-trigger workflow
+              const order = await storage.getFiverrOrder(orderId);
+              if (order) {
+                const gig = await storage.getFiverrGig((order as any).gig_id || (order as any).gigId);
+                if (gig) {
+                  const autoConfig = (gig as any).auto_response ? JSON.parse((gig as any).auto_response) : null;
+                  if (autoConfig?.pipelineId) {
+                    await storage.updateFiverrOrder(orderId, { status: "in_progress" } as any);
+                  }
+                }
+              }
+              console.log(`[stripe] Order ${orderId} paid`);
+            } catch (e: any) {
+              console.error(`[stripe] Order payment processing failed:`, e.message);
+            }
+            break;
+          }
+
+          // ── Handle subscription payments ──────────────────────────
           const tier = session.metadata?.tier || "pro";
           const userId = session.metadata?.userId ? Number(session.metadata.userId) : null;
           const email = session.customer_email || session.customer_details?.email;
