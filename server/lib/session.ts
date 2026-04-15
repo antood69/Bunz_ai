@@ -3,14 +3,14 @@ import createMemoryStore from "memorystore";
 
 /**
  * Express session middleware.
- * Uses Redis in production, in-memory store for local development.
+ * Uses Redis in production (when REDIS_URL set), in-memory store otherwise.
  */
 export async function createRedisSessionMiddleware() {
   const cookieOpts = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    maxAge: 30 * 24 * 60 * 60 * 1000,
   };
 
   const sessionOpts: session.SessionOptions = {
@@ -21,14 +21,16 @@ export async function createRedisSessionMiddleware() {
     cookie: cookieOpts,
   };
 
-  if (process.env.REDIS_URL || process.env.NODE_ENV === "production") {
-    const { RedisStore } = await import("connect-redis");
-    const { redis } = await import("./redis.js");
+  if (process.env.REDIS_URL) {
+    // Dynamic require works in both ESM (tsx) and CJS (esbuild)
+    const { RedisStore } = require("connect-redis");
+    const { redis } = require("./redis");
     sessionOpts.store = new RedisStore({
       client: redis,
       prefix: "bunz:sess:",
       ttl: 30 * 24 * 60 * 60,
     });
+    console.log("[session] Using Redis session store");
   } else {
     const MemoryStore = createMemoryStore(session);
     sessionOpts.store = new MemoryStore({ checkPeriod: 86400000 });

@@ -828,7 +828,7 @@ try {
 
 // Auto-seed admin accounts
 try {
-  const { default: bcrypt } = await import("bcryptjs");
+  const bcrypt = require("bcryptjs");
   const seedAccounts = [
     { email: "test@bunz.io", password: "TestBunz123!", displayName: "Test Admin" },
     { email: "abigail.lowry@uky.edu", password: "lesboqueen", displayName: "Abigail Lowry" },
