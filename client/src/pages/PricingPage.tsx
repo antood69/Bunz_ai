@@ -3,6 +3,7 @@ import { Check, Zap, Building2, Sparkles, ArrowRight, ChevronDown, ChevronUp, Lo
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 
 const tiers = [
@@ -14,7 +15,9 @@ const tiers = [
     icon: Sparkles,
     color: "text-muted-foreground",
     accent: "border-border",
-    badgeVariant: null as null,
+    iconBg: "bg-secondary",
+    buttonClass: "",
+    popular: false,
     features: [
       "3K tokens / month",
       "Entry-level models only",
@@ -34,7 +37,9 @@ const tiers = [
     icon: Zap,
     color: "text-emerald-500",
     accent: "border-emerald-500/40",
-    badgeVariant: null as null,
+    iconBg: "bg-emerald-500/15",
+    buttonClass: "bg-emerald-600 hover:bg-emerald-700 text-white border-0",
+    popular: false,
     features: [
       "40K tokens / month",
       "Entry + Medium models",
@@ -56,7 +61,9 @@ const tiers = [
     icon: Zap,
     color: "text-primary",
     accent: "border-primary",
-    badgeVariant: "default" as "default",
+    iconBg: "bg-primary/15",
+    buttonClass: "",
+    popular: true,
     features: [
       "200K tokens / month",
       "All models (Entry/Medium/Max)",
@@ -78,7 +85,9 @@ const tiers = [
     icon: Building2,
     color: "text-violet-500",
     accent: "border-violet-500",
-    badgeVariant: null as null,
+    iconBg: "bg-violet-500/15",
+    buttonClass: "bg-violet-600 hover:bg-violet-700 text-white border-0",
+    popular: false,
     features: [
       "800K tokens / month",
       "All models + priority queue",
@@ -115,10 +124,6 @@ const faqs = [
     q: "What's white-label?",
     a: "Agency plan lets you remove Bunz branding and replace it with your own logo and colors — great for client deployments.",
   },
-  {
-    q: "Is there a free trial for Pro?",
-    a: "Yes — start a 14-day Pro trial with no credit card required. Full access, no limits during trial.",
-  },
 ];
 
 function FAQ() {
@@ -128,15 +133,10 @@ function FAQ() {
       <h2 className="text-lg font-semibold text-foreground text-center mb-6">Frequently asked questions</h2>
       <div className="space-y-2">
         {faqs.map((faq, i) => (
-          <div
-            key={i}
-            className="border border-border rounded-xl overflow-hidden"
-            data-testid={`faq-item-${i}`}
-          >
+          <div key={i} className="border border-border rounded-xl overflow-hidden">
             <button
               className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-secondary/50 transition-colors text-left"
               onClick={() => setOpen(open === i ? null : i)}
-              data-testid={`faq-toggle-${i}`}
             >
               {faq.q}
               {open === i ? (
@@ -162,7 +162,9 @@ export default function PricingPage() {
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Check for Stripe redirect results in URL params
+  const { data: tokenStatus } = useQuery<any>({ queryKey: ["/api/tokens/status"] });
+  const plan = tokenStatus?.plan;
+
   const params = new URLSearchParams(window.location.search);
   const checkoutSuccess = params.get("success") === "1";
   const checkoutCanceled = params.get("canceled") === "1";
@@ -186,13 +188,16 @@ export default function PricingPage() {
     }
   }
 
-  return (
-    <div className="min-h-full px-6 py-10 pb-20 max-w-6xl mx-auto" data-testid="pricing-page">
+  const currentTier = plan?.tier || "free";
+  const tokensUsed = plan?.tokensUsed || 0;
+  const tokensLimit = plan?.monthlyTokens || 3000;
 
-      {/* Success / Cancel banners */}
+  return (
+    <div className="min-h-full px-6 py-10 pb-20 max-w-6xl mx-auto">
+
       {checkoutSuccess && (
         <div className="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-500 text-center">
-          Subscription activated! Welcome to Bunz {annual ? "Annual" : "Monthly"} — let's get it. 🔥
+          Subscription activated! Welcome to Bunz — let's get it.
         </div>
       )}
       {checkoutCanceled && (
@@ -203,9 +208,6 @@ export default function PricingPage() {
 
       {/* Header */}
       <div className="text-center mb-10">
-        <Badge variant="outline" className="mb-3 text-primary border-primary/40 bg-primary/5">
-          SaaS Subscriptions
-        </Badge>
         <h1 className="text-xl font-bold text-foreground mb-2">Simple, transparent pricing</h1>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">
           Start free. Scale as your AI workforce grows. No hidden fees.
@@ -216,7 +218,6 @@ export default function PricingPage() {
           <button
             className={`text-sm font-medium transition-colors ${!annual ? "text-foreground" : "text-muted-foreground"}`}
             onClick={() => setAnnual(false)}
-            data-testid="billing-monthly"
           >
             Monthly
           </button>
@@ -224,17 +225,13 @@ export default function PricingPage() {
             role="switch"
             aria-checked={annual}
             onClick={() => setAnnual(!annual)}
-            data-testid="billing-toggle"
             className={`relative w-10 h-5 rounded-full transition-colors ${annual ? "bg-primary" : "bg-border"}`}
           >
-            <span
-              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${annual ? "translate-x-5" : "translate-x-0"}`}
-            />
+            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${annual ? "translate-x-5" : "translate-x-0"}`} />
           </button>
           <button
             className={`text-sm font-medium transition-colors flex items-center gap-1.5 ${annual ? "text-foreground" : "text-muted-foreground"}`}
             onClick={() => setAnnual(true)}
-            data-testid="billing-annual"
           >
             Annual
             <span className="text-[11px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
@@ -250,16 +247,16 @@ export default function PricingPage() {
           const Icon = tier.icon;
           const price = annual ? tier.price.annual : tier.price.monthly;
           const isLoading = loadingTier === tier.id;
+          const isCurrent = tier.id === currentTier;
 
           return (
             <div
               key={tier.id}
-              data-testid={`tier-card-${tier.id}`}
               className={`relative rounded-2xl border-2 ${tier.accent} bg-card p-6 flex flex-col transition-all hover:shadow-lg hover:shadow-primary/5 ${
-                tier.id === "pro" ? "ring-1 ring-primary/20" : ""
+                tier.popular ? "ring-1 ring-primary/20" : ""
               }`}
             >
-              {tier.id === "pro" && (
+              {tier.popular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                   <Badge className="bg-primary text-primary-foreground text-[11px] px-2.5 py-0.5 shadow-md">
                     Most Popular
@@ -269,7 +266,7 @@ export default function PricingPage() {
 
               {/* Tier header */}
               <div className="flex items-center gap-2 mb-3">
-                <div className={`p-1.5 rounded-xl ${tier.id === "pro" ? "bg-primary/15" : tier.id === "agency" ? "bg-violet-500/15" : tier.id === "starter" ? "bg-emerald-500/15" : "bg-secondary"}`}>
+                <div className={`p-1.5 rounded-xl ${tier.iconBg}`}>
                   <Icon className={`w-4 h-4 ${tier.color}`} />
                 </div>
                 <span className="font-semibold text-sm text-foreground">{tier.name}</span>
@@ -277,12 +274,8 @@ export default function PricingPage() {
 
               {/* Price */}
               <div className="mb-1">
-                <span className="text-3xl font-bold text-foreground tabular-nums">
-                  ${price}
-                </span>
-                {price > 0 && (
-                  <span className="text-muted-foreground text-sm ml-1">/mo</span>
-                )}
+                <span className="text-3xl font-bold text-foreground tabular-nums">${price}</span>
+                {price > 0 && <span className="text-muted-foreground text-sm ml-1">/mo</span>}
               </div>
               {price > 0 && annual && (
                 <p className="text-[11px] text-muted-foreground mb-3">
@@ -293,14 +286,13 @@ export default function PricingPage() {
 
               {/* CTA */}
               <Button
-                data-testid={`cta-${tier.id}`}
-                variant={tier.current ? "outline" : tier.id === "pro" ? "default" : "secondary"}
-                className={`w-full mb-5 text-sm ${tier.id === "agency" ? "bg-violet-600 hover:bg-violet-700 text-foreground border-0" : tier.id === "starter" ? "bg-emerald-600 hover:bg-emerald-700 text-white border-0" : ""}`}
-                disabled={tier.current || isLoading}
+                variant={isCurrent ? "outline" : tier.popular ? "default" : "secondary"}
+                className={`w-full mb-5 text-sm ${!isCurrent ? tier.buttonClass : ""}`}
+                disabled={isCurrent || isLoading}
                 onClick={() => handleUpgrade(tier.id)}
               >
-                {tier.current ? (
-                  tier.cta
+                {isCurrent ? (
+                  "Current Plan"
                 ) : isLoading ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
@@ -321,7 +313,7 @@ export default function PricingPage() {
               <ul className="space-y-2 flex-1">
                 {tier.features.map((f) => (
                   <li key={f} className="flex items-start gap-2 text-xs text-muted-foreground">
-                    <Check className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${tier.id === "pro" ? "text-primary" : tier.id === "agency" ? "text-violet-500" : tier.id === "starter" ? "text-emerald-500" : "text-muted-foreground"}`} />
+                    <Check className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${tier.color}`} />
                     {f}
                   </li>
                 ))}
@@ -331,26 +323,24 @@ export default function PricingPage() {
         })}
       </div>
 
-      {/* Usage meters callout */}
+      {/* Usage summary */}
       <div className="mt-8 rounded-2xl border border-border bg-card px-6 py-5 flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-8">
         <div className="flex-1">
           <p className="text-sm font-medium text-foreground mb-0.5">Your current usage</p>
-          <p className="text-xs text-muted-foreground">Free tier — tracked against your plan limits in real time</p>
+          <p className="text-xs text-muted-foreground capitalize">{currentTier} tier — tracked against your plan limits</p>
         </div>
         <div className="flex flex-wrap gap-6">
-          {[
-            { label: "Credits", used: 0, limit: 3000 },
-            { label: "Agents", used: 0, limit: 2 },
-            { label: "Workflows", used: 0, limit: 1 },
-          ].map((meter) => {
-            const pct = Math.min((meter.used / meter.limit) * 100, 100);
-            const danger = pct >= 90;
+          {(() => {
+            const pct = Math.min((tokensUsed / tokensLimit) * 100, 100);
+            const danger = pct >= 80;
+            const usedStr = tokensUsed >= 1000 ? `${(tokensUsed / 1000).toFixed(1)}K` : String(tokensUsed);
+            const limitStr = tokensLimit >= 1000 ? `${(tokensLimit / 1000).toFixed(0)}K` : String(tokensLimit);
             return (
-              <div key={meter.label} className="min-w-[120px]" data-testid={`meter-${meter.label.toLowerCase().replace(/ /g, '-')}`}>
+              <div className="min-w-[160px]">
                 <div className="flex justify-between text-[11px] mb-1">
-                  <span className="text-muted-foreground">{meter.label}</span>
+                  <span className="text-muted-foreground">Tokens</span>
                   <span className={`font-medium tabular-nums ${danger ? "text-orange-500" : "text-foreground"}`}>
-                    {meter.used}/{meter.limit}
+                    {usedStr} / {limitStr}
                   </span>
                 </div>
                 <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
@@ -361,7 +351,7 @@ export default function PricingPage() {
                 </div>
               </div>
             );
-          })}
+          })()}
         </div>
         <div className="flex gap-2">
           <Link href="/usage">
@@ -370,13 +360,14 @@ export default function PricingPage() {
               Buy Tokens
             </Button>
           </Link>
-          <Button variant="default" size="sm" className="text-xs flex-shrink-0" onClick={() => handleUpgrade("pro")} data-testid="usage-upgrade-btn">
-            Upgrade <ArrowRight className="w-3 h-3 ml-1" />
-          </Button>
+          {currentTier === "free" && (
+            <Button variant="default" size="sm" className="text-xs flex-shrink-0" onClick={() => handleUpgrade("pro")}>
+              Upgrade <ArrowRight className="w-3 h-3 ml-1" />
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* FAQ */}
       <FAQ />
     </div>
   );
