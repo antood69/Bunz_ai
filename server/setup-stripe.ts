@@ -6,7 +6,7 @@
 import Stripe from "stripe";
 import "dotenv/config";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-03-31.basil" });
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-03-25.dahlia" });
 
 const PLANS = [
   { id: "starter", name: "Bunz Starter", monthly: 1200, annual: 900 },
