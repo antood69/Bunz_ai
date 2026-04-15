@@ -342,7 +342,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       } catch (e: any) { console.error("[Activity] Failed to log dispatch:", e.message); }
 
       // Execute departments asynchronously — results flow back via eventBus
-      executeDepartments(parentJobId, conversationId, userId, level, message, plan.departments, abortController.signal)
+      executeDepartments(parentJobId, conversationId, userId, level, message, plan.departments, abortController.signal, userEmail)
         .catch(err => {
           console.error("[Boss] Department dispatch error:", err.message);
           eventBus.emit(parentJobId, "error", { error: err.message });
@@ -435,7 +435,7 @@ async function handleArtShortCircuit(
   });
 
   executeDepartments(parentJobId, conversationId, userId, level, message,
-    [{ id: "artist" as DepartmentId, task: message }], abortController.signal)
+    [{ id: "artist" as DepartmentId, task: message }], abortController.signal, input.userEmail)
     .catch(err => {
       console.error("[Boss] Art dispatch error:", err.message);
       eventBus.emit(parentJobId, "error", { error: err.message });
@@ -460,6 +460,7 @@ async function executeDepartments(
   originalMessage: string,
   departments: Array<{ id: DepartmentId; task: string }>,
   signal?: AbortSignal,
+  userEmail?: string,
 ) {
   const bossModel = INTELLIGENCE_TIERS[level].bossModel;
   const complexity = estimateComplexity(originalMessage);
