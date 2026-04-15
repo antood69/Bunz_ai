@@ -12,6 +12,7 @@ import {
   PanelLeftOpen,
   ListChecks,
   Code,
+  Store,
 } from "lucide-react";
 import TokenCounter from "./TokenCounter";
 import NotificationBell from "./NotificationBell";
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/workflows", label: "Workflows", icon: GitBranch },
   { href: "/bots", label: "Bots", icon: Bot },
+  { href: "/workshop", label: "Workshop", icon: Store },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

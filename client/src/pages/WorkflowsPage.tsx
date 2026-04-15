@@ -5,8 +5,9 @@ import {
   GitBranch, Plus, Play, Trash2, Loader2, CheckCircle2, XCircle,
   Clock, ChevronDown, ChevronRight, Pencil, X, Save, Zap,
   Globe, Code, PenTool, Palette, Bot, Send, Pause, SkipForward,
-  RotateCcw, History, Coins, AlertTriangle, Square,
+  RotateCcw, History, Coins, AlertTriangle, Square, Share2,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -374,6 +375,7 @@ export default function WorkflowsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [assistMode, setAssistMode] = useState(false);
   const [historyPipeline, setHistoryPipeline] = useState<Pipeline | null>(null);
+  const [publishPipeline, setPublishPipeline] = useState<Pipeline | null>(null);
 
   const { data: pipelines = [], isLoading } = useQuery<Pipeline[]>({
     queryKey: ["/api/pipelines"],
@@ -569,6 +571,9 @@ export default function WorkflowsPage() {
                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setHistoryPipeline(p)}>
                       <History className="w-3.5 h-3.5" />
                     </Button>
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-primary/70 hover:text-primary" onClick={() => setPublishPipeline(p)} title="Publish to Workshop">
+                      <Share2 className="w-3.5 h-3.5" />
+                    </Button>
                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setEditPipeline(p); setBuilderOpen(true); }}>
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
@@ -710,6 +715,99 @@ export default function WorkflowsPage() {
         onSave={(data) => { editPipeline ? updateMutation.mutate({ id: editPipeline.id, data }) : createMutation.mutate(data); }} />
 
       <RunHistoryDialog open={!!historyPipeline} pipeline={historyPipeline} onClose={() => setHistoryPipeline(null)} />
+
+      {/* Publish to Workshop Dialog */}
+      {publishPipeline && (
+        <PublishDialog pipeline={publishPipeline} onClose={() => setPublishPipeline(null)}
+          onPublished={() => { setPublishPipeline(null); toast({ title: "Published to Workshop!" }); }} />
+      )}
     </div>
+  );
+}
+
+// ── Publish to Workshop Dialog ───────────────────────────────────────
+function PublishDialog({ pipeline, onClose, onPublished }: {
+  pipeline: Pipeline; onClose: () => void; onPublished: () => void;
+}) {
+  const [title, setTitle] = useState(pipeline.name);
+  const [description, setDescription] = useState(pipeline.description || "");
+  const [tags, setTags] = useState("");
+  const [price, setPrice] = useState("0");
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handlePublish = async () => {
+    if (!title.trim() || !description.trim()) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/workshop/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          title, description,
+          shortDescription: description.slice(0, 120),
+          category: "workflow",
+          priceUsd: Number(price) || 0,
+          pipelineId: pipeline.id,
+          tags,
+        }),
+      });
+      if (res.ok) {
+        onPublished();
+      } else {
+        const data = await res.json();
+        toast({ title: "Publish failed", description: data.error, variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Share2 className="w-5 h-5 text-primary" /> Publish to Workshop
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <Label className="text-xs">Title</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1" />
+          </div>
+          <div>
+            <Label className="text-xs">Description</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)}
+              rows={3} className="mt-1" placeholder="What does this workflow do? Who is it for?" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Price (USD)</Label>
+              <Input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} className="mt-1" />
+              <p className="text-[10px] text-muted-foreground mt-1">Set to 0 for free</p>
+            </div>
+            <div>
+              <Label className="text-xs">Tags (comma-separated)</Label>
+              <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="research, seo, fiverr" className="mt-1" />
+            </div>
+          </div>
+          <div className="bg-secondary/50 rounded-xl p-3 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground mb-1">What gets published:</p>
+            <p>Your workflow's structure ({pipeline.steps.length} steps) will be cloneable by other users. Your prompt text is included.</p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button disabled={!title.trim() || !description.trim() || loading} onClick={handlePublish}>
+            {loading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Share2 className="w-4 h-4 mr-1" />}
+            Publish
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
