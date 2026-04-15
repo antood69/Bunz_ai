@@ -8,6 +8,7 @@ import { modelRouter } from "./ai";
 import { executeDepartment } from "./departments/executor";
 import { estimateComplexity, type IntelligenceLevel } from "./departments/types";
 import { connectorRegistry } from "./lib/connectorRegistry";
+import { runReflection } from "./lib/vaultBrain";
 
 // Active bot intervals (in-memory)
 const activeBots = new Map<string, NodeJS.Timeout>();
@@ -227,6 +228,41 @@ export function createBotRouter() {
     const id = req.params.id as string;
     const limit = parseInt(req.query.limit as string) || 50;
     res.json(storage.getBotLogs(id, limit));
+  });
+
+  // Create the Vault Reflection bot (pre-built)
+  router.post("/create-reflection-bot", async (req: Request, res: Response) => {
+    const userId = req.user?.id || 1;
+    // Check if one already exists
+    const existing = storage.getBotsByUser(userId).find((b: any) => b.category === "reflection");
+    if (existing) return res.json(existing);
+
+    const bot = storage.createBot({
+      id: uuidv4(), userId,
+      name: "Vault Thinker",
+      description: "Periodically analyzes your Obsidian vault, finds patterns across notes, spots connections, and writes insight reports.",
+      brainPrompt: "You are the Vault Thinker — a reflection engine for a personal knowledge vault. Your job is to periodically review recent notes, find patterns, spot non-obvious connections between ideas, generate actionable insights, and flag contradictions. Write structured reflection reports with [[wikilinks]] to related notes.",
+      brainModel: "gpt-5.4",
+      category: "reflection",
+      rules: ["Only read and write to the vault — never take external actions", "Focus on patterns and connections, not summaries", "Always use [[wikilinks]] to reference notes"],
+      tools: [{ type: "connector", name: "obsidian", description: "Read and write vault notes" }],
+    });
+
+    res.json(bot);
+  });
+
+  // Run vault reflection (can be called manually or by the reflection bot)
+  router.post("/run-reflection", async (req: Request, res: Response) => {
+    try {
+      const path = await runReflection();
+      if (path) {
+        res.json({ ok: true, path, message: "Reflection saved" });
+      } else {
+        res.json({ ok: false, message: "Not enough notes to reflect on yet" });
+      }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // Bot AI Assistant — helps design bots by asking clarifying questions

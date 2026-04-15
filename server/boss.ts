@@ -43,6 +43,7 @@ import { executeDepartment, type DepartmentTask, type DepartmentResult } from ".
 import { runAutonomous } from "./departments/autonomous";
 import { connectorRegistry } from "./lib/connectorRegistry";
 import { decryptCredentials } from "./lib/connectorCrypto";
+import { autoLinkNote, contextSearch } from "./lib/vaultBrain";
 
 // ── Boss System Prompt ──────────────────────────────────────────────────────
 
@@ -220,47 +221,21 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     } catch {}
 
     // ── RAG: search Obsidian vault for relevant context ────────────────────
+    // ── RAG: context-aware vault search (follows wikilinks for deeper context) ──
     let vaultContext = "";
     try {
-      const obsConnector = await getOwnerObsidianConnector();
-      if (obsConnector) {
-        // Extract key terms from the message (skip common words)
-        const stopWords = new Set(["the", "a", "an", "is", "are", "was", "were", "be", "been", "to", "of", "in", "for", "on", "with", "at", "by", "from", "and", "or", "but", "not", "this", "that", "it", "my", "me", "we", "our", "can", "do", "how", "what", "about", "make", "write", "create", "help", "please", "want", "need", "get", "give"]);
-        const keywords = message.toLowerCase().split(/\W+/).filter(w => w.length > 3 && !stopWords.has(w));
-        const searchTerms = keywords.slice(0, 3);
-
-        if (searchTerms.length > 0) {
-          const searchResults: Array<{ path: string; match: string }> = [];
-          for (const term of searchTerms) {
-            const result = await connectorRegistry.execute(obsConnector.id, "search_notes", { query: term });
-            if (result.ok && Array.isArray(result.data)) {
-              for (const r of result.data) {
-                if (!searchResults.some(s => s.path === r.path)) {
-                  searchResults.push(r);
-                }
-              }
-            }
-            if (searchResults.length >= 5) break;
-          }
-
-          if (searchResults.length > 0) {
-            // Read the top 3 most relevant notes (truncated)
-            const noteContents: string[] = [];
-            for (const r of searchResults.slice(0, 3)) {
-              const readResult = await connectorRegistry.execute(obsConnector.id, "read_note", { path: r.path });
-              if (readResult.ok && readResult.data?.content) {
-                noteContents.push(`--- ${r.path} ---\n${readResult.data.content.slice(0, 1500)}`);
-              }
-            }
-            if (noteContents.length > 0) {
-              vaultContext = `\n\nRELEVANT NOTES FROM USER'S KNOWLEDGE BASE:\n${noteContents.join("\n\n")}\n\nUse this context to provide better, more personalized answers. Reference specific notes if relevant.`;
-              console.log(`[RAG] Found ${noteContents.length} relevant notes for query: "${searchTerms.join(", ")}"`);
-            }
-          }
+      if (message.split(/\s+/).length > 3) { // Skip RAG for very short messages
+        const results = await contextSearch(message, 5);
+        if (results.length > 0) {
+          const noteContents = results.map(r =>
+            `--- ${r.path} [${r.relevance}] ---\n${r.content.slice(0, 1500)}`
+          );
+          vaultContext = `\n\nKNOWLEDGE BASE CONTEXT (${results.length} notes, includes linked references):\n${noteContents.join("\n\n")}\n\nUse this context to provide better answers. Reference specific notes with [[note name]] wikilinks when relevant. Build on previous knowledge rather than starting fresh.`;
+          console.log(`[RAG] Context search found ${results.length} notes (${results.filter(r => r.relevance === "linked reference").length} via links)`);
         }
       }
     } catch (e: any) {
-      console.error("[RAG] Vault search failed:", e.message);
+      console.error("[RAG] Context search failed:", e.message);
     }
 
     // ── Call Boss AI to decide: direct answer or dispatch ─────────────────
@@ -608,6 +583,16 @@ Present each department's output clearly. For code, keep it in code blocks. For 
           console.log(`[Boss] Auto-saved to Obsidian: ${savedPaths.join(", ")}`);
           const pathList = savedPaths.map(p => `\`${p}\``).join(", ");
           eventBus.emit(parentJobId, "token", { workerType: "boss", text: `\n\n📁 *Saved to Obsidian vault: ${pathList}*`, isSynthesis: true });
+
+          // Auto-link notes to related vault content (runs in background)
+          for (const sp of savedPaths) {
+            if (!sp.startsWith("Inputs/")) {
+              const readResult = await connectorRegistry.execute(obsConnector.id, "read_note", { path: sp });
+              if (readResult.ok && readResult.data?.content) {
+                autoLinkNote(sp, readResult.data.content).catch(() => {});
+              }
+            }
+          }
         }
       }
 
