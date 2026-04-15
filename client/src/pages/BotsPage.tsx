@@ -250,16 +250,6 @@ export default function BotsPage() {
           <p className="text-sm text-muted-foreground mt-1">Persistent autonomous agents that run continuously</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={async () => {
-            try {
-              const res = await fetch("/api/bots/create-reflection-bot", { method: "POST", credentials: "include" });
-              const bot = await res.json();
-              qc.invalidateQueries({ queryKey: ["/api/bots"] });
-              toast({ title: bot.name ? `${bot.name} ready` : "Vault Thinker created" });
-            } catch { toast({ title: "Failed", variant: "destructive" }); }
-          }} className="gap-1.5 text-purple-400 border-purple-500/30 hover:bg-purple-500/10">
-            <Zap className="w-4 h-4" /> Vault Thinker
-          </Button>
           <Button variant="outline" onClick={() => setAssistMode(true)} className="gap-1.5"><Bot className="w-4 h-4" /> AI Assist</Button>
           <Button onClick={() => { setEditBot(null); setBuilderOpen(true); }} className="gap-1.5"><Plus className="w-4 h-4" /> New Bot</Button>
         </div>

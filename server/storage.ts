@@ -828,7 +828,9 @@ try {
 
 // Auto-seed admin accounts
 try {
-  const bcrypt = require("bcryptjs");
+  let bcrypt: any;
+  try { bcrypt = require("bcryptjs"); } catch { bcrypt = null; }
+  if (!bcrypt) { console.log("[seed] bcryptjs not available, skipping seed"); throw new Error("skip"); }
   const seedAccounts = [
     { email: "test@bunz.io", password: "TestBunz123!", displayName: "Test Admin" },
     { email: "abigail.lowry@uky.edu", password: "lesboqueen", displayName: "Abigail Lowry" },

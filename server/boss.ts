@@ -370,13 +370,15 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     // Auto-save Boss direct answers to owner's Obsidian vault
     try {
       const obsConnector = await getOwnerObsidianConnector();
+      console.log(`[Boss] Obsidian connector for auto-save: ${obsConnector ? `id=${obsConnector.id}` : "NOT FOUND"}`);
       if (obsConnector) {
         const timestamp = new Date().toISOString().slice(0, 10);
         const slug = message.slice(0, 50).replace(/[^a-zA-Z0-9]+/g, "-").replace(/-+$/, "").toLowerCase();
         // Save Boss response
         const bossPath = `Boss/${timestamp}-${slug}.md`;
         const header = `# ${message.slice(0, 80)}\n*${new Date().toLocaleString()} | Boss Direct | Level: ${level} | User: ${userEmail || "unknown"}*\n\n---\n\n`;
-        await connectorRegistry.execute(obsConnector.id, "write_note", { path: bossPath, content: header + bossResult.content });
+        const writeResult = await connectorRegistry.execute(obsConnector.id, "write_note", { path: bossPath, content: header + bossResult.content });
+        console.log(`[Boss] Vault write result for ${bossPath}:`, writeResult.ok ? "OK" : writeResult.error);
         // Save input
         const inputPath = `Inputs/${timestamp}-${slug}.md`;
         const inputContent = `# Prompt\n*${new Date().toLocaleString()} | Level: ${level} | Direct (Boss) | User: ${userEmail || "unknown"}*\n\n---\n\n${message}`;
@@ -554,6 +556,7 @@ Present each department's output clearly. For code, keep it in code blocks. For 
     // ── Post-synthesis: auto-save to owner's Obsidian vault by department ──
     try {
       const obsConnector = await getOwnerObsidianConnector();
+      console.log(`[Boss] Synthesis vault save: connector ${obsConnector ? `id=${obsConnector.id}` : "NOT FOUND"}`);
 
       if (obsConnector) {
         // Check if user specified a custom path
@@ -621,6 +624,16 @@ Present each department's output clearly. For code, keep it in code blocks. For 
               }
             }
           }
+
+          // Auto-reflection: run every 5 tasks to find patterns
+          try {
+            const { runReflection } = await import("./lib/vaultBrain.js");
+            const taskCount = storage.getDepartmentStats(userId).reduce((sum, d) => sum + d.total, 0);
+            if (taskCount > 0 && taskCount % 5 === 0) {
+              console.log(`[VaultBrain] Auto-reflection triggered (task #${taskCount})`);
+              runReflection().catch(() => {});
+            }
+          } catch {}
         }
       }
 
