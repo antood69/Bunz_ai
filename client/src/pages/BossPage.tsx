@@ -266,6 +266,8 @@ function renderMarkdown(text: string): JSX.Element {
       let i = 0;
       while (i < lines.length) {
         const line = lines[i];
+
+        // Unordered list
         if (/^[-*]\s+/.test(line)) {
           const items: string[] = [];
           while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
@@ -273,14 +275,19 @@ function renderMarkdown(text: string): JSX.Element {
             i++;
           }
           parts.push(
-            <ul key={key++} className="list-disc list-inside space-y-1 my-2 text-foreground">
+            <ul key={key++} className="space-y-1.5 my-3 ml-1">
               {items.map((item, idx) => (
-                <li key={idx} className="text-sm leading-relaxed">{inlineMarkdown(item)}</li>
+                <li key={idx} className="flex gap-2.5 text-[15px] leading-relaxed text-foreground">
+                  <span className="text-muted-foreground mt-2 flex-shrink-0">•</span>
+                  <span>{inlineMarkdown(item)}</span>
+                </li>
               ))}
             </ul>
           );
           continue;
         }
+
+        // Ordered list
         if (/^\d+\.\s+/.test(line)) {
           const items: string[] = [];
           while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
@@ -288,39 +295,47 @@ function renderMarkdown(text: string): JSX.Element {
             i++;
           }
           parts.push(
-            <ol key={key++} className="list-decimal list-inside space-y-1 my-2 text-foreground">
+            <ol key={key++} className="space-y-1.5 my-3 ml-1">
               {items.map((item, idx) => (
-                <li key={idx} className="text-sm leading-relaxed">{inlineMarkdown(item)}</li>
+                <li key={idx} className="flex gap-2.5 text-[15px] leading-relaxed text-foreground">
+                  <span className="text-muted-foreground flex-shrink-0 font-medium min-w-[1.2em]">{idx + 1}.</span>
+                  <span>{inlineMarkdown(item)}</span>
+                </li>
               ))}
             </ol>
           );
           continue;
         }
+
+        // Headers
         if (/^#{1,3}\s/.test(line)) {
           const level = line.match(/^(#{1,3})/)?.[1].length || 1;
           const content = line.replace(/^#{1,3}\s+/, "");
           const Tag = level === 1 ? "h2" : level === 2 ? "h3" : "h4";
           const cls = level === 1
-            ? "text-base font-semibold text-foreground mt-4 mb-1"
-            : level === 2 ? "text-sm font-semibold text-foreground mt-3 mb-1"
-            : "text-sm font-medium text-foreground mt-2 mb-1";
+            ? "text-lg font-semibold text-foreground mt-6 mb-2"
+            : level === 2 ? "text-base font-semibold text-foreground mt-5 mb-2"
+            : "text-[15px] font-semibold text-foreground mt-4 mb-1.5";
           parts.push(<Tag key={key++} className={cls}>{inlineMarkdown(content)}</Tag>);
           i++;
           continue;
         }
+
+        // Horizontal rule
         if (/^---+$/.test(line.trim())) {
-          parts.push(<hr key={key++} className="border-border my-3" />);
+          parts.push(<hr key={key++} className="border-border my-4" />);
           i++;
           continue;
         }
+
         // Image markdown: ![alt](url)
         const imgMatch = line.match(/!\[([^\]]*)\]\(([^)]+)\)/);
         if (imgMatch) {
           const [, alt, url] = imgMatch;
           parts.push(
-            <div key={key++} className="my-3 group relative inline-block">
-              <img src={url} alt={alt} className="max-w-full max-h-[80vh] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(url, '_blank')} />
-              <a href={url} download className="absolute top-2 right-2 p-1.5 rounded-lg bg-background/80 backdrop-blur border border-border opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background">
+            <div key={key++} className="my-4 group relative inline-block">
+              <img src={url} alt={alt} className="max-w-full max-h-[80vh] rounded-xl border border-border cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(url, '_blank')} />
+              <a href={url} download className="absolute top-2 right-2 p-1.5 rounded-xl bg-background/80 backdrop-blur border border-border opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background">
                 <Download className="w-4 h-4 text-foreground" />
               </a>
             </div>
@@ -328,14 +343,15 @@ function renderMarkdown(text: string): JSX.Element {
           i++;
           continue;
         }
-        // Detect inline /api/files/ URLs (AI-generated images)
+
+        // Inline /api/files/ URLs (AI-generated images)
         const fileUrlMatch = line.match(/\/api\/files\/([a-f0-9-]+)/);
         if (fileUrlMatch && (line.includes('.png') || line.includes('.jpg') || line.includes('.webp') || line.includes('image'))) {
           const fileUrl = `/api/files/${fileUrlMatch[1]}`;
           parts.push(
-            <div key={key++} className="my-3 group relative inline-block">
-              <img src={fileUrl} alt="Generated image" className="max-w-full max-h-[80vh] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(fileUrl, '_blank')} />
-              <a href={fileUrl} download className="absolute top-2 right-2 p-1.5 rounded-lg bg-background/80 backdrop-blur border border-border opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background">
+            <div key={key++} className="my-4 group relative inline-block">
+              <img src={fileUrl} alt="Generated image" className="max-w-full max-h-[80vh] rounded-xl border border-border cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(fileUrl, '_blank')} />
+              <a href={fileUrl} download className="absolute top-2 right-2 p-1.5 rounded-xl bg-background/80 backdrop-blur border border-border opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background">
                 <Download className="w-4 h-4 text-foreground" />
               </a>
             </div>
@@ -343,13 +359,32 @@ function renderMarkdown(text: string): JSX.Element {
           i++;
           continue;
         }
+
+        // Blockquote
+        if (/^>\s/.test(line)) {
+          const quoteLines: string[] = [];
+          while (i < lines.length && /^>\s?/.test(lines[i])) {
+            quoteLines.push(lines[i].replace(/^>\s?/, ""));
+            i++;
+          }
+          parts.push(
+            <blockquote key={key++} className="border-l-3 border-primary/40 pl-4 my-3 text-muted-foreground italic text-[15px] leading-relaxed">
+              {quoteLines.map((ql, qi) => <p key={qi}>{inlineMarkdown(ql)}</p>)}
+            </blockquote>
+          );
+          continue;
+        }
+
+        // Empty line = paragraph break
         if (line.trim() === "") {
-          parts.push(<div key={key++} className="h-2" />);
+          parts.push(<div key={key++} className="h-3" />);
           i++;
           continue;
         }
+
+        // Regular paragraph
         parts.push(
-          <p key={key++} className="text-sm leading-relaxed text-foreground">{inlineMarkdown(line)}</p>
+          <p key={key++} className="text-[15px] leading-[1.75] text-foreground">{inlineMarkdown(line)}</p>
         );
         i++;
       }
@@ -360,16 +395,20 @@ function renderMarkdown(text: string): JSX.Element {
 
 function inlineMarkdown(text: string): (string | JSX.Element)[] {
   const result: (string | JSX.Element)[] = [];
-  const pattern = /(\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`)/g;
+  // Match: **bold**, *italic*, `inline code`, [link](url)
+  const pattern = /(\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\))/g;
   let last = 0;
   let match;
   let key = 0;
   while ((match = pattern.exec(text)) !== null) {
     if (match.index > last) result.push(text.slice(last, match.index));
-    if (match[2]) result.push(<strong key={key++} className="font-semibold">{match[2]}</strong>);
+    if (match[2]) result.push(<strong key={key++} className="font-semibold text-foreground">{match[2]}</strong>);
     else if (match[3]) result.push(<em key={key++} className="italic">{match[3]}</em>);
     else if (match[4]) result.push(
-      <code key={key++} className="bg-muted rounded px-1 py-0.5 font-mono text-xs text-foreground">{match[4]}</code>
+      <code key={key++} className="bg-muted/60 rounded-md px-1.5 py-0.5 font-mono text-[13px] text-foreground">{match[4]}</code>
+    );
+    else if (match[5] && match[6]) result.push(
+      <a key={key++} href={match[6]} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{match[5]}</a>
     );
     last = match.index + match[0].length;
   }
@@ -424,10 +463,10 @@ function MessageBubble({
           </div>
         )}
         <div
-          className={`max-w-[75%] rounded-2xl px-5 py-3.5 ${
+          className={`rounded-2xl ${
             isUser
-              ? "bg-primary/10 text-foreground ml-auto"
-              : "bg-card border border-border text-foreground w-full max-w-none flex-1"
+              ? "max-w-[75%] bg-primary/10 text-foreground ml-auto px-5 py-3.5"
+              : "text-foreground w-full max-w-none flex-1 py-1"
           }`}
         >
           {isUser ? (
@@ -451,7 +490,7 @@ function MessageBubble({
                   ))}
                 </div>
               )}
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+              <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{msg.content}</p>
             </>
           ) : msg.type === "image" && msg.imageUrl ? (
             <div>
@@ -464,7 +503,7 @@ function MessageBubble({
               <p className="text-xs text-muted-foreground">{msg.content}</p>
             </div>
           ) : (
-            <div className="prose-sm">{renderMarkdown(msg.content)}</div>
+            <div className="space-y-0.5">{renderMarkdown(msg.content)}</div>
           )}
           {msg.tokenCount ? (
             <div className="text-[10px] text-muted-foreground mt-1">{msg.tokenCount.toLocaleString()} tokens</div>
@@ -497,12 +536,12 @@ function MessageBubble({
 
           {/* Show synthesis output when complete — render images from hidden markers */}
           {streamState.synthesisText && (
-            <div className="bg-card border border-border rounded-2xl px-4 py-3">
-              <div className="flex items-center gap-2 mb-2 text-xs text-primary">
+            <div className="bg-card border border-border rounded-2xl px-5 py-4">
+              <div className="flex items-center gap-2 mb-3 text-xs text-primary">
                 <Bot className="w-3.5 h-3.5" />
                 <span className="font-medium">Boss — Final Response</span>
               </div>
-              <div className="prose-sm">
+              <div className="space-y-0.5">
                 {renderMarkdown(streamState.synthesisText.replace(/<!--agent-image:[^>]+-->/g, ""))}
               </div>
               {/* Render any agent-generated images from the synthesis */}

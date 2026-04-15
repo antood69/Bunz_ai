@@ -36,6 +36,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import { eq, desc, gte, and } from "drizzle-orm";
 import { mkdirSync } from "node:fs";
+import bcryptPkg from "bcryptjs";
 import { dirname } from "node:path";
 
 const DB_PATH = process.env.NODE_ENV === "production" ? "/data/data.db" : "data.db";
@@ -826,36 +827,6 @@ try {
   `);
 } catch (_) {}
 
-// Auto-seed admin accounts
-try {
-  let bcrypt: any;
-  try { bcrypt = require("bcryptjs"); } catch { bcrypt = null; }
-  if (!bcrypt) { console.log("[seed] bcryptjs not available, skipping seed"); throw new Error("skip"); }
-  const seedAccounts = [
-    { email: "reederb46@gmail.com", password: "0192837465Br!", displayName: "Reed", role: "owner" },
-    { email: "test@bunz.io", password: "TestBunz123!", displayName: "Test Admin", role: "admin" },
-  ];
-  for (const acct of seedAccounts) {
-    const existing = sqlite.prepare("SELECT id FROM users WHERE email = ?").get(acct.email);
-    if (!existing) {
-      const hash = bcrypt.hashSync(acct.password, 12);
-      const username = acct.email.split("@")[0] + "_" + Math.random().toString(36).slice(2, 6);
-      const role = (acct as any).role || "admin";
-      const tier = role === "owner" ? "agency" : "agency";
-      const result = sqlite.prepare(
-        "INSERT INTO users (username, email, password_hash, display_name, auth_provider, role, tier, email_verified, created_at) VALUES (?, ?, ?, ?, 'email', ?, ?, 1, ?)"
-      ).run(username, acct.email, hash, acct.displayName, role, tier, new Date().toISOString());
-      const userId = result.lastInsertRowid;
-      sqlite.prepare(
-        "INSERT INTO user_plans (user_id, tier, monthly_tokens, tokens_used, period_start, period_end, created_at) VALUES (?, 'agency', 999999999, 0, ?, ?, ?)"
-      ).run(userId, new Date().toISOString(), new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), new Date().toISOString());
-      console.log(`[seed] Created admin account: ${acct.email}`);
-    }
-  }
-} catch (e) {
-  console.error("[seed] Failed to seed admin accounts:", e);
-}
-
 // Auto-install all mods for owner account (reederb46@gmail.com)
 try {
   const ownerUser = sqlite.prepare("SELECT id FROM users WHERE email = 'reederb46@gmail.com'").get() as any;
@@ -990,6 +961,33 @@ try {
     );
   `);
 } catch (_) {}
+
+// ── Auto-seed admin accounts (runs after all schema migrations) ──
+try {
+  const seedAccounts = [
+    { email: "reederb46@gmail.com", password: "0192837465Br!", displayName: "Reed", role: "owner" },
+    { email: "test@bunz.io", password: "TestBunz123!", displayName: "Test Admin", role: "admin" },
+  ];
+  for (const acct of seedAccounts) {
+    const existing = sqlite.prepare("SELECT id FROM users WHERE email = ?").get(acct.email);
+    if (!existing) {
+      const hash = bcryptPkg.hashSync(acct.password, 12);
+      const username = acct.email.split("@")[0] + "_" + Math.random().toString(36).slice(2, 6);
+      const role = (acct as any).role || "admin";
+      const tier = role === "owner" ? "agency" : "agency";
+      const result = sqlite.prepare(
+        "INSERT INTO users (username, email, password_hash, display_name, auth_provider, role, tier, email_verified, created_at) VALUES (?, ?, ?, ?, 'email', ?, ?, 1, ?)"
+      ).run(username, acct.email, hash, acct.displayName, role, tier, new Date().toISOString());
+      const userId = result.lastInsertRowid;
+      sqlite.prepare(
+        "INSERT INTO user_plans (user_id, tier, monthly_tokens, tokens_used, period_start, period_end, created_at) VALUES (?, 'agency', 999999999, 0, ?, ?, ?)"
+      ).run(userId, new Date().toISOString(), new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), new Date().toISOString());
+      console.log(`[seed] Created admin account: ${acct.email}`);
+    }
+  }
+} catch (e) {
+  console.error("[seed] Failed to seed admin accounts:", e);
+}
 
 export const db = drizzle(sqlite);
 export { sqlite };
