@@ -13,16 +13,18 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_place
 // Price IDs — populated by setup-stripe.ts or set manually here after running setup
 // Replace these with your real price IDs after running: npx tsx server/setup-stripe.ts
 export const PRICE_IDS = {
-  pro_monthly:    process.env.STRIPE_PRICE_PRO_MONTHLY    || "",
-  pro_annual:     process.env.STRIPE_PRICE_PRO_ANNUAL     || "",
-  agency_monthly: process.env.STRIPE_PRICE_AGENCY_MONTHLY || "",
-  agency_annual:  process.env.STRIPE_PRICE_AGENCY_ANNUAL  || "",
+  starter_monthly: process.env.STRIPE_PRICE_STARTER_MONTHLY || "",
+  starter_annual:  process.env.STRIPE_PRICE_STARTER_ANNUAL  || "",
+  pro_monthly:     process.env.STRIPE_PRICE_PRO_MONTHLY     || "",
+  pro_annual:      process.env.STRIPE_PRICE_PRO_ANNUAL      || "",
+  agency_monthly:  process.env.STRIPE_PRICE_AGENCY_MONTHLY  || "",
+  agency_annual:   process.env.STRIPE_PRICE_AGENCY_ANNUAL   || "",
 };
 
 export function registerStripeRoutes(app: Express) {
   // ── Create Checkout Session ──────────────────────────────────────────────
   app.post("/api/stripe/checkout", async (req: Request, res: Response) => {
-    const { tier, billing } = req.body as { tier: "pro" | "agency"; billing: "monthly" | "annual" };
+    const { tier, billing } = req.body as { tier: "starter" | "pro" | "agency"; billing: "monthly" | "annual" };
 
     const priceKey = `${tier}_${billing}` as keyof typeof PRICE_IDS;
     const priceId = PRICE_IDS[priceKey];
