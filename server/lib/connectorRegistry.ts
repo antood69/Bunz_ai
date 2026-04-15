@@ -1,5 +1,3 @@
-import fs from "fs";
-import path from "path";
 import { storage } from "../storage";
 import { decryptCredentials } from "./connectorCrypto";
 import type { Connector } from "@shared/schema";
@@ -111,12 +109,18 @@ async function testApiKey(provider: string, config: Record<string, any>): Promis
         return { ok: true };
       }
       case "obsidian": {
-        const vaultPath = config.vaultPath;
-        if (!vaultPath) return { ok: false, error: "No vault path configured" };
-        if (!fs.existsSync(vaultPath)) return { ok: false, error: `Vault path not found: ${vaultPath}` };
-        const stat = fs.statSync(vaultPath);
-        if (!stat.isDirectory()) return { ok: false, error: "Vault path is not a directory" };
-        return { ok: true };
+        const apiUrl = config.apiUrl || "https://127.0.0.1:27124";
+        const apiKey = config.apiKey;
+        if (!apiKey) return { ok: false, error: "No API key configured" };
+        try {
+          const res = await fetch(`${apiUrl}/`, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          });
+          if (!res.ok) return { ok: false, error: `Obsidian API returned ${res.status}` };
+          return { ok: true };
+        } catch (e: any) {
+          return { ok: false, error: `Cannot reach Obsidian: ${e.message}. Make sure the Local REST API plugin is running.` };
+        }
       }
       case "custom_rest": {
         if (!config.testEndpoint) return { ok: true };
@@ -383,67 +387,44 @@ async function executeNotion(config: Record<string, any>, action: string, params
 }
 
 async function executeObsidian(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
-  const vaultPath = config.vaultPath;
-  if (!vaultPath || !fs.existsSync(vaultPath)) return { ok: false, error: "Vault path not found" };
+  const apiUrl = config.apiUrl || "http://127.0.0.1:27123";
+  const apiKey = config.apiKey;
+  if (!apiKey) return { ok: false, error: "No Obsidian API key" };
+  const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}` };
 
-  switch (action) {
-    case "list_notes": {
-      const dir = params.folder ? path.join(vaultPath, params.folder) : vaultPath;
-      if (!fs.existsSync(dir)) return { ok: false, error: `Folder not found: ${params.folder}` };
-      const walk = (d: string, prefix = ""): string[] => {
-        const entries = fs.readdirSync(d, { withFileTypes: true });
-        const files: string[] = [];
-        for (const e of entries) {
-          if (e.name.startsWith(".")) continue;
-          const rel = prefix ? `${prefix}/${e.name}` : e.name;
-          if (e.isDirectory()) files.push(...walk(path.join(d, e.name), rel));
-          else if (e.name.endsWith(".md")) files.push(rel);
-        }
-        return files;
-      };
-      return { ok: true, data: walk(dir) };
+  try {
+    switch (action) {
+      case "list_notes": {
+        const folder = params.folder || "/";
+        const res = await fetch(`${apiUrl}/vault/${encodeURIComponent(folder)}`, { headers });
+        if (!res.ok) return { ok: false, error: `List failed: ${res.status}` };
+        return { ok: true, data: await res.json() };
+      }
+      case "read_note": {
+        const res = await fetch(`${apiUrl}/vault/${encodeURIComponent(params.path)}`, { headers, });
+        if (!res.ok) return { ok: false, error: `Read failed: ${res.status}` };
+        const content = await res.text();
+        return { ok: true, data: { path: params.path, content } };
+      }
+      case "search_notes": {
+        const res = await fetch(`${apiUrl}/search/simple/?query=${encodeURIComponent(params.query)}`, { headers });
+        if (!res.ok) return { ok: false, error: `Search failed: ${res.status}` };
+        return { ok: true, data: await res.json() };
+      }
+      case "write_note": {
+        const res = await fetch(`${apiUrl}/vault/${encodeURIComponent(params.path)}`, {
+          method: "PUT",
+          headers: { ...headers, "Content-Type": "text/markdown" },
+          body: params.content,
+        });
+        if (!res.ok) return { ok: false, error: `Write failed: ${res.status}` };
+        return { ok: true, data: { path: params.path, written: true } };
+      }
+      default:
+        return { ok: false, error: `Unknown Obsidian action: ${action}` };
     }
-    case "read_note": {
-      const filePath = path.join(vaultPath, params.path);
-      if (!filePath.startsWith(vaultPath)) return { ok: false, error: "Path traversal not allowed" };
-      if (!fs.existsSync(filePath)) return { ok: false, error: `Note not found: ${params.path}` };
-      const content = fs.readFileSync(filePath, "utf-8");
-      return { ok: true, data: { path: params.path, content } };
-    }
-    case "search_notes": {
-      const query = params.query.toLowerCase();
-      const results: Array<{ path: string; match: string }> = [];
-      const walk = (d: string, prefix = "") => {
-        const entries = fs.readdirSync(d, { withFileTypes: true });
-        for (const e of entries) {
-          if (e.name.startsWith(".")) continue;
-          const rel = prefix ? `${prefix}/${e.name}` : e.name;
-          if (e.isDirectory()) walk(path.join(d, e.name), rel);
-          else if (e.name.endsWith(".md")) {
-            const content = fs.readFileSync(path.join(d, e.name), "utf-8");
-            if (content.toLowerCase().includes(query) || e.name.toLowerCase().includes(query)) {
-              const idx = content.toLowerCase().indexOf(query);
-              const matchStart = Math.max(0, idx - 50);
-              const matchEnd = Math.min(content.length, idx + query.length + 50);
-              results.push({ path: rel, match: content.slice(matchStart, matchEnd).trim() });
-            }
-          }
-          if (results.length >= 20) return;
-        }
-      };
-      walk(vaultPath);
-      return { ok: true, data: results };
-    }
-    case "write_note": {
-      const filePath = path.join(vaultPath, params.path);
-      if (!filePath.startsWith(vaultPath)) return { ok: false, error: "Path traversal not allowed" };
-      const dir = path.dirname(filePath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(filePath, params.content, "utf-8");
-      return { ok: true, data: { path: params.path, written: true } };
-    }
-    default:
-      return { ok: false, error: `Unknown Obsidian action: ${action}` };
+  } catch (e: any) {
+    return { ok: false, error: `Obsidian API error: ${e.message}` };
   }
 }
 

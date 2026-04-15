@@ -81,7 +81,7 @@ const API_KEY_CONNECTORS: ConnectorTemplate[] = [
   { provider: "github", name: "GitHub", description: "Repos, issues, pull requests, and code", type: "api_key", category: "Developer Tools", icon: "G", fields: [{ key: "apiKey", label: "Personal Access Token", placeholder: "ghp_..." }] },
   { provider: "slack", name: "Slack", description: "Send messages and manage channels", type: "api_key", category: "Communication", icon: "S", fields: [{ key: "apiKey", label: "Bot Token", placeholder: "xoxb-..." }] },
   { provider: "stripe", name: "Stripe", description: "Payments, customers, and invoices", type: "api_key", category: "Payments", icon: "$", fields: [{ key: "apiKey", label: "Secret Key", placeholder: "sk_..." }] },
-  { provider: "obsidian", name: "Obsidian Vault", description: "Read and search notes in your local Obsidian vault", type: "api_key", category: "Knowledge", icon: "◆", fields: [{ key: "vaultPath", label: "Vault Path", placeholder: "C:\\Users\\you\\Documents\\MyVault" }] },
+  { provider: "obsidian", name: "Obsidian Vault", description: "Read, search, and write notes via Obsidian REST API", type: "api_key", category: "Knowledge", icon: "◆", fields: [{ key: "apiKey", label: "API Key", placeholder: "Your Local REST API key" }, { key: "apiUrl", label: "API URL", placeholder: "http://127.0.0.1:27123", type: "text" }] },
 ];
 
 const OAUTH2_CONNECTORS: ConnectorTemplate[] = [
@@ -580,71 +580,60 @@ function ApiKeyModal({ open, template, onClose, onSuccess }: {
   onSuccess: () => void;
 }) {
   const { toast } = useToast();
-  const [value, setValue] = useState("");
+  const [values, setValues] = useState<Record<string, string>>({});
   const [showValue, setShowValue] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) { setValue(""); setTestResult(null); setShowValue(false); }
+    if (open) { setValues({}); setTestResult(null); setShowValue(false); }
   }, [open]);
 
+  const buildConfig = () => {
+    const config: Record<string, string> = {};
+    for (const field of (template?.fields || [])) {
+      if (values[field.key]?.trim()) config[field.key] = values[field.key].trim();
+    }
+    return config;
+  };
+
+  const hasRequired = () => {
+    const first = template?.fields?.[0];
+    return first ? !!values[first.key]?.trim() : false;
+  };
+
   const handleTest = async () => {
-    if (!value.trim()) return;
-    setTesting(true);
-    setTestResult(null);
+    if (!hasRequired()) return;
+    setTesting(true); setTestResult(null);
     try {
-      // Create connector, test it, then either keep or delete based on result
-      const fieldKey = template!.fields?.[0]?.key || "apiKey";
       const res = await apiRequest("POST", "/api/connectors", {
-        type: "api_key",
-        provider: template!.provider,
-        name: template!.name,
-        config: { [fieldKey]: value.trim() },
+        type: "api_key", provider: template!.provider, name: template!.name, config: buildConfig(),
       });
       const connector = await res.json();
       const testRes = await apiRequest("POST", `/api/connectors/${connector.id}/test`);
       const result = await testRes.json();
       setTestResult(result);
-      if (!result.ok) {
-        // Delete the failed connector
-        await apiRequest("DELETE", `/api/connectors/${connector.id}`);
-      } else {
-        // Success — connection created and tested
-        toast({ title: `${template!.name} connected!` });
-        onSuccess();
-        return;
-      }
-    } catch (err: any) {
-      setTestResult({ ok: false, error: err.message });
-    } finally {
-      setTesting(false);
-    }
+      if (!result.ok) { await apiRequest("DELETE", `/api/connectors/${connector.id}`); }
+      else { toast({ title: `${template!.name} connected!` }); onSuccess(); return; }
+    } catch (err: any) { setTestResult({ ok: false, error: err.message }); }
+    finally { setTesting(false); }
   };
 
   const handleSave = async () => {
-    if (!value.trim()) return;
+    if (!hasRequired()) return;
     setSaving(true);
     try {
-      const fieldKey = template!.fields?.[0]?.key || "apiKey";
       await apiRequest("POST", "/api/connectors", {
-        type: "api_key",
-        provider: template!.provider,
-        name: template!.name,
-        config: { [fieldKey]: value.trim() },
+        type: "api_key", provider: template!.provider, name: template!.name, config: buildConfig(),
       });
-      toast({ title: `${template!.name} connected!` });
-      onSuccess();
-    } catch (err: any) {
-      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
+      toast({ title: `${template!.name} connected!` }); onSuccess();
+    } catch (err: any) { toast({ title: "Failed to save", description: err.message, variant: "destructive" }); }
+    finally { setSaving(false); }
   };
 
   if (!template) return null;
-  const field = template.fields?.[0];
+  const fields = template.fields || [];
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -656,17 +645,19 @@ function ApiKeyModal({ open, template, onClose, onSuccess }: {
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <div>
-            <Label htmlFor="api-key-input">{field?.label || "API Key"}</Label>
+          {fields.map((field, i) => (
+          <div key={field.key}>
+            <Label htmlFor={`field-${field.key}`}>{field.label || "API Key"}</Label>
             <div className="relative mt-1.5">
               <Input
-                id="api-key-input"
-                type={showValue ? "text" : "password"}
-                placeholder={field?.placeholder || "Enter key..."}
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                className="pr-10"
+                id={`field-${field.key}`}
+                type={field.type === "text" || showValue ? "text" : "password"}
+                placeholder={field.placeholder || "Enter value..."}
+                value={values[field.key] || ""}
+                onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                className={field.type !== "text" ? "pr-10" : ""}
               />
+              {field.type !== "text" && i === 0 && (
               <button
                 type="button"
                 onClick={() => setShowValue(!showValue)}
@@ -674,8 +665,10 @@ function ApiKeyModal({ open, template, onClose, onSuccess }: {
               >
                 {showValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
+              )}
             </div>
           </div>
+          ))}
           {testResult && (
             <div className={`flex items-center gap-2 text-sm px-3 py-2 rounded-md ${testResult.ok ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
               {testResult.ok ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
@@ -685,11 +678,11 @@ function ApiKeyModal({ open, template, onClose, onSuccess }: {
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button variant="outline" onClick={handleTest} disabled={!value.trim() || testing}>
+          <Button variant="outline" onClick={handleTest} disabled={!hasRequired() || testing}>
             {testing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
             Test Connection
           </Button>
-          <Button onClick={handleSave} disabled={!value.trim() || saving}>
+          <Button onClick={handleSave} disabled={!hasRequired() || saving}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
             Save
           </Button>
