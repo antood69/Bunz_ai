@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Shield,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1071,6 +1072,101 @@ function IntelligenceTab() {
 }
 
 // ---------------------------------------------------------------------------
+// Obsidian Vault Tab (Owner-only)
+// ---------------------------------------------------------------------------
+function ObsidianTab() {
+  const [apiKey, setApiKey] = useState("");
+  const [apiUrl, setApiUrl] = useState("http://127.0.0.1:27123");
+  const [status, setStatus] = useState<"idle" | "testing" | "connected" | "error">("idle");
+  const [error, setError] = useState("");
+  const { toast } = useToast();
+
+  // Load existing config
+  const { data: connectors = [], refetch } = useQuery<any[]>({ queryKey: ["/api/connectors"] });
+  const obsConnector = connectors.find((c: any) => c.provider === "obsidian");
+
+  useEffect(() => {
+    if (obsConnector) {
+      setStatus(obsConnector.status === "connected" ? "connected" : "error");
+    }
+  }, [obsConnector]);
+
+  const handleConnect = async () => {
+    if (!apiKey.trim()) return;
+    setStatus("testing"); setError("");
+    try {
+      // Delete old one if exists
+      if (obsConnector) await fetch(`/api/connectors/${obsConnector.id}`, { method: "DELETE", credentials: "include" });
+      // Create new
+      const res = await fetch("/api/connectors", {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({ type: "api_key", provider: "obsidian", name: "Obsidian Vault", config: { apiKey: apiKey.trim(), apiUrl } }),
+      });
+      const connector = await res.json();
+      // Test
+      const testRes = await fetch(`/api/connectors/${connector.id}/test`, { method: "POST", credentials: "include" });
+      const result = await testRes.json();
+      if (result.ok) {
+        setStatus("connected"); toast({ title: "Obsidian vault connected!" }); refetch();
+      } else {
+        setStatus("error"); setError(result.error || "Connection failed");
+        await fetch(`/api/connectors/${connector.id}`, { method: "DELETE", credentials: "include" });
+      }
+    } catch (e: any) { setStatus("error"); setError(e.message); }
+  };
+
+  const handleDisconnect = async () => {
+    if (obsConnector) {
+      await fetch(`/api/connectors/${obsConnector.id}`, { method: "DELETE", credentials: "include" });
+      setStatus("idle"); setApiKey(""); refetch();
+      toast({ title: "Obsidian disconnected" });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-card border border-border rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center text-purple-400 font-bold text-sm">◆</div>
+          <div>
+            <h3 className="text-sm font-semibold">Obsidian Vault</h3>
+            <p className="text-xs text-muted-foreground">All user inputs and outputs are saved to your vault</p>
+          </div>
+          {status === "connected" && <span className="ml-auto text-xs text-emerald-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Connected</span>}
+        </div>
+
+        {status === "connected" ? (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Your Obsidian vault is receiving all platform activity — every user's inputs, outputs, and department results are auto-saved and organized by folder.</p>
+            <div className="text-xs text-muted-foreground">
+              <p><strong>Folders:</strong> Boss/, Research/, Coder/, Writer/, Artist/, Inputs/, Synthesis/, Workflows/, Bots/</p>
+            </div>
+            <Button variant="destructive" size="sm" className="text-xs" onClick={handleDisconnect}>Disconnect</Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-muted-foreground">API Key (from Obsidian Local REST API plugin)</label>
+              <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Your API key..."
+                className="w-full mt-1 bg-secondary border border-border rounded-md px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">API URL</label>
+              <input value={apiUrl} onChange={(e) => setApiUrl(e.target.value)}
+                className="w-full mt-1 bg-secondary border border-border rounded-md px-3 py-2 text-sm" />
+            </div>
+            {error && <p className="text-xs text-red-400">{error}</p>}
+            <Button size="sm" onClick={handleConnect} disabled={!apiKey.trim() || status === "testing"}>
+              {status === "testing" ? "Testing..." : "Connect Vault"}
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // AdminPage
 // ---------------------------------------------------------------------------
 
@@ -1110,6 +1206,7 @@ export default function AdminPage() {
           <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
           <TabsTrigger value="users" className="text-xs">Users</TabsTrigger>
           <TabsTrigger value="intelligence" className="text-xs">Intelligence</TabsTrigger>
+          <TabsTrigger value="obsidian" className="text-xs">Obsidian</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -1122,6 +1219,10 @@ export default function AdminPage() {
 
         <TabsContent value="intelligence" className="mt-4">
           <IntelligenceTab />
+        </TabsContent>
+
+        <TabsContent value="obsidian" className="mt-4">
+          <ObsidianTab />
         </TabsContent>
       </Tabs>
     </div>

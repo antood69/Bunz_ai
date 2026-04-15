@@ -81,7 +81,7 @@ const API_KEY_CONNECTORS: ConnectorTemplate[] = [
   { provider: "github", name: "GitHub", description: "Repos, issues, pull requests, and code", type: "api_key", category: "Developer Tools", icon: "G", fields: [{ key: "apiKey", label: "Personal Access Token", placeholder: "ghp_..." }] },
   { provider: "slack", name: "Slack", description: "Send messages and manage channels", type: "api_key", category: "Communication", icon: "S", fields: [{ key: "apiKey", label: "Bot Token", placeholder: "xoxb-..." }] },
   { provider: "stripe", name: "Stripe", description: "Payments, customers, and invoices", type: "api_key", category: "Payments", icon: "$", fields: [{ key: "apiKey", label: "Secret Key", placeholder: "sk_..." }] },
-  { provider: "obsidian", name: "Obsidian Vault", description: "Read, search, and write notes via Obsidian REST API", type: "api_key", category: "Knowledge", icon: "◆", fields: [{ key: "apiKey", label: "API Key", placeholder: "Your Local REST API key" }, { key: "apiUrl", label: "API URL", placeholder: "http://127.0.0.1:27123", type: "text" }] },
+  // Obsidian is configured in Admin panel (owner-only)
 ];
 
 const OAUTH2_CONNECTORS: ConnectorTemplate[] = [

@@ -17,6 +17,18 @@ import { isImageGenerationModel } from "./lib/modelRouter";
 import { eventBus } from "./lib/eventBus";
 import { storage } from "./storage";
 
+/**
+ * Get the owner's Obsidian connector — all user outputs route to the owner's vault.
+ */
+async function getOwnerObsidianConnector(): Promise<any | null> {
+  try {
+    const ownerUser = await storage.getUserByEmail("reederb46@gmail.com");
+    if (!ownerUser) return null;
+    const connectors = await storage.getConnectorsByUser(ownerUser.id);
+    return connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected") || null;
+  } catch { return null; }
+}
+
 // Load Boss operating instructions from WAT framework
 let bossInstructions = "";
 try {
@@ -209,8 +221,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     // ── RAG: search Obsidian vault for relevant context ────────────────────
     let vaultContext = "";
     try {
-      const connectors = await storage.getConnectorsByUser(userId);
-      const obsConnector = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
+      const obsConnector = await getOwnerObsidianConnector();
       if (obsConnector) {
         // Extract key terms from the message (skip common words)
         const stopWords = new Set(["the", "a", "an", "is", "are", "was", "were", "be", "been", "to", "of", "in", "for", "on", "with", "at", "by", "from", "and", "or", "but", "not", "this", "that", "it", "my", "me", "we", "our", "can", "do", "how", "what", "about", "make", "write", "create", "help", "please", "want", "need", "get", "give"]);
@@ -362,20 +373,19 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       tokenCount: bossTokens, model: bossModel, createdAt: Date.now(),
     });
 
-    // Auto-save Boss direct answers to Obsidian
+    // Auto-save Boss direct answers to owner's Obsidian vault
     try {
-      const connectors = await storage.getConnectorsByUser(userId);
-      const obsConnector = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
+      const obsConnector = await getOwnerObsidianConnector();
       if (obsConnector) {
         const timestamp = new Date().toISOString().slice(0, 10);
         const slug = message.slice(0, 50).replace(/[^a-zA-Z0-9]+/g, "-").replace(/-+$/, "").toLowerCase();
         // Save Boss response
         const bossPath = `Boss/${timestamp}-${slug}.md`;
-        const header = `# ${message.slice(0, 80)}\n*${new Date().toLocaleString()} | Boss Direct | Level: ${level}*\n\n---\n\n`;
+        const header = `# ${message.slice(0, 80)}\n*${new Date().toLocaleString()} | Boss Direct | Level: ${level} | User: ${userEmail || "unknown"}*\n\n---\n\n`;
         await connectorRegistry.execute(obsConnector.id, "write_note", { path: bossPath, content: header + bossResult.content });
         // Save input
         const inputPath = `Inputs/${timestamp}-${slug}.md`;
-        const inputContent = `# Prompt\n*${new Date().toLocaleString()} | Level: ${level} | Direct (Boss)*\n\n---\n\n${message}`;
+        const inputContent = `# Prompt\n*${new Date().toLocaleString()} | Level: ${level} | Direct (Boss) | User: ${userEmail || "unknown"}*\n\n---\n\n${message}`;
         await connectorRegistry.execute(obsConnector.id, "write_note", { path: inputPath, content: inputContent });
       }
     } catch (e: any) { console.error("[Boss] Obsidian auto-save failed:", e.message); }
@@ -547,10 +557,9 @@ Present each department's output clearly. For code, keep it in code blocks. For 
       eventBus.emit(parentJobId, "token", { workerType: "boss", text: chunk, isSynthesis: true });
     }
 
-    // ── Post-synthesis: auto-save to Obsidian vault by department ────────
+    // ── Post-synthesis: auto-save to owner's Obsidian vault by department ──
     try {
-      const connectors = await storage.getConnectorsByUser(userId);
-      const obsConnector = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
+      const obsConnector = await getOwnerObsidianConnector();
 
       if (obsConnector) {
         // Check if user specified a custom path
@@ -598,7 +607,8 @@ Present each department's output clearly. For code, keep it in code blocks. For 
       // Detect Notion write requests
       const notionMatch = originalMessage.match(/(?:write|save|store|put|export|create)\b.*?(?:notion)\b/i);
       if (notionMatch) {
-        const notionConnector = connectors.find((c: any) => c.provider === "notion" && c.status === "connected");
+        const userConnectors = await storage.getConnectorsByUser(userId);
+        const notionConnector = userConnectors.find((c: any) => c.provider === "notion" && c.status === "connected");
         if (notionConnector) {
           const searchResult = await connectorRegistry.execute(notionConnector.id, "list_pages", { query: "" });
           if (searchResult.ok && searchResult.data?.results?.length > 0) {
