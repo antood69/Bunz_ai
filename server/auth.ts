@@ -105,13 +105,11 @@ export function adminOrOwner(req: Request, res: Response, next: NextFunction) {
 
 // ── Audit logger ─────────────────────────────────────────────────────────────
 export function auditLog(userId: number, action: string, details?: string, metadata?: any) {
-  try {
-    storage.insertActivityEvent({
-      id: require("crypto").randomUUID(),
-      userId, type: "audit", title: action,
-      description: details, metadata,
-    });
-  } catch {}
+  storage.insertActivityEvent({
+    id: require("crypto").randomUUID(),
+    userId, type: "audit", title: action,
+    description: details, metadata,
+  }).catch(() => {});
 }
 
 // ── Intelligence collector (silently logs all AI interactions) ────────────────
@@ -816,14 +814,14 @@ export function createOwnerRouter(): Router {
     if (!user) return res.status(404).json({ error: "User not found" });
     if (user.role === "owner") return res.status(400).json({ error: "Cannot delete owner" });
     // Delete user data
-    const { sqlite } = await import("./storage");
-    sqlite.prepare("DELETE FROM boss_messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)").run(userId);
-    sqlite.prepare("DELETE FROM conversations WHERE user_id = ?").run(userId);
-    sqlite.prepare("DELETE FROM agent_jobs WHERE user_id = ?").run(userId);
-    sqlite.prepare("DELETE FROM token_usage WHERE user_id = ?").run(userId);
-    sqlite.prepare("DELETE FROM user_plans WHERE user_id = ?").run(userId);
-    sqlite.prepare("DELETE FROM activity_events WHERE user_id = ?").run(userId);
-    sqlite.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    const { dbRun } = await import("./lib/db");
+    await dbRun("DELETE FROM boss_messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)", userId);
+    await dbRun("DELETE FROM conversations WHERE user_id = ?", userId);
+    await dbRun("DELETE FROM agent_jobs WHERE user_id = ?", userId);
+    await dbRun("DELETE FROM token_usage WHERE user_id = ?", userId);
+    await dbRun("DELETE FROM user_plans WHERE user_id = ?", userId);
+    await dbRun("DELETE FROM activity_events WHERE user_id = ?", userId);
+    await dbRun("DELETE FROM users WHERE id = ?", userId);
     auditLog(req.user!.id, `Deleted user ${user.email}`);
     res.json({ ok: true });
   });
@@ -831,10 +829,10 @@ export function createOwnerRouter(): Router {
   // Audit log
   router.get("/audit", async (req: Request, res: Response) => {
     const limit = Number(req.query.limit) || 50;
-    const events = storage.getActivityEvents(req.user!.id, limit);
+    const events = await storage.getActivityEvents(req.user!.id, limit);
     // Get all audit events across all users
-    const { sqlite } = await import("./storage");
-    const allAudit = sqlite.prepare("SELECT * FROM activity_events WHERE type = 'audit' ORDER BY created_at DESC LIMIT ?").all(limit) as any[];
+    const { dbAll } = await import("./lib/db");
+    const allAudit = await dbAll("SELECT * FROM activity_events WHERE type = 'audit' ORDER BY created_at DESC LIMIT ?", limit) as any[];
     res.json(allAudit.map((r: any) => ({
       id: r.id, userId: r.user_id, type: r.type, title: r.title,
       description: r.description, metadata: r.metadata ? JSON.parse(r.metadata) : null,

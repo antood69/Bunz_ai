@@ -18,7 +18,31 @@
       "Bash(grep -rn \"status.*=.*'running'\" /c/Users/reede/OneDrive/Documents/bunz-1/server/*.ts)",
       "Bash(sqlite3 data.db \".schema activity_events\")",
       "Bash(grep -rn \"createAgentJob\\\\|createJob\" /c/Users/reede/OneDrive/Documents/bunz-1/server/*.ts)",
-      "Bash(taskkill //PID 35036 //F)"
+      "Bash(taskkill //PID 35036 //F)",
+      "Bash(taskkill //PID 36384 //F)",
+      "Bash(taskkill //PID 34648 //F)",
+      "Bash(awk '{print $5}')",
+      "Bash(taskkill //PID 41264 //F)",
+      "Bash(taskkill //PID 43356 //F)",
+      "Bash(curl -s \"http://127.0.0.1:27123/vault/\" -H \"Authorization: Bearer 3a325f2f269deebdb20ba161f6131512416b861eff559238e75b0ec87cc2d869\")",
+      "Bash(node -e ' *)",
+      "Bash(taskkill //PID 43656 //F)",
+      "Bash(head -481 client/src/components/dashboard/widgets.tsx)",
+      "Bash(tail -n +755 client/src/components/dashboard/widgets.tsx)",
+      "Bash(cp /tmp/widgets_clean.tsx client/src/components/dashboard/widgets.tsx)",
+      "Bash(taskkill //PID 39708 //F)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(grep -E \"\\\\.tsx$\")",
+      "Bash(start \"\" \"c:\\\\Users\\\\reede\\\\OneDrive\\\\Documents\\\\bunz-1\\\\.tmp\\\\design-preview.html\")",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(curl -s http://localhost:3000/api/health)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(ls \"c:/Users/reede/OneDrive/Documents/bunz-1/\"*.db)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"reederb46@gmail.com\",\"password\":\"0192837465Br!\"}')",
+      "Bash(grep \"server/storage.ts\\\\|server\\\\\\\\storage.ts\")"
     ]
   }
 }

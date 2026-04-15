@@ -338,7 +338,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
 
       // Log department dispatch activity
       try {
-        storage.insertActivityEvent({ id: uuidv4(), userId, type: "department_dispatch", title: "Dispatched to " + plan.departments.map((d:any) => d.id).join(", "), description: message.slice(0, 200), metadata: { level, departments: plan.departments.map((d:any) => d.id) } });
+        await storage.insertActivityEvent({ id: uuidv4(), userId, type: "department_dispatch", title: "Dispatched to " + plan.departments.map((d:any) => d.id).join(", "), description: message.slice(0, 200), metadata: { level, departments: plan.departments.map((d:any) => d.id) } });
       } catch (e: any) { console.error("[Activity] Failed to log dispatch:", e.message); }
 
       // Execute departments asynchronously — results flow back via eventBus
@@ -358,7 +358,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
 
     // Log activity event
     try {
-      storage.insertActivityEvent({ id: uuidv4(), userId, type: "boss_direct", title: "Boss answered: " + message.slice(0, 60), description: message.slice(0, 200), metadata: { level } });
+      await storage.insertActivityEvent({ id: uuidv4(), userId, type: "boss_direct", title: "Boss answered: " + message.slice(0, 60), description: message.slice(0, 200), metadata: { level } });
     } catch (e: any) { console.error("[Activity] Failed to log event:", e.message); }
 
     // ── DIRECT MODE: Boss answers directly ──────────────────────────────
@@ -632,7 +632,7 @@ Present each department's output clearly. For code, keep it in code blocks. For 
           // Auto-reflection: run every 5 tasks to find patterns
           try {
             const { runReflection } = await import("./lib/vaultBrain.js");
-            const taskCount = storage.getDepartmentStats(userId).reduce((sum, d) => sum + d.total, 0);
+            const taskCount = await storage.getDepartmentStats(userId).reduce((sum, d) => sum + d.total, 0);
             if (taskCount > 0 && taskCount % 5 === 0) {
               console.log(`[VaultBrain] Auto-reflection triggered (task #${taskCount})`);
               runReflection().catch(() => {});
@@ -698,7 +698,7 @@ Present each department's output clearly. For code, keep it in code blocks. For 
     // Log task completion activity + notification
     try {
       const deptList = departments.map(d => d.id).join(", ");
-      storage.insertActivityEvent({ id: uuidv4(), userId, type: "task_complete", title: "Task completed: " + deptList, description: originalMessage.slice(0, 200), metadata: { departments: departments.map(d => d.id), totalTokens } });
+      await storage.insertActivityEvent({ id: uuidv4(), userId, type: "task_complete", title: "Task completed: " + deptList, description: originalMessage.slice(0, 200), metadata: { departments: departments.map(d => d.id), totalTokens } });
       const tokenStr = totalTokens >= 1000 ? `${(totalTokens / 1000).toFixed(1)}K` : String(totalTokens);
       await storage.createNotification({ userId, type: "task_complete", title: `Task completed (${deptList})`, message: `${originalMessage.slice(0, 100)} — ${tokenStr} tokens`, link: "/tasks" });
     } catch (e: any) { console.error("[Activity] Failed to log completion:", e.message); }

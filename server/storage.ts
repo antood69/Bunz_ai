@@ -32,21 +32,21 @@ import {
   oauthStates, type OAuthState,
   webhookEvents, type WebhookEvent,
 } from "@shared/schema";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
 import { eq, desc, gte, and } from "drizzle-orm";
-import { mkdirSync } from "node:fs";
 import bcryptPkg from "bcryptjs";
-import { dirname } from "node:path";
+import { dbRun, dbGet, dbAll, dbExec, safeAlter, getDrizzle } from "./lib/db";
 
-const DB_PATH = process.env.NODE_ENV === "production" ? "/data/data.db" : "data.db";
-// Ensure parent directory exists (fixes Railway crash when /data isn't pre-created)
-try { mkdirSync(dirname(DB_PATH), { recursive: true }); } catch {}
-const sqlite = new Database(DB_PATH);
-sqlite.pragma("journal_mode = WAL");
+// Lazy proxy — getDrizzle() deferred until after dotenv loads
+let _db: any = null;
+export const db = new Proxy({} as any, {
+  get(_target, prop) {
+    if (!_db) _db = getDrizzle();
+    return _db[prop];
+  },
+});
 
-// Auto-create ALL tables if they don't exist (covers fresh deploys)
-sqlite.exec(`
+export async function initDatabase() {
+  await dbExec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
@@ -799,198 +799,195 @@ sqlite.exec(`
   );
 `);
 
-// Seed products
-try {
-  sqlite.exec(`INSERT OR IGNORE INTO products (id, name, description, price_cents, category, features) VALUES ('meme-coin-engine', 'Meme Coin Trading Engine', 'Complete meme coin trading workflow suite with signal detection, risk management, and execution templates. Includes 5 pre-built workflow presets.', 799, 'trading', '["Token Scanner Workflow","Smart Money Tracker","Auto-Exit Strategy","Social Sentiment Pipeline","Multi-Chain Sniper"]')`);
-} catch (_) {}
+  // Seed products
+  try {
+    await dbExec(`INSERT OR IGNORE INTO products (id, name, description, price_cents, category, features) VALUES ('meme-coin-engine', 'Meme Coin Trading Engine', 'Complete meme coin trading workflow suite with signal detection, risk management, and execution templates. Includes 5 pre-built workflow presets.', 799, 'trading', '["Token Scanner Workflow","Smart Money Tracker","Auto-Exit Strategy","Social Sentiment Pipeline","Multi-Chain Sniper"]')`);
+  } catch (_) {}
 
-// Seed workflow presets for meme coin engine
-try {
-  sqlite.exec(`INSERT OR IGNORE INTO workflow_presets (id, product_id, name, description, category, template_data, icon) VALUES ('preset-token-scanner', 'meme-coin-engine', 'Token Scanner', 'Monitors new token launches, filters by liquidity and volume, generates trade signals', 'trading', '{"nodes":[{"id":"trigger","type":"trigger","data":{"label":"New Token Alert"},"position":{"x":50,"y":100}},{"id":"filter","type":"logic","data":{"label":"Liquidity Filter"},"position":{"x":300,"y":100}},{"id":"signal","type":"output","data":{"label":"Generate Signal"},"position":{"x":550,"y":100}}],"edges":[{"source":"trigger","target":"filter"},{"source":"filter","target":"signal"}]}', 'Search')`);
-  sqlite.exec(`INSERT OR IGNORE INTO workflow_presets (id, product_id, name, description, category, template_data, icon) VALUES ('preset-smart-money', 'meme-coin-engine', 'Smart Money Tracker', 'Watches whale wallets for large buys and alerts you in real-time', 'trading', '{"nodes":[{"id":"trigger","type":"trigger","data":{"label":"Wallet Monitor"},"position":{"x":50,"y":100}},{"id":"agent","type":"agent","data":{"label":"Whale Detector"},"position":{"x":300,"y":100}},{"id":"alert","type":"output","data":{"label":"Alert Owner"},"position":{"x":550,"y":100}}],"edges":[{"source":"trigger","target":"agent"},{"source":"agent","target":"alert"}]}', 'Eye')`);
-  sqlite.exec(`INSERT OR IGNORE INTO workflow_presets (id, product_id, name, description, category, template_data, icon) VALUES ('preset-auto-exit', 'meme-coin-engine', 'Auto-Exit Strategy', 'Monitors open positions and applies take-profit and stop-loss rules automatically', 'trading', '{"nodes":[{"id":"trigger","type":"trigger","data":{"label":"Position Monitor"},"position":{"x":50,"y":100}},{"id":"check","type":"logic","data":{"label":"TP/SL Check"},"position":{"x":300,"y":100}},{"id":"exit","type":"output","data":{"label":"Execute Exit"},"position":{"x":550,"y":100}}],"edges":[{"source":"trigger","target":"check"},{"source":"check","target":"exit"}]}', 'ShieldCheck')`);
-  sqlite.exec(`INSERT OR IGNORE INTO workflow_presets (id, product_id, name, description, category, template_data, icon) VALUES ('preset-sentiment', 'meme-coin-engine', 'Social Sentiment Pipeline', 'Scrapes social mentions, classifies sentiment with AI, generates buy or skip signals', 'trading', '{"nodes":[{"id":"trigger","type":"trigger","data":{"label":"Social Scraper"},"position":{"x":50,"y":100}},{"id":"agent","type":"agent","data":{"label":"Sentiment Analyzer"},"position":{"x":300,"y":100}},{"id":"decision","type":"logic","data":{"label":"Signal Gate"},"position":{"x":550,"y":100}},{"id":"output","type":"output","data":{"label":"Buy Signal"},"position":{"x":800,"y":100}}],"edges":[{"source":"trigger","target":"agent"},{"source":"agent","target":"decision"},{"source":"decision","target":"output"}]}', 'MessageSquare')`);
-  sqlite.exec(`INSERT OR IGNORE INTO workflow_presets (id, product_id, name, description, category, template_data, icon) VALUES ('preset-sniper', 'meme-coin-engine', 'Multi-Chain Sniper', 'Cross-chain token scanner for fastest entry execution on new launches', 'trading', '{"nodes":[{"id":"trigger","type":"trigger","data":{"label":"Chain Scanner"},"position":{"x":50,"y":100}},{"id":"validate","type":"logic","data":{"label":"Contract Validator"},"position":{"x":300,"y":100}},{"id":"execute","type":"output","data":{"label":"Execute Buy"},"position":{"x":550,"y":100}}],"edges":[{"source":"trigger","target":"validate"},{"source":"validate","target":"execute"}]}', 'Zap')`);
-} catch (_) {}
+  // Seed workflow presets for meme coin engine
+  try {
+    await dbExec(`INSERT OR IGNORE INTO workflow_presets (id, product_id, name, description, category, template_data, icon) VALUES ('preset-token-scanner', 'meme-coin-engine', 'Token Scanner', 'Monitors new token launches, filters by liquidity and volume, generates trade signals', 'trading', '{"nodes":[{"id":"trigger","type":"trigger","data":{"label":"New Token Alert"},"position":{"x":50,"y":100}},{"id":"filter","type":"logic","data":{"label":"Liquidity Filter"},"position":{"x":300,"y":100}},{"id":"signal","type":"output","data":{"label":"Generate Signal"},"position":{"x":550,"y":100}}],"edges":[{"source":"trigger","target":"filter"},{"source":"filter","target":"signal"}]}', 'Search')`);
+    await dbExec(`INSERT OR IGNORE INTO workflow_presets (id, product_id, name, description, category, template_data, icon) VALUES ('preset-smart-money', 'meme-coin-engine', 'Smart Money Tracker', 'Watches whale wallets for large buys and alerts you in real-time', 'trading', '{"nodes":[{"id":"trigger","type":"trigger","data":{"label":"Wallet Monitor"},"position":{"x":50,"y":100}},{"id":"agent","type":"agent","data":{"label":"Whale Detector"},"position":{"x":300,"y":100}},{"id":"alert","type":"output","data":{"label":"Alert Owner"},"position":{"x":550,"y":100}}],"edges":[{"source":"trigger","target":"agent"},{"source":"agent","target":"alert"}]}', 'Eye')`);
+    await dbExec(`INSERT OR IGNORE INTO workflow_presets (id, product_id, name, description, category, template_data, icon) VALUES ('preset-auto-exit', 'meme-coin-engine', 'Auto-Exit Strategy', 'Monitors open positions and applies take-profit and stop-loss rules automatically', 'trading', '{"nodes":[{"id":"trigger","type":"trigger","data":{"label":"Position Monitor"},"position":{"x":50,"y":100}},{"id":"check","type":"logic","data":{"label":"TP/SL Check"},"position":{"x":300,"y":100}},{"id":"exit","type":"output","data":{"label":"Execute Exit"},"position":{"x":550,"y":100}}],"edges":[{"source":"trigger","target":"check"},{"source":"check","target":"exit"}]}', 'ShieldCheck')`);
+    await dbExec(`INSERT OR IGNORE INTO workflow_presets (id, product_id, name, description, category, template_data, icon) VALUES ('preset-sentiment', 'meme-coin-engine', 'Social Sentiment Pipeline', 'Scrapes social mentions, classifies sentiment with AI, generates buy or skip signals', 'trading', '{"nodes":[{"id":"trigger","type":"trigger","data":{"label":"Social Scraper"},"position":{"x":50,"y":100}},{"id":"agent","type":"agent","data":{"label":"Sentiment Analyzer"},"position":{"x":300,"y":100}},{"id":"decision","type":"logic","data":{"label":"Signal Gate"},"position":{"x":550,"y":100}},{"id":"output","type":"output","data":{"label":"Buy Signal"},"position":{"x":800,"y":100}}],"edges":[{"source":"trigger","target":"agent"},{"source":"agent","target":"decision"},{"source":"decision","target":"output"}]}', 'MessageSquare')`);
+    await dbExec(`INSERT OR IGNORE INTO workflow_presets (id, product_id, name, description, category, template_data, icon) VALUES ('preset-sniper', 'meme-coin-engine', 'Multi-Chain Sniper', 'Cross-chain token scanner for fastest entry execution on new launches', 'trading', '{"nodes":[{"id":"trigger","type":"trigger","data":{"label":"Chain Scanner"},"position":{"x":50,"y":100}},{"id":"validate","type":"logic","data":{"label":"Contract Validator"},"position":{"x":300,"y":100}},{"id":"execute","type":"output","data":{"label":"Execute Buy"},"position":{"x":550,"y":100}}],"edges":[{"source":"trigger","target":"validate"},{"source":"validate","target":"execute"}]}', 'Zap')`);
+  } catch (_) {}
 
-// Seed official workshop mods
-try {
-  sqlite.exec(`
-    INSERT OR IGNORE INTO workshop_mods (slug, name, description, long_description, category, icon, price, version, install_count, rating, is_official, route) VALUES
-    ('fiverr-automation', 'Fiverr Automation', 'AI-powered Fiverr order management with kanban, templates, auto-generation', 'Complete Fiverr automation suite. Manage orders with AI-powered drafting, kanban boards, gig templates, and one-click delivery. Auto-generate deliverables from buyer requirements.', 'Freelance', 'Briefcase', 0, '1.0.0', 142, 4.7, 1, '/fiverr'),
-    ('bot-challenge', 'Bot Challenge', 'Test your trading skills against AI-configured bot scenarios', 'Simulated prop firm challenges where you trade against AI bots. Configure account sizes, drawdown limits, and profit targets. Track your performance and learn risk management.', 'Trading', 'Target', 0, '1.0.0', 89, 4.3, 1, '/bot-challenge'),
-    ('trade-journal', 'Trade Journal', 'AI-analyzed trading journal with entry/exit tracking and coaching insights', 'Professional trading journal with AI-powered post-trade analysis. Track entries, exits, P&L, and get personalized coaching insights to improve your trading.', 'Trading', 'BookOpen', 0, '1.0.0', 203, 4.8, 1, '/journal'),
-    ('account-stacking', 'Account Stacking', 'Multi-account equity tracking and prop firm management', 'Manage multiple trading accounts with copy trading, equity tracking, and automated execution across prop firms and brokers.', 'Trading', 'Layers', 0, '1.0.0', 67, 4.1, 1, '/stacks'),
-    ('app-generator', 'App Generator', 'Claude Code-style IDE with AI chat, live preview, and ZIP export', 'Full-stack app generator with AI chat, code editor, live preview, and one-click ZIP export. Build React, Node, and Python apps with AI assistance.', 'Development', 'Cpu', 0, '1.0.0', 312, 4.9, 1, '/app-generator'),
-    ('prop-trading', 'Prop Trading', 'Professional trading with live charts, firm presets, and risk management', 'Professional prop trading dashboard with live charts, firm preset configurations, risk management tools, and real-time P&L tracking.', 'Trading', 'Trophy', 0, '1.0.0', 156, 4.5, 1, '/prop-trading'),
-    ('white-label', 'White Label', 'Rebrand Bunz as your own platform for clients', 'Create your own branded AI platform. Customize logos, colors, domains, and features. Perfect for agencies and consultants who want to offer AI services under their own brand.', 'Productivity', 'Building2', 0, '1.0.0', 34, 4.0, 1, '/white-label');
-  `);
-} catch (_) {}
+  // Seed official workshop mods
+  try {
+    await dbExec(`
+      INSERT OR IGNORE INTO workshop_mods (slug, name, description, long_description, category, icon, price, version, install_count, rating, is_official, route) VALUES
+      ('fiverr-automation', 'Fiverr Automation', 'AI-powered Fiverr order management with kanban, templates, auto-generation', 'Complete Fiverr automation suite. Manage orders with AI-powered drafting, kanban boards, gig templates, and one-click delivery. Auto-generate deliverables from buyer requirements.', 'Freelance', 'Briefcase', 0, '1.0.0', 142, 4.7, 1, '/fiverr'),
+      ('bot-challenge', 'Bot Challenge', 'Test your trading skills against AI-configured bot scenarios', 'Simulated prop firm challenges where you trade against AI bots. Configure account sizes, drawdown limits, and profit targets. Track your performance and learn risk management.', 'Trading', 'Target', 0, '1.0.0', 89, 4.3, 1, '/bot-challenge'),
+      ('trade-journal', 'Trade Journal', 'AI-analyzed trading journal with entry/exit tracking and coaching insights', 'Professional trading journal with AI-powered post-trade analysis. Track entries, exits, P&L, and get personalized coaching insights to improve your trading.', 'Trading', 'BookOpen', 0, '1.0.0', 203, 4.8, 1, '/journal'),
+      ('account-stacking', 'Account Stacking', 'Multi-account equity tracking and prop firm management', 'Manage multiple trading accounts with copy trading, equity tracking, and automated execution across prop firms and brokers.', 'Trading', 'Layers', 0, '1.0.0', 67, 4.1, 1, '/stacks'),
+      ('app-generator', 'App Generator', 'Claude Code-style IDE with AI chat, live preview, and ZIP export', 'Full-stack app generator with AI chat, code editor, live preview, and one-click ZIP export. Build React, Node, and Python apps with AI assistance.', 'Development', 'Cpu', 0, '1.0.0', 312, 4.9, 1, '/app-generator'),
+      ('prop-trading', 'Prop Trading', 'Professional trading with live charts, firm presets, and risk management', 'Professional prop trading dashboard with live charts, firm preset configurations, risk management tools, and real-time P&L tracking.', 'Trading', 'Trophy', 0, '1.0.0', 156, 4.5, 1, '/prop-trading'),
+      ('white-label', 'White Label', 'Rebrand Bunz as your own platform for clients', 'Create your own branded AI platform. Customize logos, colors, domains, and features. Perfect for agencies and consultants who want to offer AI services under their own brand.', 'Productivity', 'Building2', 0, '1.0.0', 34, 4.0, 1, '/white-label');
+    `);
+  } catch (_) {}
 
-// Auto-install all mods for owner account (reederb46@gmail.com)
-try {
-  const ownerUser = sqlite.prepare("SELECT id FROM users WHERE email = 'reederb46@gmail.com'").get() as any;
-  if (ownerUser) {
-    const allMods = sqlite.prepare("SELECT id FROM workshop_mods").all() as any[];
-    for (const mod of allMods) {
-      sqlite.prepare("INSERT OR IGNORE INTO user_installed_mods (user_id, mod_id) VALUES (?, ?)").run(ownerUser.id, mod.id);
+  // Auto-install all mods for owner account (reederb46@gmail.com)
+  try {
+    const ownerUser = await dbGet("SELECT id FROM users WHERE email = 'reederb46@gmail.com'") as any;
+    if (ownerUser) {
+      const allMods = await dbAll("SELECT id FROM workshop_mods") as any[];
+      for (const mod of allMods) {
+        await dbRun("INSERT OR IGNORE INTO user_installed_mods (user_id, mod_id) VALUES (?, ?)", ownerUser.id, mod.id);
+      }
     }
-  }
-  // Also auto-install all mods for admin accounts
-  const adminUsers = sqlite.prepare("SELECT id FROM users WHERE role IN ('admin', 'owner')").all() as any[];
-  for (const u of adminUsers) {
-    const allMods = sqlite.prepare("SELECT id FROM workshop_mods").all() as any[];
-    for (const mod of allMods) {
-      sqlite.prepare("INSERT OR IGNORE INTO user_installed_mods (user_id, mod_id) VALUES (?, ?)").run(u.id, mod.id);
+    // Also auto-install all mods for admin accounts
+    const adminUsers = await dbAll("SELECT id FROM users WHERE role IN ('admin', 'owner')") as any[];
+    for (const u of adminUsers) {
+      const allMods = await dbAll("SELECT id FROM workshop_mods") as any[];
+      for (const mod of allMods) {
+        await dbRun("INSERT OR IGNORE INTO user_installed_mods (user_id, mod_id) VALUES (?, ?)", u.id, mod.id);
+      }
     }
-  }
-} catch (_) {}
+  } catch (_) {}
 
-// Safe ALTER TABLE for existing DBs that lack new columns
-const safeAlter = (sql: string) => {
-  try { sqlite.exec(sql); } catch (_) { /* column already exists */ }
-};
+  // Boss messages image support
+  await safeAlter("ALTER TABLE boss_messages ADD COLUMN type TEXT DEFAULT 'text'");
+  await safeAlter("ALTER TABLE boss_messages ADD COLUMN image_url TEXT");
 
-// Boss messages image support
-safeAlter("ALTER TABLE boss_messages ADD COLUMN type TEXT DEFAULT 'text'");
-safeAlter("ALTER TABLE boss_messages ADD COLUMN image_url TEXT");
+  // Default repo for Coder self-improvement loop
+  await safeAlter("ALTER TABLE user_preferences ADD COLUMN default_repo TEXT");
 
-// Default repo for Coder self-improvement loop
-safeAlter("ALTER TABLE user_preferences ADD COLUMN default_repo TEXT");
+  // Marketplace listing type columns
+  await safeAlter("ALTER TABLE marketplace_listings ADD COLUMN listing_type TEXT DEFAULT 'service'");
+  await safeAlter("ALTER TABLE marketplace_listings ADD COLUMN attached_item_id TEXT");
+  await safeAlter("ALTER TABLE marketplace_listings ADD COLUMN attached_item_data TEXT");
 
-// Marketplace listing type columns
-safeAlter("ALTER TABLE marketplace_listings ADD COLUMN listing_type TEXT DEFAULT 'service'");
-safeAlter("ALTER TABLE marketplace_listings ADD COLUMN attached_item_id TEXT");
-safeAlter("ALTER TABLE marketplace_listings ADD COLUMN attached_item_data TEXT");
+  // Fiverr orders pipeline columns
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN client_name TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN client_email TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN gig_type TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN deadline TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN ai_output TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN revision_notes TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN delivery_message TEXT");
+  // Phase 3: Fiverr Automation extended columns
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN order_id TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN gig_title TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN specs TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN revenue INTEGER");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN generated_output TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN generation_job_id TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN template_id TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN auto_generate INTEGER DEFAULT 0");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN due_at INTEGER");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN delivered_at INTEGER");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN reviewed_at INTEGER");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN review_note TEXT");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN updated_at INTEGER");
+  await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN models TEXT");
 
-// Fiverr orders pipeline columns
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN client_name TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN client_email TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN gig_type TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN deadline TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN ai_output TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN revision_notes TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN delivery_message TEXT");
-// Phase 3: Fiverr Automation extended columns
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN order_id TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN gig_title TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN specs TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN revenue INTEGER");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN generated_output TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN generation_job_id TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN template_id TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN auto_generate INTEGER DEFAULT 0");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN due_at INTEGER");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN delivered_at INTEGER");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN reviewed_at INTEGER");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN review_note TEXT");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN updated_at INTEGER");
-safeAlter("ALTER TABLE fiverr_orders ADD COLUMN models TEXT");
+  // Users table migration for existing DBs
+  await safeAlter("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''");
+  await safeAlter("ALTER TABLE users ADD COLUMN password_hash TEXT");
+  await safeAlter("ALTER TABLE users ADD COLUMN display_name TEXT");
+  await safeAlter("ALTER TABLE users ADD COLUMN avatar_url TEXT");
+  await safeAlter("ALTER TABLE users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'email'");
+  await safeAlter("ALTER TABLE users ADD COLUMN provider_id TEXT");
+  await safeAlter("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+  await safeAlter("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
+  await safeAlter("ALTER TABLE users ADD COLUMN last_login_at TEXT");
+  await safeAlter("ALTER TABLE users ADD COLUMN created_at TEXT NOT NULL DEFAULT ''");
+  // GitHub token for Coder agent repo access
+  await safeAlter("ALTER TABLE users ADD COLUMN github_token TEXT");
+  await safeAlter("ALTER TABLE users ADD COLUMN github_username TEXT");
+  // Generated apps version tracking
+  await safeAlter("ALTER TABLE generated_apps ADD COLUMN versions TEXT");
 
-// Users table migration for existing DBs
-safeAlter("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''");
-safeAlter("ALTER TABLE users ADD COLUMN password_hash TEXT");
-safeAlter("ALTER TABLE users ADD COLUMN display_name TEXT");
-safeAlter("ALTER TABLE users ADD COLUMN avatar_url TEXT");
-safeAlter("ALTER TABLE users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'email'");
-safeAlter("ALTER TABLE users ADD COLUMN provider_id TEXT");
-safeAlter("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
-safeAlter("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
-safeAlter("ALTER TABLE users ADD COLUMN last_login_at TEXT");
-safeAlter("ALTER TABLE users ADD COLUMN created_at TEXT NOT NULL DEFAULT ''");
-// GitHub token for Coder agent repo access
-safeAlter("ALTER TABLE users ADD COLUMN github_token TEXT");
-safeAlter("ALTER TABLE users ADD COLUMN github_username TEXT");
-// Generated apps version tracking
-safeAlter("ALTER TABLE generated_apps ADD COLUMN versions TEXT");
+  // Stack execution log table
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS stack_execution_log (
+        id TEXT PRIMARY KEY,
+        stack_id TEXT NOT NULL,
+        connection_id TEXT NOT NULL,
+        symbol TEXT NOT NULL,
+        side TEXT NOT NULL,
+        quantity REAL NOT NULL DEFAULT 0,
+        price REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending',
+        executed_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  } catch (_) {}
 
-// Stack execution log table
-try {
-  sqlite.exec(`
-    CREATE TABLE IF NOT EXISTS stack_execution_log (
-      id TEXT PRIMARY KEY,
-      stack_id TEXT NOT NULL,
-      connection_id TEXT NOT NULL,
-      symbol TEXT NOT NULL,
-      side TEXT NOT NULL,
-      quantity REAL NOT NULL DEFAULT 0,
-      price REAL NOT NULL DEFAULT 0,
-      status TEXT NOT NULL DEFAULT 'pending',
-      executed_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
-} catch (_) {}
+  // Workflows table migration
+  await safeAlter("ALTER TABLE user_preferences ADD COLUMN trading_disclaimer_ack INTEGER NOT NULL DEFAULT 0");
+  await safeAlter("ALTER TABLE workflows ADD COLUMN canvas_state TEXT");
+  await safeAlter("ALTER TABLE workflows ADD COLUMN is_template INTEGER DEFAULT 0");
+  await safeAlter("ALTER TABLE workflows ADD COLUMN template_category TEXT");
+  await safeAlter("ALTER TABLE workflows ADD COLUMN template_description TEXT");
+  await safeAlter("ALTER TABLE workflows ADD COLUMN is_public INTEGER DEFAULT 0");
+  await safeAlter("ALTER TABLE workflows ADD COLUMN fork_count INTEGER DEFAULT 0");
+  await safeAlter("ALTER TABLE workflows ADD COLUMN use_count INTEGER DEFAULT 0");
+  await safeAlter("ALTER TABLE gig_templates ADD COLUMN workflow_id INTEGER");
 
-// Workflows table migration
-safeAlter("ALTER TABLE user_preferences ADD COLUMN trading_disclaimer_ack INTEGER NOT NULL DEFAULT 0");
-safeAlter("ALTER TABLE workflows ADD COLUMN canvas_state TEXT");
-safeAlter("ALTER TABLE workflows ADD COLUMN is_template INTEGER DEFAULT 0");
-safeAlter("ALTER TABLE workflows ADD COLUMN template_category TEXT");
-safeAlter("ALTER TABLE workflows ADD COLUMN template_description TEXT");
-safeAlter("ALTER TABLE workflows ADD COLUMN is_public INTEGER DEFAULT 0");
-safeAlter("ALTER TABLE workflows ADD COLUMN fork_count INTEGER DEFAULT 0");
-safeAlter("ALTER TABLE workflows ADD COLUMN use_count INTEGER DEFAULT 0");
-safeAlter("ALTER TABLE gig_templates ADD COLUMN workflow_id INTEGER");
+  // Agent configs multi-model support
+  await safeAlter("ALTER TABLE agent_configs ADD COLUMN models TEXT");
 
-// Agent configs multi-model support
-safeAlter("ALTER TABLE agent_configs ADD COLUMN models TEXT");
+  // Phase 3 Dashboard: user_dashboard_layouts table
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS user_dashboard_layouts (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        layout TEXT NOT NULL DEFAULT '[]',
+        updated_at INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+  } catch (_) {}
 
-// Phase 3 Dashboard: user_dashboard_layouts table
-try {
-  sqlite.exec(`
-    CREATE TABLE IF NOT EXISTS user_dashboard_layouts (
-      id TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL,
-      layout TEXT NOT NULL DEFAULT '[]',
-      updated_at INTEGER NOT NULL DEFAULT 0
-    );
-  `);
-} catch (_) {}
+  // Phase 3 Dashboard: activity_events table
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS activity_events (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        metadata TEXT,
+        created_at INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+  } catch (_) {}
 
-// Phase 3 Dashboard: activity_events table
-try {
-  sqlite.exec(`
-    CREATE TABLE IF NOT EXISTS activity_events (
-      id TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL,
-      type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      description TEXT,
-      metadata TEXT,
-      created_at INTEGER NOT NULL DEFAULT 0
-    );
-  `);
-} catch (_) {}
-
-// ── Auto-seed admin accounts (runs after all schema migrations) ──
-try {
-  const seedAccounts = [
-    { email: "reederb46@gmail.com", password: "0192837465Br!", displayName: "Reed", role: "owner" },
-    { email: "test@bunz.io", password: "TestBunz123!", displayName: "Test Admin", role: "admin" },
-  ];
-  for (const acct of seedAccounts) {
-    const existing = sqlite.prepare("SELECT id FROM users WHERE email = ?").get(acct.email);
-    if (!existing) {
-      const hash = bcryptPkg.hashSync(acct.password, 12);
-      const username = acct.email.split("@")[0] + "_" + Math.random().toString(36).slice(2, 6);
-      const role = (acct as any).role || "admin";
-      const tier = role === "owner" ? "agency" : "agency";
-      const result = sqlite.prepare(
-        "INSERT INTO users (username, email, password_hash, display_name, auth_provider, role, tier, email_verified, created_at) VALUES (?, ?, ?, ?, 'email', ?, ?, 1, ?)"
-      ).run(username, acct.email, hash, acct.displayName, role, tier, new Date().toISOString());
-      const userId = result.lastInsertRowid;
-      sqlite.prepare(
-        "INSERT INTO user_plans (user_id, tier, monthly_tokens, tokens_used, period_start, period_end, created_at) VALUES (?, 'agency', 999999999, 0, ?, ?, ?)"
-      ).run(userId, new Date().toISOString(), new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), new Date().toISOString());
-      console.log(`[seed] Created admin account: ${acct.email}`);
+  // ── Auto-seed admin accounts (runs after all schema migrations) ──
+  try {
+    const seedAccounts = [
+      { email: "reederb46@gmail.com", password: "0192837465Br!", displayName: "Reed", role: "owner" },
+      { email: "test@bunz.io", password: "TestBunz123!", displayName: "Test Admin", role: "admin" },
+    ];
+    for (const acct of seedAccounts) {
+      const existing = await dbGet("SELECT id FROM users WHERE email = ?", acct.email);
+      if (!existing) {
+        const hash = bcryptPkg.hashSync(acct.password, 12);
+        const username = acct.email.split("@")[0] + "_" + Math.random().toString(36).slice(2, 6);
+        const role = (acct as any).role || "admin";
+        const tier = role === "owner" ? "agency" : "agency";
+        const result = await dbRun(
+          "INSERT INTO users (username, email, password_hash, display_name, auth_provider, role, tier, email_verified, created_at) VALUES (?, ?, ?, ?, 'email', ?, ?, 1, ?)",
+          username, acct.email, hash, acct.displayName, role, tier, new Date().toISOString()
+        );
+        const userId = result.lastInsertRowid;
+        await dbRun(
+          "INSERT INTO user_plans (user_id, tier, monthly_tokens, tokens_used, period_start, period_end, created_at) VALUES (?, 'agency', 999999999, 0, ?, ?, ?)",
+          userId, new Date().toISOString(), new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), new Date().toISOString()
+        );
+        console.log(`[seed] Created admin account: ${acct.email}`);
+      }
     }
+  } catch (e) {
+    console.error("[seed] Failed to seed admin accounts:", e);
   }
-} catch (e) {
-  console.error("[seed] Failed to seed admin accounts:", e);
+
+  console.log("[db] Database initialized");
 }
-
-export const db = drizzle(sqlite);
-export { sqlite };
 
 // Custom Tool type (raw SQLite, not drizzle-managed)
 export interface CustomTool {
@@ -1618,17 +1615,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGitHubToken(userId: number): Promise<string | null> {
-    const row = sqlite.prepare('SELECT github_token FROM users WHERE id = ?').get(userId) as any;
+    const row = await dbGet('SELECT github_token FROM users WHERE id = ?', userId) as any;
     return row?.github_token || null;
   }
 
   async getGitHubUsername(userId: number): Promise<string | null> {
-    const row = sqlite.prepare('SELECT github_username FROM users WHERE id = ?').get(userId) as any;
+    const row = await dbGet('SELECT github_username FROM users WHERE id = ?', userId) as any;
     return row?.github_username || null;
   }
 
   async setGitHubToken(userId: number, token: string, username: string): Promise<void> {
-    sqlite.prepare('UPDATE users SET github_token = ?, github_username = ? WHERE id = ?').run(token, username, userId);
+    await dbRun('UPDATE users SET github_token = ?, github_username = ? WHERE id = ?', token, username, userId);
   }
 
   // Workflow Runs
@@ -1684,7 +1681,7 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteExpiredSessions() {
     const now = new Date().toISOString();
-    sqlite.exec(`DELETE FROM sessions WHERE expires_at < '${now}'`);
+    await dbExec(`DELETE FROM sessions WHERE expires_at < '${now}'`);
   }
 
   // Auth: Users (extended)
@@ -1713,15 +1710,15 @@ export class DatabaseStorage implements IStorage {
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const limit = opts.limit || 50;
     const offset = opts.offset || 0;
-    const rows = sqlite.prepare(`SELECT * FROM owner_intelligence ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(limit, offset);
+    const rows = await dbAll(`SELECT * FROM owner_intelligence ${where} ORDER BY id DESC LIMIT ? OFFSET ?`, limit, offset);
     return rows as OwnerIntelligence[];
   }
   async getIntelligenceCount() {
-    const row = sqlite.prepare('SELECT COUNT(*) as count FROM owner_intelligence').get() as any;
+    const row = await dbGet('SELECT COUNT(*) as count FROM owner_intelligence') as any;
     return row?.count || 0;
   }
   async updateIntelligenceQuality(id: number, quality: string) {
-    sqlite.prepare('UPDATE owner_intelligence SET quality = ? WHERE id = ?').run(quality, id);
+    await dbRun('UPDATE owner_intelligence SET quality = ? WHERE id = ?', quality, id);
   }
 
   // Email Verification
@@ -1734,8 +1731,8 @@ export class DatabaseStorage implements IStorage {
   async markEmailVerified(token: string) {
     const v = await this.getEmailVerification(token);
     if (v) {
-      sqlite.prepare('UPDATE email_verifications SET verified = 1 WHERE token = ?').run(token);
-      sqlite.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(v.userId);
+      await dbRun('UPDATE email_verifications SET verified = 1 WHERE token = ?', token);
+      await dbRun('UPDATE users SET email_verified = 1 WHERE id = ?', v.userId);
     }
   }
 
@@ -1747,14 +1744,14 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(desc(notifications.id)).limit(limit).all();
   }
   async getUnreadNotificationCount(userId: number) {
-    const row = sqlite.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND read = 0').get(userId) as any;
+    const row = await dbGet('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND read = 0', userId) as any;
     return row?.count || 0;
   }
   async markNotificationRead(id: number) {
-    sqlite.prepare('UPDATE notifications SET read = 1 WHERE id = ?').run(id);
+    await dbRun('UPDATE notifications SET read = 1 WHERE id = ?', id);
   }
   async markAllNotificationsRead(userId: number) {
-    sqlite.prepare('UPDATE notifications SET read = 1 WHERE user_id = ?').run(userId);
+    await dbRun('UPDATE notifications SET read = 1 WHERE user_id = ?', userId);
   }
 
   // ── Marketplace Listings ─────────────────────────────────────────────────
@@ -1762,12 +1759,12 @@ export class DatabaseStorage implements IStorage {
     const { v4: uuidv4 } = await import("uuid");
     const id = uuidv4();
     const now = new Date().toISOString();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO marketplace_listings
         (id, seller_id, title, description, short_description, category, listing_type, price_usd, price_type, content_ref, version, is_published, is_verified, install_count, rating_avg, rating_count, preview_images, tags, created_at, updated_at)
       VALUES
         (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)
-    `).run(
+    `,
       id, data.sellerId, data.title, data.description, data.shortDescription ?? null,
       data.category, data.listingType, data.priceUsd, data.priceType,
       data.contentRef ?? null, data.version, data.isPublished ?? 0, data.isVerified ?? 0,
@@ -1777,7 +1774,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getListing(id: string): Promise<MarketplaceListing | undefined> {
-    const row = sqlite.prepare('SELECT * FROM marketplace_listings WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM marketplace_listings WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapListing(row);
   }
@@ -1800,12 +1797,12 @@ export class DatabaseStorage implements IStorage {
       }
     }
     values.push(id);
-    sqlite.prepare(`UPDATE marketplace_listings SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE marketplace_listings SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getListing(id);
   }
 
   async deleteListing(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM marketplace_listings WHERE id = ?').run(id);
+    await dbRun('DELETE FROM marketplace_listings WHERE id = ?', id);
   }
 
   async getListings(opts: { category?: string; search?: string; minRating?: number; priceType?: string; sellerId?: number; isPublished?: number; sortBy?: string; limit?: number; offset?: number }): Promise<MarketplaceListing[]> {
@@ -1828,51 +1825,51 @@ export class DatabaseStorage implements IStorage {
     const limit = opts.limit ?? 20;
     const offset = opts.offset ?? 0;
     params.push(limit, offset);
-    const rows = sqlite.prepare(`SELECT * FROM marketplace_listings ${where} ${orderBy} LIMIT ? OFFSET ?`).all(...params) as any[];
+    const rows = await dbAll(`SELECT * FROM marketplace_listings ${where} ${orderBy} LIMIT ? OFFSET ?`, ...params) as any[];
     return rows.map(r => this._mapListing(r));
   }
 
   async getListingsBySeller(sellerId: number): Promise<MarketplaceListing[]> {
-    const rows = sqlite.prepare('SELECT * FROM marketplace_listings WHERE seller_id = ? ORDER BY created_at DESC').all(sellerId) as any[];
+    const rows = await dbAll('SELECT * FROM marketplace_listings WHERE seller_id = ? ORDER BY created_at DESC', sellerId) as any[];
     return rows.map(r => this._mapListing(r));
   }
 
   async getFeaturedListings(limit: number): Promise<MarketplaceListing[]> {
-    const rows = sqlite.prepare(
-      'SELECT * FROM marketplace_listings WHERE is_published = 1 ORDER BY rating_avg DESC, install_count DESC LIMIT ?'
-    ).all(limit) as any[];
+    const rows = await dbAll(
+      'SELECT * FROM marketplace_listings WHERE is_published = 1 ORDER BY rating_avg DESC, install_count DESC LIMIT ?', limit
+    ) as any[];
     return rows.map(r => this._mapListing(r));
   }
 
   async getTrendingListings(limit: number): Promise<MarketplaceListing[]> {
     // Proxy for trending: most installs overall among published listings (no created_at on purchases for efficient 7-day filter without joins here)
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const rows = sqlite.prepare(`
+    const rows = await dbAll(`
       SELECT ml.* FROM marketplace_listings ml
       INNER JOIN marketplace_purchases mp ON mp.listing_id = ml.id
       WHERE ml.is_published = 1 AND mp.created_at >= ?
       GROUP BY ml.id
       ORDER BY COUNT(mp.id) DESC, ml.install_count DESC
       LIMIT ?
-    `).all(sevenDaysAgo, limit) as any[];
+    `, sevenDaysAgo, limit) as any[];
     // Fallback to most installed if no recent purchases
     if (rows.length === 0) {
-      const fallback = sqlite.prepare(
-        'SELECT * FROM marketplace_listings WHERE is_published = 1 ORDER BY install_count DESC LIMIT ?'
-      ).all(limit) as any[];
+      const fallback = await dbAll(
+        'SELECT * FROM marketplace_listings WHERE is_published = 1 ORDER BY install_count DESC LIMIT ?', limit
+      ) as any[];
       return fallback.map(r => this._mapListing(r));
     }
     return rows.map(r => this._mapListing(r));
   }
 
   async incrementInstallCount(listingId: string): Promise<void> {
-    sqlite.prepare('UPDATE marketplace_listings SET install_count = install_count + 1, updated_at = ? WHERE id = ?').run(new Date().toISOString(), listingId);
+    await dbRun('UPDATE marketplace_listings SET install_count = install_count + 1, updated_at = ? WHERE id = ?', new Date().toISOString(), listingId);
   }
 
   async getCategoryCounts(): Promise<{ category: string; count: number }[]> {
-    const rows = sqlite.prepare(
+    const rows = await dbAll(
       'SELECT category, COUNT(*) as count FROM marketplace_listings WHERE is_published = 1 GROUP BY category'
-    ).all() as any[];
+    ) as any[];
     return rows.map(r => ({ category: r.category, count: r.count }));
   }
 
@@ -1906,11 +1903,11 @@ export class DatabaseStorage implements IStorage {
     const { v4: uuidv4 } = await import("uuid");
     const id = uuidv4();
     const now = new Date().toISOString();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO marketplace_purchases
         (id, listing_id, buyer_id, seller_id, amount_usd, platform_fee_usd, seller_payout_usd, stripe_payment_id, stripe_transfer_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `,
       id, data.listingId, data.buyerId, data.sellerId,
       data.amountUsd, data.platformFeeUsd, data.sellerPayoutUsd,
       data.stripePaymentId ?? null, data.stripeTransferId ?? null, now
@@ -1919,17 +1916,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPurchasesByBuyer(buyerId: number): Promise<MarketplacePurchase[]> {
-    const rows = sqlite.prepare('SELECT * FROM marketplace_purchases WHERE buyer_id = ? ORDER BY created_at DESC').all(buyerId) as any[];
+    const rows = await dbAll('SELECT * FROM marketplace_purchases WHERE buyer_id = ? ORDER BY created_at DESC', buyerId) as any[];
     return rows.map(r => this._mapPurchase(r));
   }
 
   async getPurchasesBySeller(sellerId: number): Promise<MarketplacePurchase[]> {
-    const rows = sqlite.prepare('SELECT * FROM marketplace_purchases WHERE seller_id = ? ORDER BY created_at DESC').all(sellerId) as any[];
+    const rows = await dbAll('SELECT * FROM marketplace_purchases WHERE seller_id = ? ORDER BY created_at DESC', sellerId) as any[];
     return rows.map(r => this._mapPurchase(r));
   }
 
   async hasPurchased(buyerId: number, listingId: string): Promise<boolean> {
-    const row = sqlite.prepare('SELECT id FROM marketplace_purchases WHERE buyer_id = ? AND listing_id = ? LIMIT 1').get(buyerId, listingId);
+    const row = await dbGet('SELECT id FROM marketplace_purchases WHERE buyer_id = ? AND listing_id = ? LIMIT 1', buyerId, listingId);
     return !!row;
   }
 
@@ -1953,27 +1950,27 @@ export class DatabaseStorage implements IStorage {
     const { v4: uuidv4 } = await import("uuid");
     const id = uuidv4();
     const now = new Date().toISOString();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO marketplace_reviews
         (id, listing_id, buyer_id, purchase_id, rating, review_text, is_verified_purchase, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, data.listingId, data.buyerId, data.purchaseId, data.rating, data.reviewText ?? null, data.isVerifiedPurchase ?? 1, now);
+    `, id, data.listingId, data.buyerId, data.purchaseId, data.rating, data.reviewText ?? null, data.isVerifiedPurchase ?? 1, now);
     // Recalculate listing rating
-    const agg = sqlite.prepare('SELECT AVG(rating) as avg, COUNT(*) as cnt FROM marketplace_reviews WHERE listing_id = ?').get(data.listingId) as any;
+    const agg = await dbGet('SELECT AVG(rating) as avg, COUNT(*) as cnt FROM marketplace_reviews WHERE listing_id = ?', data.listingId) as any;
     if (agg) {
-      sqlite.prepare('UPDATE marketplace_listings SET rating_avg = ?, rating_count = ?, updated_at = ? WHERE id = ?')
-        .run(Math.round((agg.avg || 0) * 100) / 100, agg.cnt, now, data.listingId);
+      await dbRun('UPDATE marketplace_listings SET rating_avg = ?, rating_count = ?, updated_at = ? WHERE id = ?',
+        Math.round((agg.avg || 0) * 100) / 100, agg.cnt, now, data.listingId);
     }
     return { id, ...data, createdAt: now };
   }
 
   async getReviewsByListing(listingId: string, limit = 20, offset = 0): Promise<MarketplaceReview[]> {
-    const rows = sqlite.prepare('SELECT * FROM marketplace_reviews WHERE listing_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?').all(listingId, limit, offset) as any[];
+    const rows = await dbAll('SELECT * FROM marketplace_reviews WHERE listing_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?', listingId, limit, offset) as any[];
     return rows.map(r => this._mapReview(r));
   }
 
   async getReviewByBuyerAndListing(buyerId: number, listingId: string): Promise<MarketplaceReview | undefined> {
-    const row = sqlite.prepare('SELECT * FROM marketplace_reviews WHERE buyer_id = ? AND listing_id = ? LIMIT 1').get(buyerId, listingId) as any;
+    const row = await dbGet('SELECT * FROM marketplace_reviews WHERE buyer_id = ? AND listing_id = ? LIMIT 1', buyerId, listingId) as any;
     if (!row) return undefined;
     return this._mapReview(row);
   }
@@ -2018,11 +2015,11 @@ export class DatabaseStorage implements IStorage {
     const { v4: uuidv4 } = await import("uuid");
     const id = uuidv4();
     const now = new Date().toISOString();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO custom_tools
         (id, owner_id, name, description, tool_type, endpoint, method, headers, auth_type, auth_config, input_schema, output_schema, is_active, usage_count, last_used_at, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, NULL, ?, ?)
-    `).run(
+    `,
       id, data.ownerId, data.name, data.description,
       data.toolType ?? 'rest_api',
       data.endpoint ?? null, data.method ?? 'POST',
@@ -2034,13 +2031,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTool(id: string): Promise<CustomTool | undefined> {
-    const row = sqlite.prepare('SELECT * FROM custom_tools WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM custom_tools WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapTool(row);
   }
 
   async getToolsByOwner(ownerId: number): Promise<CustomTool[]> {
-    const rows = sqlite.prepare('SELECT * FROM custom_tools WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId) as any[];
+    const rows = await dbAll('SELECT * FROM custom_tools WHERE owner_id = ? ORDER BY created_at DESC', ownerId) as any[];
     return rows.map(r => this._mapTool(r));
   }
 
@@ -2062,17 +2059,17 @@ export class DatabaseStorage implements IStorage {
       }
     }
     values.push(id);
-    sqlite.prepare(`UPDATE custom_tools SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE custom_tools SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getTool(id);
   }
 
   async deleteTool(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM custom_tools WHERE id = ?').run(id);
+    await dbRun('DELETE FROM custom_tools WHERE id = ?', id);
   }
 
   async incrementToolUsage(id: string): Promise<void> {
     const now = new Date().toISOString();
-    sqlite.prepare('UPDATE custom_tools SET usage_count = usage_count + 1, last_used_at = ?, updated_at = ? WHERE id = ?').run(now, now, id);
+    await dbRun('UPDATE custom_tools SET usage_count = usage_count + 1, last_used_at = ?, updated_at = ? WHERE id = ?', now, now, id);
   }
 
   // ── User Preferences ──────────────────────────────────────────────────────
@@ -2089,7 +2086,7 @@ export class DatabaseStorage implements IStorage {
   };
 
   async getUserPreferences(userId: number): Promise<UserPreferences> {
-    const row = sqlite.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(userId) as any;
+    const row = await dbGet('SELECT * FROM user_preferences WHERE user_id = ?', userId) as any;
     if (!row) {
       // Return defaults (no row yet)
       return {
@@ -2120,12 +2117,12 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserPreferences(userId: number, data: Partial<UserPreferences>): Promise<UserPreferences> {
     const now = new Date().toISOString();
-    const existing = sqlite.prepare('SELECT id FROM user_preferences WHERE user_id = ?').get(userId);
+    const existing = await dbGet('SELECT id FROM user_preferences WHERE user_id = ?', userId);
     if (!existing) {
-      sqlite.prepare(`
+      await dbRun(`
         INSERT INTO user_preferences (user_id, wallpaper_url, wallpaper_type, wallpaper_tint, accent_color, glass_blur, glass_opacity, sidebar_position, compact_mode, default_repo, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `,
         userId,
         data.wallpaperUrl ?? null,
         data.wallpaperType ?? 'none',
@@ -2155,7 +2152,7 @@ export class DatabaseStorage implements IStorage {
         fields.push('updated_at = ?');
         values.push(now);
         values.push(userId);
-        sqlite.prepare(`UPDATE user_preferences SET ${fields.join(', ')} WHERE user_id = ?`).run(...values);
+        await dbRun(`UPDATE user_preferences SET ${fields.join(', ')} WHERE user_id = ?`, ...values);
       }
     }
     return this.getUserPreferences(userId);
@@ -2203,10 +2200,10 @@ export class DatabaseStorage implements IStorage {
       grossPnl = calc.grossPnl;
       netPnl = calc.netPnl;
     }
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO trades (id, user_id, symbol, direction, entry_price, exit_price, quantity, entry_time, exit_time, gross_pnl, fees, net_pnl, strategy_tag, notes, screenshot_url, import_source)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `,
       id, data.userId, data.symbol, data.direction,
       data.entryPrice, data.exitPrice ?? null, data.quantity,
       data.entryTime, data.exitTime ?? null,
@@ -2218,7 +2215,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTrade(id: string): Promise<Trade | undefined> {
-    const row = sqlite.prepare('SELECT * FROM trades WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM trades WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapTrade(row);
   }
@@ -2232,7 +2229,7 @@ export class DatabaseStorage implements IStorage {
     if (opts.endDate) { query += ' AND entry_time <= ?'; params.push(opts.endDate); }
     query += ' ORDER BY entry_time DESC';
     query += ` LIMIT ${opts.limit ?? 100} OFFSET ${opts.offset ?? 0}`;
-    const rows = sqlite.prepare(query).all(...params) as any[];
+    const rows = await dbAll(query, ...params) as any[];
     return rows.map(r => this._mapTrade(r));
   }
 
@@ -2263,13 +2260,13 @@ export class DatabaseStorage implements IStorage {
     }
     if (fields.length > 0) {
       values.push(id);
-      sqlite.prepare(`UPDATE trades SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+      await dbRun(`UPDATE trades SET ${fields.join(', ')} WHERE id = ?`, ...values);
     }
     return this.getTrade(id);
   }
 
   async deleteTrade(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM trades WHERE id = ?').run(id);
+    await dbRun('DELETE FROM trades WHERE id = ?', id);
   }
 
   async closeTrade(id: string, exitPrice: number, exitTime: string, fees = 0): Promise<Trade | undefined> {
@@ -2277,9 +2274,9 @@ export class DatabaseStorage implements IStorage {
     if (!trade) return undefined;
     const totalFees = (trade.fees ?? 0) + fees;
     const { grossPnl, netPnl } = this._calcPnl(trade.direction, trade.entryPrice, exitPrice, trade.quantity, totalFees);
-    sqlite.prepare(`
+    await dbRun(`
       UPDATE trades SET exit_price = ?, exit_time = ?, fees = ?, gross_pnl = ?, net_pnl = ? WHERE id = ?
-    `).run(exitPrice, exitTime, totalFees, grossPnl, netPnl, id);
+    `, exitPrice, exitTime, totalFees, grossPnl, netPnl, id);
     return this.getTrade(id);
   }
 
@@ -2338,13 +2335,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEquityCurve(userId: number): Promise<{ date: string; cumulativePnl: number }[]> {
-    const rows = sqlite.prepare(`
+    const rows = await dbAll(`
       SELECT date(entry_time) as date, SUM(net_pnl) as daily_pnl
       FROM trades
       WHERE user_id = ? AND net_pnl IS NOT NULL
       GROUP BY date(entry_time)
       ORDER BY date(entry_time) ASC
-    `).all(userId) as any[];
+    `, userId) as any[];
     let cumulative = 0;
     return rows.map(r => {
       cumulative += r.daily_pnl ?? 0;
@@ -2353,29 +2350,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getMonthlyPnl(userId: number): Promise<{ month: string; pnl: number }[]> {
-    const rows = sqlite.prepare(`
+    const rows = await dbAll(`
       SELECT strftime('%Y-%m', entry_time) as month, SUM(net_pnl) as pnl
       FROM trades
       WHERE user_id = ? AND net_pnl IS NOT NULL
       GROUP BY strftime('%Y-%m', entry_time)
       ORDER BY month ASC
-    `).all(userId) as any[];
+    `, userId) as any[];
     return rows.map(r => ({ month: r.month, pnl: Math.round((r.pnl ?? 0) * 100) / 100 }));
   }
 
   async getPnlBySymbol(userId: number): Promise<{ symbol: string; pnl: number; tradeCount: number }[]> {
-    const rows = sqlite.prepare(`
+    const rows = await dbAll(`
       SELECT symbol, SUM(net_pnl) as pnl, COUNT(*) as trade_count
       FROM trades
       WHERE user_id = ? AND net_pnl IS NOT NULL
       GROUP BY symbol
       ORDER BY pnl DESC
-    `).all(userId) as any[];
+    `, userId) as any[];
     return rows.map(r => ({ symbol: r.symbol, pnl: Math.round((r.pnl ?? 0) * 100) / 100, tradeCount: r.trade_count }));
   }
 
   async getPnlByDayOfWeek(userId: number): Promise<{ day: string; pnl: number; tradeCount: number }[]> {
-    const rows = sqlite.prepare(`
+    const rows = await dbAll(`
       SELECT
         CASE cast(strftime('%w', entry_time) as integer)
           WHEN 0 THEN 'Sunday'
@@ -2392,7 +2389,7 @@ export class DatabaseStorage implements IStorage {
       WHERE user_id = ? AND net_pnl IS NOT NULL
       GROUP BY strftime('%w', entry_time)
       ORDER BY cast(strftime('%w', entry_time) as integer)
-    `).all(userId) as any[];
+    `, userId) as any[];
     return rows.map(r => ({ day: r.day, pnl: Math.round((r.pnl ?? 0) * 100) / 100, tradeCount: r.trade_count }));
   }
 
@@ -2425,10 +2422,10 @@ export class DatabaseStorage implements IStorage {
     accountInfo?: string | null;
   }): Promise<BrokerConnection> {
     const id = `bc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO broker_connections (id, user_id, broker, label, api_key, api_secret, is_paper, account_id, account_info)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `,
       id,
       data.userId,
       data.broker,
@@ -2443,14 +2440,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBrokerConnections(userId: number): Promise<BrokerConnection[]> {
-    const rows = sqlite.prepare(
-      `SELECT * FROM broker_connections WHERE user_id = ? ORDER BY created_at DESC`
-    ).all(userId) as any[];
+    const rows = await dbAll(
+      `SELECT * FROM broker_connections WHERE user_id = ? ORDER BY created_at DESC`, userId
+    ) as any[];
     return rows.map(r => this.mapBrokerConnection(r));
   }
 
   async getBrokerConnection(id: string): Promise<BrokerConnection | undefined> {
-    const row = sqlite.prepare(`SELECT * FROM broker_connections WHERE id = ?`).get(id) as any;
+    const row = await dbGet(`SELECT * FROM broker_connections WHERE id = ?`, id) as any;
     if (!row) return undefined;
     return this.mapBrokerConnection(row);
   }
@@ -2471,12 +2468,12 @@ export class DatabaseStorage implements IStorage {
     if (data.accountInfo !== undefined) { fields.push('account_info = ?'); values.push(data.accountInfo); }
     if (fields.length === 0) return existing;
     values.push(id);
-    sqlite.prepare(`UPDATE broker_connections SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE broker_connections SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getBrokerConnection(id);
   }
 
   async deleteBrokerConnection(id: string): Promise<void> {
-    sqlite.prepare(`DELETE FROM broker_connections WHERE id = ?`).run(id);
+    await dbRun(`DELETE FROM broker_connections WHERE id = ?`, id);
   }
 
   // ── User API Keys ───────────────────────────────────────────────────────
@@ -2495,12 +2492,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserApiKeys(userId: number): Promise<UserApiKey[]> {
-    const rows = sqlite.prepare('SELECT * FROM user_api_keys WHERE user_id = ? ORDER BY created_at DESC').all(userId) as any[];
+    const rows = await dbAll('SELECT * FROM user_api_keys WHERE user_id = ? ORDER BY created_at DESC', userId) as any[];
     return rows.map(r => this._mapUserApiKey(r));
   }
 
   async getUserApiKey(id: string): Promise<UserApiKey | undefined> {
-    const row = sqlite.prepare('SELECT * FROM user_api_keys WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM user_api_keys WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapUserApiKey(row);
   }
@@ -2509,12 +2506,12 @@ export class DatabaseStorage implements IStorage {
     const id = `uak_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     // If setting as default, unset other defaults
     if (data.isDefault) {
-      sqlite.prepare('UPDATE user_api_keys SET is_default = 0 WHERE user_id = ?').run(data.userId);
+      await dbRun('UPDATE user_api_keys SET is_default = 0 WHERE user_id = ?', data.userId);
     }
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO user_api_keys (id, user_id, provider, api_key, endpoint_url, default_model, is_default, is_active)
       VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-    `).run(id, data.userId, data.provider, data.apiKey ?? null, data.endpointUrl ?? null, data.defaultModel ?? null, data.isDefault ?? 0);
+    `, id, data.userId, data.provider, data.apiKey ?? null, data.endpointUrl ?? null, data.defaultModel ?? null, data.isDefault ?? 0);
     return this.getUserApiKey(id) as Promise<UserApiKey>;
   }
 
@@ -2523,7 +2520,7 @@ export class DatabaseStorage implements IStorage {
     if (!existing) return undefined;
     // If setting as default, unset other defaults
     if (data.isDefault) {
-      sqlite.prepare('UPDATE user_api_keys SET is_default = 0 WHERE user_id = ?').run(existing.userId);
+      await dbRun('UPDATE user_api_keys SET is_default = 0 WHERE user_id = ?', existing.userId);
     }
     const fields: string[] = [];
     const values: any[] = [];
@@ -2535,16 +2532,16 @@ export class DatabaseStorage implements IStorage {
     if (data.isActive !== undefined) { fields.push('is_active = ?'); values.push(data.isActive); }
     if (fields.length === 0) return existing;
     values.push(id);
-    sqlite.prepare(`UPDATE user_api_keys SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE user_api_keys SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getUserApiKey(id);
   }
 
   async deleteUserApiKey(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM user_api_keys WHERE id = ?').run(id);
+    await dbRun('DELETE FROM user_api_keys WHERE id = ?', id);
   }
 
   async getDefaultApiKey(userId: number): Promise<UserApiKey | undefined> {
-    const row = sqlite.prepare('SELECT * FROM user_api_keys WHERE user_id = ? AND is_default = 1 AND is_active = 1 LIMIT 1').get(userId) as any;
+    const row = await dbGet('SELECT * FROM user_api_keys WHERE user_id = ? AND is_default = 1 AND is_active = 1 LIMIT 1', userId) as any;
     if (!row) return undefined;
     return this._mapUserApiKey(row);
   }
@@ -2575,12 +2572,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAccountStacks(userId: number): Promise<AccountStack[]> {
-    const rows = sqlite.prepare('SELECT * FROM account_stacks WHERE user_id = ? ORDER BY created_at DESC').all(userId) as any[];
+    const rows = await dbAll('SELECT * FROM account_stacks WHERE user_id = ? ORDER BY created_at DESC', userId) as any[];
     return rows.map(r => this._mapAccountStack(r));
   }
 
   async getAccountStack(id: string): Promise<AccountStack | undefined> {
-    const row = sqlite.prepare('SELECT * FROM account_stacks WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM account_stacks WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapAccountStack(row);
   }
@@ -2588,36 +2585,36 @@ export class DatabaseStorage implements IStorage {
   async createAccountStack(data: { userId: number; name: string; leaderConnectionId: string; copyMode?: string; sizeMultiplier?: number }): Promise<AccountStack> {
     const { v4: uuidv4 } = await import('uuid');
     const id = uuidv4();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO account_stacks (id, user_id, name, leader_connection_id, copy_mode, size_multiplier)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, data.userId, data.name, data.leaderConnectionId, data.copyMode ?? 'mirror', data.sizeMultiplier ?? 1.0);
+    `, id, data.userId, data.name, data.leaderConnectionId, data.copyMode ?? 'mirror', data.sizeMultiplier ?? 1.0);
     return this.getAccountStack(id) as Promise<AccountStack>;
   }
 
   async deleteAccountStack(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM account_stack_followers WHERE stack_id = ?').run(id);
-    sqlite.prepare('DELETE FROM account_stacks WHERE id = ?').run(id);
+    await dbRun('DELETE FROM account_stack_followers WHERE stack_id = ?', id);
+    await dbRun('DELETE FROM account_stacks WHERE id = ?', id);
   }
 
   async getStackFollowers(stackId: string): Promise<AccountStackFollower[]> {
-    const rows = sqlite.prepare('SELECT * FROM account_stack_followers WHERE stack_id = ? ORDER BY created_at DESC').all(stackId) as any[];
+    const rows = await dbAll('SELECT * FROM account_stack_followers WHERE stack_id = ? ORDER BY created_at DESC', stackId) as any[];
     return rows.map(r => this._mapStackFollower(r));
   }
 
   async addStackFollower(data: { stackId: string; connectionId: string; sizeMultiplier?: number }): Promise<AccountStackFollower> {
     const { v4: uuidv4 } = await import('uuid');
     const id = uuidv4();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO account_stack_followers (id, stack_id, connection_id, size_multiplier)
       VALUES (?, ?, ?, ?)
-    `).run(id, data.stackId, data.connectionId, data.sizeMultiplier ?? 1.0);
-    const row = sqlite.prepare('SELECT * FROM account_stack_followers WHERE id = ?').get(id) as any;
+    `, id, data.stackId, data.connectionId, data.sizeMultiplier ?? 1.0);
+    const row = await dbGet('SELECT * FROM account_stack_followers WHERE id = ?', id) as any;
     return this._mapStackFollower(row);
   }
 
   async removeStackFollower(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM account_stack_followers WHERE id = ?').run(id);
+    await dbRun('DELETE FROM account_stack_followers WHERE id = ?', id);
   }
 
   // ── Trading Bots ──────────────────────────────────────────────────────────
@@ -2644,12 +2641,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTradingBots(userId: number): Promise<TradingBot[]> {
-    const rows = sqlite.prepare('SELECT * FROM trading_bots WHERE user_id = ? ORDER BY created_at DESC').all(userId) as any[];
+    const rows = await dbAll('SELECT * FROM trading_bots WHERE user_id = ? ORDER BY created_at DESC', userId) as any[];
     return rows.map(r => this._mapTradingBot(r));
   }
 
   async getTradingBot(id: string): Promise<TradingBot | undefined> {
-    const row = sqlite.prepare('SELECT * FROM trading_bots WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM trading_bots WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapTradingBot(row);
   }
@@ -2657,10 +2654,10 @@ export class DatabaseStorage implements IStorage {
   async createTradingBot(data: { userId: number; name: string; description?: string; strategyType?: string; model?: string; systemPrompt?: string; indicators?: string; entryRules?: string; exitRules?: string; riskRules?: string; timeframe?: string; symbols?: string; status?: string }): Promise<TradingBot> {
     const { v4: uuidv4 } = await import('uuid');
     const id = uuidv4();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO trading_bots (id, user_id, name, description, strategy_type, model, system_prompt, indicators, entry_rules, exit_rules, risk_rules, timeframe, symbols, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `,
       id, data.userId, data.name, data.description ?? null,
       data.strategyType ?? 'custom', data.model ?? 'claude-sonnet',
       data.systemPrompt ?? null, data.indicators ?? null,
@@ -2685,12 +2682,12 @@ export class DatabaseStorage implements IStorage {
       if (key in data) { fields.push(`${col} = ?`); values.push((data as any)[key]); }
     }
     values.push(id);
-    sqlite.prepare(`UPDATE trading_bots SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE trading_bots SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getTradingBot(id);
   }
 
   async deleteTradingBot(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM trading_bots WHERE id = ?').run(id);
+    await dbRun('DELETE FROM trading_bots WHERE id = ?', id);
   }
 
   // ── Bot Deployments ───────────────────────────────────────────────────────
@@ -2712,12 +2709,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBotDeployments(userId: number): Promise<BotDeployment[]> {
-    const rows = sqlite.prepare('SELECT * FROM bot_deployments WHERE user_id = ? ORDER BY created_at DESC').all(userId) as any[];
+    const rows = await dbAll('SELECT * FROM bot_deployments WHERE user_id = ? ORDER BY created_at DESC', userId) as any[];
     return rows.map(r => this._mapBotDeployment(r));
   }
 
   async getBotDeployment(id: string): Promise<BotDeployment | undefined> {
-    const row = sqlite.prepare('SELECT * FROM bot_deployments WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM bot_deployments WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapBotDeployment(row);
   }
@@ -2725,10 +2722,10 @@ export class DatabaseStorage implements IStorage {
   async createBotDeployment(data: { userId: number; botId: string; connectionId: string; maxPositionSize?: number; maxDailyLoss?: number; maxTradesPerDay?: number }): Promise<BotDeployment> {
     const { v4: uuidv4 } = await import('uuid');
     const id = uuidv4();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO bot_deployments (id, user_id, bot_id, connection_id, max_position_size, max_daily_loss, max_trades_per_day)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, data.userId, data.botId, data.connectionId, data.maxPositionSize ?? 1, data.maxDailyLoss ?? 500, data.maxTradesPerDay ?? 10);
+    `, id, data.userId, data.botId, data.connectionId, data.maxPositionSize ?? 1, data.maxDailyLoss ?? 500, data.maxTradesPerDay ?? 10);
     return this.getBotDeployment(id) as Promise<BotDeployment>;
   }
 
@@ -2745,12 +2742,12 @@ export class DatabaseStorage implements IStorage {
     }
     if (fields.length === 0) return this.getBotDeployment(id);
     values.push(id);
-    sqlite.prepare(`UPDATE bot_deployments SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE bot_deployments SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getBotDeployment(id);
   }
 
   async deleteBotDeployment(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM bot_deployments WHERE id = ?').run(id);
+    await dbRun('DELETE FROM bot_deployments WHERE id = ?', id);
   }
 
   // ── Fiverr Gigs ───────────────────────────────────────────────────────────
@@ -2772,12 +2769,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getFiverrGigs(userId: number): Promise<FiverrGig[]> {
-    const rows = sqlite.prepare('SELECT * FROM fiverr_gigs WHERE user_id = ? ORDER BY created_at DESC').all(userId) as any[];
+    const rows = await dbAll('SELECT * FROM fiverr_gigs WHERE user_id = ? ORDER BY created_at DESC', userId) as any[];
     return rows.map(r => this._mapFiverrGig(r));
   }
 
   async getFiverrGig(id: string): Promise<FiverrGig | undefined> {
-    const row = sqlite.prepare('SELECT * FROM fiverr_gigs WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM fiverr_gigs WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapFiverrGig(row);
   }
@@ -2785,10 +2782,10 @@ export class DatabaseStorage implements IStorage {
   async createFiverrGig(data: { userId: number; title: string; category?: string; description?: string; priceTiers?: string; autoResponse?: string; aiModel?: string }): Promise<FiverrGig> {
     const { v4: uuidv4 } = await import('uuid');
     const id = uuidv4();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO fiverr_gigs (id, user_id, title, category, description, price_tiers, auto_response, ai_model)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, data.userId, data.title, data.category ?? null, data.description ?? null, data.priceTiers ?? null, data.autoResponse ?? null, data.aiModel ?? 'claude-sonnet');
+    `, id, data.userId, data.title, data.category ?? null, data.description ?? null, data.priceTiers ?? null, data.autoResponse ?? null, data.aiModel ?? 'claude-sonnet');
     return this.getFiverrGig(id) as Promise<FiverrGig>;
   }
 
@@ -2805,12 +2802,12 @@ export class DatabaseStorage implements IStorage {
     }
     if (fields.length === 0) return this.getFiverrGig(id);
     values.push(id);
-    sqlite.prepare(`UPDATE fiverr_gigs SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE fiverr_gigs SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getFiverrGig(id);
   }
 
   async deleteFiverrGig(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM fiverr_gigs WHERE id = ?').run(id);
+    await dbRun('DELETE FROM fiverr_gigs WHERE id = ?', id);
   }
 
   // ── Fiverr Orders ─────────────────────────────────────────────────────────
@@ -2830,12 +2827,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getFiverrOrders(userId: number): Promise<FiverrOrder[]> {
-    const rows = sqlite.prepare('SELECT * FROM fiverr_orders WHERE user_id = ? ORDER BY created_at DESC').all(userId) as any[];
+    const rows = await dbAll('SELECT * FROM fiverr_orders WHERE user_id = ? ORDER BY created_at DESC', userId) as any[];
     return rows.map(r => this._mapFiverrOrder(r));
   }
 
   async getFiverrOrder(id: string): Promise<FiverrOrder | undefined> {
-    const row = sqlite.prepare('SELECT * FROM fiverr_orders WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM fiverr_orders WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapFiverrOrder(row);
   }
@@ -2843,10 +2840,10 @@ export class DatabaseStorage implements IStorage {
   async createFiverrOrder(data: { gigId: string; userId: number; buyerName?: string; requirements?: string; amount?: number }): Promise<FiverrOrder> {
     const { v4: uuidv4 } = await import('uuid');
     const id = uuidv4();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO fiverr_orders (id, gig_id, user_id, buyer_name, requirements, amount)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, data.gigId, data.userId, data.buyerName ?? null, data.requirements ?? null, data.amount ?? 0);
+    `, id, data.gigId, data.userId, data.buyerName ?? null, data.requirements ?? null, data.amount ?? 0);
     return this.getFiverrOrder(id) as Promise<FiverrOrder>;
   }
 
@@ -2862,7 +2859,7 @@ export class DatabaseStorage implements IStorage {
     }
     if (fields.length === 0) return this.getFiverrOrder(id);
     values.push(id);
-    sqlite.prepare(`UPDATE fiverr_orders SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE fiverr_orders SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getFiverrOrder(id);
   }
 
@@ -2902,12 +2899,12 @@ export class DatabaseStorage implements IStorage {
       params.push(status);
     }
     query += ' ORDER BY created_at DESC';
-    const rows = sqlite.prepare(query).all(...params) as any[];
+    const rows = await dbAll(query, ...params) as any[];
     return rows.map(r => this._mapFiverrOrderV2(r));
   }
 
   async getFiverrOrderV2(id: string): Promise<any | undefined> {
-    const row = sqlite.prepare('SELECT * FROM fiverr_orders WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM fiverr_orders WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapFiverrOrderV2(row);
   }
@@ -2920,10 +2917,10 @@ export class DatabaseStorage implements IStorage {
     const { v4: uuidv4 } = await import('uuid');
     const id = uuidv4();
     const now = Date.now();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO fiverr_orders (id, gig_id, user_id, buyer_name, requirements, status, amount, order_id, gig_title, client_email, specs, revenue, template_id, auto_generate, due_at, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
-    `).run(
+    `,
       id, 'manual', data.userId, data.buyerName ?? null, data.specs ?? null,
       data.status ?? 'intake', 0, data.orderId ?? null, data.gigTitle ?? null,
       data.buyerEmail ?? null, data.specs ?? null, data.revenue ?? null,
@@ -2948,12 +2945,12 @@ export class DatabaseStorage implements IStorage {
       if (key in data) { fields.push(`${col} = ?`); values.push(data[key]); }
     }
     values.push(id);
-    sqlite.prepare(`UPDATE fiverr_orders SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE fiverr_orders SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getFiverrOrderV2(id);
   }
 
   async deleteFiverrOrderV2(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM fiverr_orders WHERE id = ?').run(id);
+    await dbRun('DELETE FROM fiverr_orders WHERE id = ?', id);
   }
 
   async getDeliveredOrdersForRevenue(userId: number, sinceTs?: number): Promise<any[]> {
@@ -2964,7 +2961,7 @@ export class DatabaseStorage implements IStorage {
       params.push(sinceTs);
     }
     query += ' ORDER BY delivered_at DESC';
-    const rows = sqlite.prepare(query).all(...params) as any[];
+    const rows = await dbAll(query, ...params) as any[];
     return rows.map(r => this._mapFiverrOrderV2(r));
   }
 
@@ -3058,12 +3055,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGeneratedApps(userId: number): Promise<GeneratedApp[]> {
-    const rows = sqlite.prepare('SELECT * FROM generated_apps WHERE user_id = ? ORDER BY created_at DESC').all(userId) as any[];
+    const rows = await dbAll('SELECT * FROM generated_apps WHERE user_id = ? ORDER BY created_at DESC', userId) as any[];
     return rows.map(r => this._mapGeneratedApp(r));
   }
 
   async getGeneratedApp(id: string): Promise<GeneratedApp | undefined> {
-    const row = sqlite.prepare('SELECT * FROM generated_apps WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM generated_apps WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapGeneratedApp(row);
   }
@@ -3071,10 +3068,10 @@ export class DatabaseStorage implements IStorage {
   async createGeneratedApp(data: { userId: number; name: string; description?: string; appType?: string; framework?: string }): Promise<GeneratedApp> {
     const { v4: uuidv4 } = await import('uuid');
     const id = uuidv4();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO generated_apps (id, user_id, name, description, app_type, framework)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, data.userId, data.name, data.description ?? null, data.appType ?? 'web', data.framework ?? 'react');
+    `, id, data.userId, data.name, data.description ?? null, data.appType ?? 'web', data.framework ?? 'react');
     return this.getGeneratedApp(id) as Promise<GeneratedApp>;
   }
 
@@ -3091,12 +3088,12 @@ export class DatabaseStorage implements IStorage {
     }
     if (fields.length === 0) return this.getGeneratedApp(id);
     values.push(id);
-    sqlite.prepare(`UPDATE generated_apps SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE generated_apps SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getGeneratedApp(id);
   }
 
   async deleteGeneratedApp(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM generated_apps WHERE id = ?').run(id);
+    await dbRun('DELETE FROM generated_apps WHERE id = ?', id);
   }
 
   // ── White Label Configs ───────────────────────────────────────────────────
@@ -3117,12 +3114,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getWhiteLabelConfigs(userId: number): Promise<WhiteLabelConfig[]> {
-    const rows = sqlite.prepare('SELECT * FROM white_label_configs WHERE user_id = ? ORDER BY created_at DESC').all(userId) as any[];
+    const rows = await dbAll('SELECT * FROM white_label_configs WHERE user_id = ? ORDER BY created_at DESC', userId) as any[];
     return rows.map(r => this._mapWhiteLabelConfig(r));
   }
 
   async getWhiteLabelConfig(id: string): Promise<WhiteLabelConfig | undefined> {
-    const row = sqlite.prepare('SELECT * FROM white_label_configs WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM white_label_configs WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapWhiteLabelConfig(row);
   }
@@ -3130,10 +3127,10 @@ export class DatabaseStorage implements IStorage {
   async createWhiteLabelConfig(data: { userId: number; brandName: string; logoUrl?: string; primaryColor?: string; secondaryColor?: string; customDomain?: string; features?: string; maxUsers?: number }): Promise<WhiteLabelConfig> {
     const { v4: uuidv4 } = await import('uuid');
     const id = uuidv4();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO white_label_configs (id, user_id, brand_name, logo_url, primary_color, secondary_color, custom_domain, features, max_users)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, data.userId, data.brandName, data.logoUrl ?? null, data.primaryColor ?? '#6366f1', data.secondaryColor ?? '#8b5cf6', data.customDomain ?? null, data.features ?? null, data.maxUsers ?? 10);
+    `, id, data.userId, data.brandName, data.logoUrl ?? null, data.primaryColor ?? '#6366f1', data.secondaryColor ?? '#8b5cf6', data.customDomain ?? null, data.features ?? null, data.maxUsers ?? 10);
     return this.getWhiteLabelConfig(id) as Promise<WhiteLabelConfig>;
   }
 
@@ -3150,12 +3147,12 @@ export class DatabaseStorage implements IStorage {
     }
     if (fields.length === 0) return this.getWhiteLabelConfig(id);
     values.push(id);
-    sqlite.prepare(`UPDATE white_label_configs SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE white_label_configs SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getWhiteLabelConfig(id);
   }
 
   async deleteWhiteLabelConfig(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM white_label_configs WHERE id = ?').run(id);
+    await dbRun('DELETE FROM white_label_configs WHERE id = ?', id);
   }
 
   // ── Prop Accounts ─────────────────────────────────────────────────────────
@@ -3179,12 +3176,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPropAccounts(userId: number): Promise<PropAccount[]> {
-    const rows = sqlite.prepare('SELECT * FROM prop_accounts WHERE user_id = ? ORDER BY created_at DESC').all(userId) as any[];
+    const rows = await dbAll('SELECT * FROM prop_accounts WHERE user_id = ? ORDER BY created_at DESC', userId) as any[];
     return rows.map(r => this._mapPropAccount(r));
   }
 
   async getPropAccount(id: string): Promise<PropAccount | undefined> {
-    const row = sqlite.prepare('SELECT * FROM prop_accounts WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM prop_accounts WHERE id = ?', id) as any;
     if (!row) return undefined;
     return this._mapPropAccount(row);
   }
@@ -3192,10 +3189,10 @@ export class DatabaseStorage implements IStorage {
   async createPropAccount(data: { userId: number; firm: string; accountNumber?: string; accountSize?: number; phase?: string; profitTarget?: number; maxDrawdown?: number; dailyDrawdown?: number; currentBalance?: number; credentials?: string }): Promise<PropAccount> {
     const { v4: uuidv4 } = await import('uuid');
     const id = uuidv4();
-    sqlite.prepare(`
+    await dbRun(`
       INSERT INTO prop_accounts (id, user_id, firm, account_number, account_size, phase, profit_target, max_drawdown, daily_drawdown, current_balance, credentials)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `,
       id, data.userId, data.firm, data.accountNumber ?? null,
       data.accountSize ?? null, data.phase ?? 'evaluation',
       data.profitTarget ?? null, data.maxDrawdown ?? null, data.dailyDrawdown ?? null,
@@ -3218,67 +3215,67 @@ export class DatabaseStorage implements IStorage {
     }
     if (fields.length === 0) return this.getPropAccount(id);
     values.push(id);
-    sqlite.prepare(`UPDATE prop_accounts SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE prop_accounts SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getPropAccount(id);
   }
 
   async deletePropAccount(id: string): Promise<void> {
-    sqlite.prepare('DELETE FROM prop_accounts WHERE id = ?').run(id);
+    await dbRun('DELETE FROM prop_accounts WHERE id = ?', id);
   }
 
   // ── Stack Execution Log ──────────────────────────────────────────────────
-  addStackExecutionLog(entry: { id: string; stackId: string; connectionId: string; symbol: string; side: string; quantity: number; price: number; status: string; executedAt: string }): void {
-    sqlite.prepare(`
+  async addStackExecutionLog(entry: { id: string; stackId: string; connectionId: string; symbol: string; side: string; quantity: number; price: number; status: string; executedAt: string }): Promise<void> {
+    await dbRun(`
       INSERT INTO stack_execution_log (id, stack_id, connection_id, symbol, side, quantity, price, status, executed_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(entry.id, entry.stackId, entry.connectionId, entry.symbol, entry.side, entry.quantity, entry.price, entry.status, entry.executedAt);
+    `, entry.id, entry.stackId, entry.connectionId, entry.symbol, entry.side, entry.quantity, entry.price, entry.status, entry.executedAt);
   }
 
-  getStackExecutionLogs(stackId: string): any[] {
-    return sqlite.prepare('SELECT * FROM stack_execution_log WHERE stack_id = ? ORDER BY executed_at DESC LIMIT 50').all(stackId) as any[];
+  async getStackExecutionLogs(stackId: string): Promise<any[]> {
+    return await dbAll('SELECT * FROM stack_execution_log WHERE stack_id = ? ORDER BY executed_at DESC LIMIT 50', stackId) as any[];
   }
 
   // ── Products ────────────────────────────────────────────────────────────────
   async getProduct(id: string): Promise<any> {
-    const row = sqlite.prepare('SELECT * FROM products WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM products WHERE id = ?', id) as any;
     if (!row) return undefined;
     return { id: row.id, name: row.name, description: row.description, priceCents: row.price_cents, category: row.category, features: row.features, isActive: row.is_active, createdAt: row.created_at };
   }
 
   async getProducts(): Promise<any[]> {
-    const rows = sqlite.prepare('SELECT * FROM products WHERE is_active = 1 ORDER BY created_at DESC').all() as any[];
+    const rows = await dbAll('SELECT * FROM products WHERE is_active = 1 ORDER BY created_at DESC') as any[];
     return rows.map(r => ({ id: r.id, name: r.name, description: r.description, priceCents: r.price_cents, category: r.category, features: r.features, isActive: r.is_active, createdAt: r.created_at }));
   }
 
   async getUserProduct(userId: number, productId: string): Promise<any> {
-    const row = sqlite.prepare('SELECT * FROM user_products WHERE user_id = ? AND product_id = ? AND status = ?').get(userId, productId, 'active') as any;
+    const row = await dbGet('SELECT * FROM user_products WHERE user_id = ? AND product_id = ? AND status = ?', userId, productId, 'active') as any;
     if (!row) return undefined;
     return { id: row.id, userId: row.user_id, productId: row.product_id, stripePaymentId: row.stripe_payment_id, priceCents: row.price_cents, status: row.status, purchasedAt: row.purchased_at, expiresAt: row.expires_at };
   }
 
   async getUserProducts(userId: number): Promise<any[]> {
-    const rows = sqlite.prepare('SELECT * FROM user_products WHERE user_id = ? ORDER BY purchased_at DESC').all(userId) as any[];
+    const rows = await dbAll('SELECT * FROM user_products WHERE user_id = ? ORDER BY purchased_at DESC', userId) as any[];
     return rows.map(r => ({ id: r.id, userId: r.user_id, productId: r.product_id, stripePaymentId: r.stripe_payment_id, priceCents: r.price_cents, status: r.status, purchasedAt: r.purchased_at, expiresAt: r.expires_at }));
   }
 
   async createUserProduct(data: { userId: number; productId: string; stripePaymentId?: string; priceCents: number }): Promise<any> {
     const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    sqlite.prepare('INSERT INTO user_products (id, user_id, product_id, stripe_payment_id, price_cents) VALUES (?, ?, ?, ?, ?)').run(id, data.userId, data.productId, data.stripePaymentId ?? null, data.priceCents);
+    await dbRun('INSERT INTO user_products (id, user_id, product_id, stripe_payment_id, price_cents) VALUES (?, ?, ?, ?, ?)', id, data.userId, data.productId, data.stripePaymentId ?? null, data.priceCents);
     return this.getUserProduct(data.userId, data.productId);
   }
 
   // ── Workflow Presets ────────────────────────────────────────────────────────
   async getWorkflowPresets(productId?: string): Promise<any[]> {
     if (productId) {
-      const rows = sqlite.prepare('SELECT * FROM workflow_presets WHERE product_id = ? ORDER BY created_at').all(productId) as any[];
+      const rows = await dbAll('SELECT * FROM workflow_presets WHERE product_id = ? ORDER BY created_at', productId) as any[];
       return rows.map(r => ({ id: r.id, productId: r.product_id, name: r.name, description: r.description, category: r.category, templateData: r.template_data, icon: r.icon, createdAt: r.created_at }));
     }
-    const rows = sqlite.prepare('SELECT * FROM workflow_presets ORDER BY created_at').all() as any[];
+    const rows = await dbAll('SELECT * FROM workflow_presets ORDER BY created_at') as any[];
     return rows.map(r => ({ id: r.id, productId: r.product_id, name: r.name, description: r.description, category: r.category, templateData: r.template_data, icon: r.icon, createdAt: r.created_at }));
   }
 
   async getWorkflowPreset(id: string): Promise<any> {
-    const row = sqlite.prepare('SELECT * FROM workflow_presets WHERE id = ?').get(id) as any;
+    const row = await dbGet('SELECT * FROM workflow_presets WHERE id = ?', id) as any;
     if (!row) return undefined;
     return { id: row.id, productId: row.product_id, name: row.name, description: row.description, category: row.category, templateData: row.template_data, icon: row.icon, createdAt: row.created_at };
   }
@@ -3335,7 +3332,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRecentJobsByUser(userId: number, limit: number = 30): Promise<AgentJob[]> {
-    return sqlite.prepare("SELECT * FROM agent_jobs WHERE user_id = ? ORDER BY created_at DESC LIMIT ?").all(userId, limit) as AgentJob[];
+    return await dbAll("SELECT * FROM agent_jobs WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", userId, limit) as AgentJob[];
   }
 
   async updateAgentJob(id: string, data: Partial<AgentJob>): Promise<AgentJob | undefined> {
@@ -3398,27 +3395,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ── Phase 3 Dashboard: Layout Persistence ────────────────────────────────
-  getDashboardLayout(userId: number): any | null {
-    const row = sqlite.prepare('SELECT * FROM user_dashboard_layouts WHERE user_id = ?').get(userId) as any;
+  async getDashboardLayout(userId: number): Promise<any | null> {
+    const row = await dbGet('SELECT * FROM user_dashboard_layouts WHERE user_id = ?', userId) as any;
     if (!row) return null;
     return { id: row.id, userId: row.user_id, layout: JSON.parse(row.layout || '[]'), updatedAt: row.updated_at };
   }
 
-  upsertDashboardLayout(userId: number, layout: any[]): any {
-    const existing = sqlite.prepare('SELECT id FROM user_dashboard_layouts WHERE user_id = ?').get(userId) as any;
+  async upsertDashboardLayout(userId: number, layout: any[]): Promise<any> {
+    const existing = await dbGet('SELECT id FROM user_dashboard_layouts WHERE user_id = ?', userId) as any;
     const now = Date.now();
     if (existing) {
-      sqlite.prepare('UPDATE user_dashboard_layouts SET layout = ?, updated_at = ? WHERE user_id = ?').run(JSON.stringify(layout), now, userId);
+      await dbRun('UPDATE user_dashboard_layouts SET layout = ?, updated_at = ? WHERE user_id = ?', JSON.stringify(layout), now, userId);
       return { id: existing.id, userId, layout, updatedAt: now };
     }
     const id = crypto.randomUUID();
-    sqlite.prepare('INSERT INTO user_dashboard_layouts (id, user_id, layout, updated_at) VALUES (?, ?, ?, ?)').run(id, userId, JSON.stringify(layout), now);
+    await dbRun('INSERT INTO user_dashboard_layouts (id, user_id, layout, updated_at) VALUES (?, ?, ?, ?)', id, userId, JSON.stringify(layout), now);
     return { id, userId, layout, updatedAt: now };
   }
 
   // ── Phase 3 Dashboard: Activity Events ────────────────────────────────────
-  getActivityEvents(userId: number, limit: number = 20): any[] {
-    const rows = sqlite.prepare('SELECT * FROM activity_events WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').all(userId, limit) as any[];
+  async getActivityEvents(userId: number, limit: number = 20): Promise<any[]> {
+    const rows = await dbAll('SELECT * FROM activity_events WHERE user_id = ? ORDER BY created_at DESC LIMIT ?', userId, limit) as any[];
     return rows.map(r => ({
       id: r.id,
       userId: r.user_id,
@@ -3430,8 +3427,8 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  insertActivityEvent(event: { id: string; userId: number; type: string; title: string; description?: string; metadata?: any }): void {
-    sqlite.prepare('INSERT INTO activity_events (id, user_id, type, title, description, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+  async insertActivityEvent(event: { id: string; userId: number; type: string; title: string; description?: string; metadata?: any }): Promise<void> {
+    await dbRun('INSERT INTO activity_events (id, user_id, type, title, description, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
       event.id, event.userId, event.type, event.title,
       event.description || null,
       event.metadata ? JSON.stringify(event.metadata) : null,
@@ -3440,13 +3437,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ── Phase 3 Dashboard: Stats Queries ──────────────────────────────────────
-  getDashboardStats(userId: number): {
+  async getDashboardStats(userId: number): Promise<{
     activeAgents: number;
     tokensUsed7d: number;
     workflowsRun30d: number;
     revenueThisMonth: number;
     deltas: { activeAgentsDelta: number; tokensDelta: number; workflowsDelta: number; revenueDelta: number };
-  } {
+  }> {
     const now = Date.now();
     const sevenDaysAgo = now - 7 * 86400000;
     const fourteenDaysAgo = now - 14 * 86400000;
@@ -3462,22 +3459,22 @@ export class DatabaseStorage implements IStorage {
 
     // Active agents: count currently running OR recently completed (last 30s) so fast jobs are visible
     const recentWindow = Date.now() - 30000;
-    const activeAgents = (sqlite.prepare("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND (status = 'running' OR (status = 'complete' AND completed_at > ?))").get(userId, recentWindow) as any)?.c || 0;
-    const prevActiveAgents = (sqlite.prepare("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND status = 'complete' AND completed_at > ? AND completed_at <= ?").get(userId, fourteenDaysAgo, sevenDaysAgo) as any)?.c || 0;
+    const activeAgents = ((await dbGet("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND (status = 'running' OR (status = 'complete' AND completed_at > ?))", userId, recentWindow)) as any)?.c || 0;
+    const prevActiveAgents = ((await dbGet("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND status = 'complete' AND completed_at > ? AND completed_at <= ?", userId, fourteenDaysAgo, sevenDaysAgo)) as any)?.c || 0;
 
     // Tokens used (7d) - from token_usage table (authoritative record for all AI calls)
     const sevenDaysAgoISO = new Date(sevenDaysAgo).toISOString();
     const fourteenDaysAgoISO = new Date(fourteenDaysAgo).toISOString();
-    const tokensUsed7d = (sqlite.prepare("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ?").get(userId, sevenDaysAgoISO) as any)?.t || 0;
-    const tokensPrev7d = (sqlite.prepare("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, fourteenDaysAgoISO, sevenDaysAgoISO) as any)?.t || 0;
+    const tokensUsed7d = ((await dbGet("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ?", userId, sevenDaysAgoISO)) as any)?.t || 0;
+    const tokensPrev7d = ((await dbGet("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ? AND created_at <= ?", userId, fourteenDaysAgoISO, sevenDaysAgoISO)) as any)?.t || 0;
 
     // Tasks run (30d) - count agent_jobs (department tasks)
-    const workflowsRun30d = (sqlite.prepare("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND created_at > ?").get(userId, thirtyDaysAgo) as any)?.c || 0;
-    const workflowsPrev30d = (sqlite.prepare("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, sixtyDaysAgo, thirtyDaysAgo) as any)?.c || 0;
+    const workflowsRun30d = ((await dbGet("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND created_at > ?", userId, thirtyDaysAgo)) as any)?.c || 0;
+    const workflowsPrev30d = ((await dbGet("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND created_at > ? AND created_at <= ?", userId, sixtyDaysAgo, thirtyDaysAgo)) as any)?.c || 0;
 
     // Boss conversations this month
-    const revenueThisMonth = (sqlite.prepare("SELECT COUNT(*) as r FROM conversations WHERE user_id = ? AND created_at >= ?").get(userId, startOfMonthTs) as any)?.r || 0;
-    const revenuePrevMonth = (sqlite.prepare("SELECT COUNT(*) as r FROM conversations WHERE user_id = ? AND created_at >= ? AND created_at < ?").get(userId, startOfPrevMonthTs, startOfMonthTs) as any)?.r || 0;
+    const revenueThisMonth = ((await dbGet("SELECT COUNT(*) as r FROM conversations WHERE user_id = ? AND created_at >= ?", userId, startOfMonthTs)) as any)?.r || 0;
+    const revenuePrevMonth = ((await dbGet("SELECT COUNT(*) as r FROM conversations WHERE user_id = ? AND created_at >= ? AND created_at < ?", userId, startOfPrevMonthTs, startOfMonthTs)) as any)?.r || 0;
 
     // Compute deltas as percentage
     const computeDelta = (curr: number, prev: number) => {
@@ -3501,7 +3498,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ── Phase 3 Dashboard: Token Usage Chart Data ─────────────────────────────
-  getTokenUsageByDay(userId: number, days: number = 7): { date: string; tokens: number }[] {
+  async getTokenUsageByDay(userId: number, days: number = 7): Promise<{ date: string; tokens: number }[]> {
     const now = Date.now();
     const result: { date: string; tokens: number }[] = [];
     for (let i = days - 1; i >= 0; i--) {
@@ -3510,7 +3507,7 @@ export class DatabaseStorage implements IStorage {
       // Query token_usage table (the authoritative record for all AI calls)
       const dateStart = new Date(dayStart).toISOString();
       const dateEnd = new Date(dayEnd).toISOString();
-      const row = sqlite.prepare("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, dateStart, dateEnd) as any;
+      const row = await dbGet("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ? AND created_at <= ?", userId, dateStart, dateEnd) as any;
       const date = new Date(dayEnd).toISOString().slice(0, 10);
       result.push({ date, tokens: row?.t || 0 });
     }
@@ -3518,7 +3515,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ── Phase 3 Dashboard: Workflow Run Chart Data ────────────────────────────
-  getWorkflowRunsByDay(userId: number, days: number = 30): { date: string; runs: number }[] {
+  async getWorkflowRunsByDay(userId: number, days: number = 30): Promise<{ date: string; runs: number }[]> {
     const now = Date.now();
     const result: { date: string; runs: number }[] = [];
     for (let i = days - 1; i >= 0; i--) {
@@ -3527,22 +3524,22 @@ export class DatabaseStorage implements IStorage {
       const dateStr = new Date(dayEnd).toISOString().slice(0, 10);
       const fromStr = new Date(dayStart).toISOString();
       const toStr = new Date(dayEnd).toISOString();
-      const wfRuns = (sqlite.prepare("SELECT COUNT(*) as c FROM workflow_runs WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, fromStr, toStr) as any)?.c || 0;
-      const wfExec = (sqlite.prepare("SELECT COUNT(*) as c FROM workflow_executions WHERE user_id = ? AND created_at > ? AND created_at <= ?").get(userId, dayStart, dayEnd) as any)?.c || 0;
+      const wfRuns = ((await dbGet("SELECT COUNT(*) as c FROM workflow_runs WHERE user_id = ? AND created_at > ? AND created_at <= ?", userId, fromStr, toStr)) as any)?.c || 0;
+      const wfExec = ((await dbGet("SELECT COUNT(*) as c FROM workflow_executions WHERE user_id = ? AND created_at > ? AND created_at <= ?", userId, dayStart, dayEnd)) as any)?.c || 0;
       result.push({ date: dateStr, runs: wfRuns + wfExec });
     }
     return result;
   }
 
   // ── Phase 3 Dashboard: Model Usage Breakdown ──────────────────────────────
-  getModelUsageBreakdown(userId: number): { model: string; tokens: number }[] {
-    const rows = sqlite.prepare("SELECT COALESCE(model, 'unknown') as model, SUM(COALESCE(total_tokens, 0)) as tokens FROM token_usage WHERE user_id = ? GROUP BY model ORDER BY tokens DESC").all(userId) as any[];
+  async getModelUsageBreakdown(userId: number): Promise<{ model: string; tokens: number }[]> {
+    const rows = await dbAll("SELECT COALESCE(model, 'unknown') as model, SUM(COALESCE(total_tokens, 0)) as tokens FROM token_usage WHERE user_id = ? GROUP BY model ORDER BY tokens DESC", userId) as any[];
     return rows.map(r => ({ model: r.model || 'unknown', tokens: r.tokens || 0 }));
   }
 
   // ── Department Performance Stats ──────────────────────────────────────────
-  getDepartmentStats(userId: number): Array<{ department: string; total: number; complete: number; failed: number; avgDurationMs: number; totalTokens: number }> {
-    const rows = sqlite.prepare(`
+  async getDepartmentStats(userId: number): Promise<Array<{ department: string; total: number; complete: number; failed: number; avgDurationMs: number; totalTokens: number }>> {
+    const rows = await dbAll(`
       SELECT type as department,
         COUNT(*) as total,
         SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END) as complete,
@@ -3550,7 +3547,7 @@ export class DatabaseStorage implements IStorage {
         AVG(CASE WHEN duration_ms > 0 THEN duration_ms ELSE NULL END) as avg_duration_ms,
         SUM(COALESCE(token_count, 0)) as total_tokens
       FROM agent_jobs WHERE user_id = ? GROUP BY type ORDER BY total DESC
-    `).all(userId) as any[];
+    `, userId) as any[];
     return rows.map(r => ({
       department: r.department,
       total: r.total || 0,
@@ -3609,23 +3606,24 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(webhookEvents).where(eq(webhookEvents.connectorId, connectorId)).orderBy(desc(webhookEvents.id)).limit(limit).all();
   }
   // ── Bots ───────────────────────────────────────────────────────────────────
-  getBotsByUser(userId: number): any[] {
-    return (sqlite.prepare('SELECT * FROM bots WHERE user_id = ? ORDER BY updated_at DESC').all(userId) as any[]).map(r => ({
+  async getBotsByUser(userId: number): Promise<any[]> {
+    const rows = await dbAll('SELECT * FROM bots WHERE user_id = ? ORDER BY updated_at DESC', userId) as any[];
+    return rows.map(r => ({
       ...r, memory: JSON.parse(r.memory || '{}'), triggers: JSON.parse(r.triggers || '[]'),
       tools: JSON.parse(r.tools || '[]'), rules: JSON.parse(r.rules || '[]'),
     }));
   }
 
-  getBot(id: string): any | null {
-    const r = sqlite.prepare('SELECT * FROM bots WHERE id = ?').get(id) as any;
+  async getBot(id: string): Promise<any | null> {
+    const r = await dbGet('SELECT * FROM bots WHERE id = ?', id) as any;
     if (!r) return null;
     return { ...r, memory: JSON.parse(r.memory || '{}'), triggers: JSON.parse(r.triggers || '[]'),
       tools: JSON.parse(r.tools || '[]'), rules: JSON.parse(r.rules || '[]') };
   }
 
-  createBot(data: { id: string; userId: number; name: string; description?: string; brainPrompt: string; brainModel?: string; category?: string; triggers?: any[]; tools?: any[]; rules?: any[] }): any {
+  async createBot(data: { id: string; userId: number; name: string; description?: string; brainPrompt: string; brainModel?: string; category?: string; triggers?: any[]; tools?: any[]; rules?: any[] }): Promise<any> {
     const now = Date.now();
-    sqlite.prepare('INSERT INTO bots (id, user_id, name, description, brain_prompt, brain_model, category, triggers, tools, rules, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+    await dbRun('INSERT INTO bots (id, user_id, name, description, brain_prompt, brain_model, category, triggers, tools, rules, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       data.id, data.userId, data.name, data.description || null, data.brainPrompt, data.brainModel || 'gpt-5.4',
       data.category || 'general', JSON.stringify(data.triggers || []), JSON.stringify(data.tools || []),
       JSON.stringify(data.rules || []), 'stopped', now, now
@@ -3633,7 +3631,7 @@ export class DatabaseStorage implements IStorage {
     return this.getBot(data.id);
   }
 
-  updateBot(id: string, data: any): any {
+  async updateBot(id: string, data: any): Promise<any> {
     const fields: string[] = []; const values: any[] = [];
     if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
     if (data.description !== undefined) { fields.push('description = ?'); values.push(data.description); }
@@ -3649,49 +3647,51 @@ export class DatabaseStorage implements IStorage {
     if (data.totalRuns !== undefined) { fields.push('total_runs = ?'); values.push(data.totalRuns); }
     if (data.totalTokens !== undefined) { fields.push('total_tokens = ?'); values.push(data.totalTokens); }
     fields.push('updated_at = ?'); values.push(Date.now()); values.push(id);
-    sqlite.prepare(`UPDATE bots SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE bots SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getBot(id);
   }
 
-  deleteBot(id: string): void {
-    sqlite.prepare('DELETE FROM bots WHERE id = ?').run(id);
-    sqlite.prepare('DELETE FROM bot_logs WHERE bot_id = ?').run(id);
+  async deleteBot(id: string): Promise<void> {
+    await dbRun('DELETE FROM bots WHERE id = ?', id);
+    await dbRun('DELETE FROM bot_logs WHERE bot_id = ?', id);
   }
 
-  addBotLog(botId: string, type: string, message: string, data?: any): void {
-    sqlite.prepare('INSERT INTO bot_logs (bot_id, type, message, data, created_at) VALUES (?, ?, ?, ?, ?)').run(
+  async addBotLog(botId: string, type: string, message: string, data?: any): Promise<void> {
+    await dbRun('INSERT INTO bot_logs (bot_id, type, message, data, created_at) VALUES (?, ?, ?, ?, ?)',
       botId, type, message, data ? JSON.stringify(data) : null, Date.now()
     );
   }
 
-  getBotLogs(botId: string, limit = 50): any[] {
-    return (sqlite.prepare('SELECT * FROM bot_logs WHERE bot_id = ? ORDER BY created_at DESC LIMIT ?').all(botId, limit) as any[]).map(r => ({
+  async getBotLogs(botId: string, limit = 50): Promise<any[]> {
+    const rows = await dbAll('SELECT * FROM bot_logs WHERE bot_id = ? ORDER BY created_at DESC LIMIT ?', botId, limit) as any[];
+    return rows.map(r => ({
       ...r, data: r.data ? JSON.parse(r.data) : null,
     }));
   }
 
   // ── Pipelines ──────────────────────────────────────────────────────────────
-  getPipelinesByUser(userId: number): any[] {
-    return (sqlite.prepare('SELECT * FROM pipelines WHERE user_id = ? ORDER BY updated_at DESC').all(userId) as any[]).map(r => ({
+  async getPipelinesByUser(userId: number): Promise<any[]> {
+    const rows = await dbAll('SELECT * FROM pipelines WHERE user_id = ? ORDER BY updated_at DESC', userId) as any[];
+    return rows.map(r => ({
       ...r, steps: JSON.parse(r.steps || '[]'), triggerConfig: r.trigger_config ? JSON.parse(r.trigger_config) : null,
     }));
   }
 
-  getPipeline(id: string): any | null {
-    const r = sqlite.prepare('SELECT * FROM pipelines WHERE id = ?').get(id) as any;
+  async getPipeline(id: string): Promise<any | null> {
+    const r = await dbGet('SELECT * FROM pipelines WHERE id = ?', id) as any;
     if (!r) return null;
     return { ...r, steps: JSON.parse(r.steps || '[]'), triggerConfig: r.trigger_config ? JSON.parse(r.trigger_config) : null };
   }
 
-  createPipeline(data: { id: string; userId: number; name: string; description?: string; triggerType: string; triggerConfig?: any; steps: any[] }): any {
+  async createPipeline(data: { id: string; userId: number; name: string; description?: string; triggerType: string; triggerConfig?: any; steps: any[] }): Promise<any> {
     const now = Date.now();
-    sqlite.prepare('INSERT INTO pipelines (id, user_id, name, description, trigger_type, trigger_config, steps, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+    await dbRun('INSERT INTO pipelines (id, user_id, name, description, trigger_type, trigger_config, steps, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       data.id, data.userId, data.name, data.description || null, data.triggerType, data.triggerConfig ? JSON.stringify(data.triggerConfig) : null, JSON.stringify(data.steps), 'active', now, now
     );
     return this.getPipeline(data.id);
   }
 
-  updatePipeline(id: string, data: any): any {
+  async updatePipeline(id: string, data: any): Promise<any> {
     const fields: string[] = [];
     const values: any[] = [];
     if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
@@ -3704,23 +3704,23 @@ export class DatabaseStorage implements IStorage {
     if (data.runCount !== undefined) { fields.push('run_count = ?'); values.push(data.runCount); }
     fields.push('updated_at = ?'); values.push(Date.now());
     values.push(id);
-    sqlite.prepare(`UPDATE pipelines SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    await dbRun(`UPDATE pipelines SET ${fields.join(', ')} WHERE id = ?`, ...values);
     return this.getPipeline(id);
   }
 
-  deletePipeline(id: string): void {
-    sqlite.prepare('DELETE FROM pipelines WHERE id = ?').run(id);
-    sqlite.prepare('DELETE FROM pipeline_runs WHERE pipeline_id = ?').run(id);
+  async deletePipeline(id: string): Promise<void> {
+    await dbRun('DELETE FROM pipelines WHERE id = ?', id);
+    await dbRun('DELETE FROM pipeline_runs WHERE pipeline_id = ?', id);
   }
 
-  createPipelineRun(data: { id: string; pipelineId: string; userId: number; totalSteps: number }): any {
-    sqlite.prepare('INSERT INTO pipeline_runs (id, pipeline_id, user_id, status, steps_completed, total_steps, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+  async createPipelineRun(data: { id: string; pipelineId: string; userId: number; totalSteps: number }): Promise<any> {
+    await dbRun('INSERT INTO pipeline_runs (id, pipeline_id, user_id, status, steps_completed, total_steps, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
       data.id, data.pipelineId, data.userId, 'running', 0, data.totalSteps, Date.now()
     );
-    return sqlite.prepare('SELECT * FROM pipeline_runs WHERE id = ?').get(data.id);
+    return await dbGet('SELECT * FROM pipeline_runs WHERE id = ?', data.id);
   }
 
-  updatePipelineRun(id: string, data: any): void {
+  async updatePipelineRun(id: string, data: any): Promise<void> {
     const fields: string[] = [];
     const values: any[] = [];
     if (data.status !== undefined) { fields.push('status = ?'); values.push(data.status); }
@@ -3730,11 +3730,11 @@ export class DatabaseStorage implements IStorage {
     if (data.totalTokens !== undefined) { fields.push('total_tokens = ?'); values.push(data.totalTokens); }
     if (data.completedAt !== undefined) { fields.push('completed_at = ?'); values.push(data.completedAt); }
     values.push(id);
-    if (fields.length > 0) sqlite.prepare(`UPDATE pipeline_runs SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    if (fields.length > 0) await dbRun(`UPDATE pipeline_runs SET ${fields.join(', ')} WHERE id = ?`, ...values);
   }
 
-  getPipelineRuns(pipelineId: string, limit = 20): any[] {
-    return sqlite.prepare('SELECT * FROM pipeline_runs WHERE pipeline_id = ? ORDER BY started_at DESC LIMIT ?').all(pipelineId, limit) as any[];
+  async getPipelineRuns(pipelineId: string, limit = 20): Promise<any[]> {
+    return await dbAll('SELECT * FROM pipeline_runs WHERE pipeline_id = ? ORDER BY started_at DESC LIMIT ?', pipelineId, limit) as any[];
   }
 }
 

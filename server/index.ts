@@ -7,6 +7,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { createRedisSessionMiddleware } from "./lib/session";
+import { initDatabase } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -63,6 +64,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Initialize database tables, seeds, and migrations
+  await initDatabase();
+
   // Session store (Redis in production, in-memory for local dev)
   app.use(await createRedisSessionMiddleware());
 

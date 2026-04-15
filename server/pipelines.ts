@@ -29,7 +29,7 @@ async function executePipeline(
   level: IntelligenceLevel = "medium",
   runId: string,
 ): Promise<void> {
-  const pipeline = storage.getPipeline(pipelineId);
+  const pipeline = await storage.getPipeline(pipelineId);
   if (!pipeline) { eventBus.emit(runId, "error", { error: "Pipeline not found" }); return; }
 
   const steps: PipelineStep[] = pipeline.steps;
@@ -102,7 +102,7 @@ async function executePipeline(
       outputs.push(stepOutput);
       previousOutput = stepOutput;
 
-      storage.updatePipelineRun(runId, { stepsCompleted: i + 1, totalTokens });
+      await storage.updatePipelineRun(runId, { stepsCompleted: i + 1, totalTokens });
 
       eventBus.emit(runId, "step_complete", {
         stepIndex: i, stepTotal: steps.length, label: stepLabel,
@@ -126,8 +126,8 @@ async function executePipeline(
       }
     } catch {}
 
-    storage.updatePipelineRun(runId, { status: "complete", output: previousOutput, totalTokens, completedAt: Date.now() });
-    storage.updatePipeline(pipelineId, { lastRunAt: Date.now(), runCount: (pipeline.run_count || 0) + 1 });
+    await storage.updatePipelineRun(runId, { status: "complete", output: previousOutput, totalTokens, completedAt: Date.now() });
+    await storage.updatePipeline(pipelineId, { lastRunAt: Date.now(), runCount: (pipeline.run_count || 0) + 1 });
 
     try {
       await storage.createNotification({
@@ -143,7 +143,7 @@ async function executePipeline(
     });
 
   } catch (err: any) {
-    storage.updatePipelineRun(runId, { status: "failed", error: err.message, completedAt: Date.now() });
+    await storage.updatePipelineRun(runId, { status: "failed", error: err.message, completedAt: Date.now() });
     console.error(`[Pipeline] Failed:`, err.message);
     eventBus.emit(runId, "pipeline_complete", { status: "failed", error: err.message });
   }
@@ -155,52 +155,52 @@ async function executePipeline(
 export function createPipelineRouter() {
   const router = Router();
 
-  router.get("/", (req: Request, res: Response) => {
+  router.get("/", async (req: Request, res: Response) => {
     const userId = req.user?.id || 1;
-    res.json(storage.getPipelinesByUser(userId));
+    res.json(await storage.getPipelinesByUser(userId));
   });
 
-  router.get("/:id", (req: Request, res: Response) => {
+  router.get("/:id", async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    const pipeline = storage.getPipeline(id);
+    const pipeline = await storage.getPipeline(id);
     if (!pipeline) return res.status(404).json({ error: "Not found" });
     res.json(pipeline);
   });
 
-  router.post("/", (req: Request, res: Response) => {
+  router.post("/", async (req: Request, res: Response) => {
     const userId = req.user?.id || 1;
     const { name, description, triggerType, triggerConfig, steps } = req.body;
     if (!name || !steps?.length) return res.status(400).json({ error: "Name and steps required" });
-    const pipeline = storage.createPipeline({
+    const pipeline = await storage.createPipeline({
       id: uuidv4(), userId, name, description,
       triggerType: triggerType || "manual", triggerConfig, steps,
     });
     res.json(pipeline);
   });
 
-  router.put("/:id", (req: Request, res: Response) => {
+  router.put("/:id", async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    const pipeline = storage.getPipeline(id);
+    const pipeline = await storage.getPipeline(id);
     if (!pipeline) return res.status(404).json({ error: "Not found" });
-    res.json(storage.updatePipeline(id, req.body));
+    res.json(await storage.updatePipeline(id, req.body));
   });
 
-  router.delete("/:id", (req: Request, res: Response) => {
+  router.delete("/:id", async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    storage.deletePipeline(id);
+    await storage.deletePipeline(id);
     res.json({ ok: true });
   });
 
   // Run pipeline — async, returns runId immediately
-  router.post("/:id/run", (req: Request, res: Response) => {
+  router.post("/:id/run", async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const userId = req.user?.id || 1;
     const level = (req.body.level || "medium") as IntelligenceLevel;
     const runId = uuidv4();
-    const pipeline = storage.getPipeline(id);
+    const pipeline = await storage.getPipeline(id);
     if (!pipeline) return res.status(404).json({ error: "Not found" });
 
-    storage.createPipelineRun({ id: runId, pipelineId: id, userId, totalSteps: pipeline.steps.length });
+    await storage.createPipelineRun({ id: runId, pipelineId: id, userId, totalSteps: pipeline.steps.length });
 
     executePipeline(id, userId, level, runId).catch(err => {
       console.error("[Pipeline] Unhandled error:", err.message);
@@ -229,9 +229,9 @@ export function createPipelineRouter() {
     req.on("close", unsub);
   });
 
-  router.get("/:id/runs", (req: Request, res: Response) => {
+  router.get("/:id/runs", async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    res.json(storage.getPipelineRuns(id));
+    res.json(await storage.getPipelineRuns(id));
   });
 
   // Workflow AI Assistant — helps build workflows by asking questions

@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage, sqlite } from "./storage";
+import { storage } from "./storage";
+import { dbRun, dbGet, dbAll } from "./lib/db";
 import { insertWorkflowSchema, insertAgentSchema, insertJobSchema, insertMessageSchema, insertAuditReviewSchema } from "@shared/schema";
 import { runAgentChat } from "./ai";
 import { registerStripeRoutes } from "./stripe";
@@ -407,7 +408,7 @@ export async function registerRoutes(
             try {
               // Read file from uploads dir and convert to base64
               const fileId = att.id || att.url?.split("/").pop();
-              const row = sqlite.prepare("SELECT storage_path, mime_type FROM uploaded_files WHERE id = ?").get(fileId) as any;
+              const row = await dbGet("SELECT storage_path, mime_type FROM uploaded_files WHERE id = ?", fileId) as any;
               if (row) {
                 const filePath = pathModule.default.resolve(process.cwd(), "uploads", row.storage_path);
                 if (fsModule.default.existsSync(filePath)) {
@@ -496,8 +497,8 @@ export async function registerRoutes(
   app.delete("/api/conversations/:id", async (req, res) => {
     const id = req.params.id as string;
     try {
-      sqlite.prepare("DELETE FROM boss_messages WHERE conversation_id = ?").run(id);
-      sqlite.prepare("DELETE FROM conversations WHERE id = ?").run(id);
+      await dbRun("DELETE FROM boss_messages WHERE conversation_id = ?", id);
+      await dbRun("DELETE FROM conversations WHERE id = ?", id);
       res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -508,9 +509,9 @@ export async function registerRoutes(
     try {
       const convs = await storage.getConversationsByUser(userId);
       for (const c of convs) {
-        sqlite.prepare("DELETE FROM boss_messages WHERE conversation_id = ?").run(c.id);
+        await dbRun("DELETE FROM boss_messages WHERE conversation_id = ?", c.id);
       }
-      sqlite.prepare("DELETE FROM conversations WHERE user_id = ?").run(userId);
+      await dbRun("DELETE FROM conversations WHERE user_id = ?", userId);
       res.json({ ok: true, deleted: convs.length });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -969,7 +970,7 @@ export async function registerRoutes(
         if (cached) return res.json(JSON.parse(cached));
       } catch (_) { /* Redis unavailable, skip cache */ }
 
-      const stats = storage.getDashboardStats(userId);
+      const stats = await storage.getDashboardStats(userId);
 
       // Cache in Redis for 60s
       try {
@@ -987,7 +988,7 @@ export async function registerRoutes(
   app.get("/api/dashboard/token-usage", async (req, res) => {
     const userId = req.user?.id || 1;
     const days = parseInt(req.query.days as string) || 7;
-    const data = storage.getTokenUsageByDay(userId, days);
+    const data = await storage.getTokenUsageByDay(userId, days);
     res.json(data);
   });
 
@@ -995,28 +996,28 @@ export async function registerRoutes(
   app.get("/api/dashboard/workflow-runs", async (req, res) => {
     const userId = req.user?.id || 1;
     const days = parseInt(req.query.days as string) || 30;
-    const data = storage.getWorkflowRunsByDay(userId, days);
+    const data = await storage.getWorkflowRunsByDay(userId, days);
     res.json(data);
   });
 
   // ── Model Usage Breakdown ───────────────────────────────────────────────
   app.get("/api/dashboard/model-usage", async (req, res) => {
     const userId = req.user?.id || 1;
-    const data = storage.getModelUsageBreakdown(userId);
+    const data = await storage.getModelUsageBreakdown(userId);
     res.json(data);
   });
 
   // ── Department Performance Stats ────────────────────────────────────────
   app.get("/api/dashboard/department-stats", async (req, res) => {
     const userId = req.user?.id || 1;
-    const data = storage.getDepartmentStats(userId);
+    const data = await storage.getDepartmentStats(userId);
     res.json(data);
   });
 
   // ── Cost Estimation ───────────────────────────────────────────────────────
   app.get("/api/dashboard/cost-estimate", async (req, res) => {
     const userId = req.user?.id || 1;
-    const modelUsage = storage.getModelUsageBreakdown(userId);
+    const modelUsage = await storage.getModelUsageBreakdown(userId);
     // Approximate cost per 1M tokens by model family
     const COST_PER_M: Record<string, number> = {
       "claude-opus": 75, "claude-sonnet": 15, "claude-haiku": 1.25,
@@ -1039,7 +1040,7 @@ export async function registerRoutes(
   // ── Dashboard Layout Persistence ────────────────────────────────────────
   app.get("/api/dashboard/layout", async (req, res) => {
     const userId = req.user?.id || 1;
-    const layout = storage.getDashboardLayout(userId);
+    const layout = await storage.getDashboardLayout(userId);
     res.json(layout || { layout: null });
   });
 
@@ -1047,7 +1048,7 @@ export async function registerRoutes(
     const userId = req.user?.id || 1;
     const { layout } = req.body;
     if (!Array.isArray(layout)) return res.status(400).json({ error: "layout must be an array" });
-    const saved = storage.upsertDashboardLayout(userId, layout);
+    const saved = await storage.upsertDashboardLayout(userId, layout);
     res.json(saved);
   });
 
@@ -1055,7 +1056,7 @@ export async function registerRoutes(
   app.get("/api/activity", async (req, res) => {
     const userId = req.user?.id || 1;
     const limit = parseInt(req.query.limit as string) || 20;
-    const events = storage.getActivityEvents(userId, limit);
+    const events = await storage.getActivityEvents(userId, limit);
     res.json(events);
   });
 
@@ -1069,7 +1070,7 @@ export async function registerRoutes(
         redisStatus = pong === "PONG" ? "connected" : "error";
       } catch (_) {}
 
-      const dbSizeRow = sqlite.prepare("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()").get() as any;
+      const dbSizeRow = await dbGet("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()") as any;
       const dbSize = dbSizeRow?.size || 0;
 
       const uptime = process.uptime();
@@ -1122,9 +1123,10 @@ export async function registerRoutes(
     const conversationId = req.body?.conversationId || null;
 
     try {
-      sqlite.prepare(
-        "INSERT INTO uploaded_files (id, user_id, original_name, mime_type, size, storage_path, conversation_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).run(fileId, userId, req.file.originalname, req.file.mimetype, req.file.size, storagePath, conversationId);
+      await dbRun(
+        "INSERT INTO uploaded_files (id, user_id, original_name, mime_type, size, storage_path, conversation_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        fileId, userId, req.file.originalname, req.file.mimetype, req.file.size, storagePath, conversationId
+      );
 
       res.json({
         id: fileId,
@@ -1141,7 +1143,7 @@ export async function registerRoutes(
 
   app.get("/api/files/:id", async (req, res) => {
     try {
-      const file = sqlite.prepare("SELECT * FROM uploaded_files WHERE id = ?").get(req.params.id) as any;
+      const file = await dbGet("SELECT * FROM uploaded_files WHERE id = ?", req.params.id) as any;
       if (!file) return res.status(404).json({ error: "File not found" });
       const filePath = path.default.join(uploadsDir, file.storage_path);
       if (!fs.default.existsSync(filePath)) return res.status(404).json({ error: "File not found on disk" });
@@ -1155,7 +1157,7 @@ export async function registerRoutes(
 
   app.get("/api/files/:id/thumbnail", async (req, res) => {
     try {
-      const file = sqlite.prepare("SELECT * FROM uploaded_files WHERE id = ?").get(req.params.id) as any;
+      const file = await dbGet("SELECT * FROM uploaded_files WHERE id = ?", req.params.id) as any;
       if (!file) return res.status(404).json({ error: "File not found" });
       const filePath = path.default.join(uploadsDir, file.storage_path);
       if (!fs.default.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
@@ -1203,7 +1205,7 @@ export async function registerRoutes(
 
   app.post("/api/dashboard/active-agents/:jobId/clear", async (req, res) => {
     try {
-      try { sqlite.prepare("DELETE FROM agent_jobs WHERE id = ?").run(req.params.jobId); } catch {}
+      try { await dbRun("DELETE FROM agent_jobs WHERE id = ?", req.params.jobId); } catch {}
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

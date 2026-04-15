@@ -17,22 +17,22 @@ const activeBots = new Map<string, NodeJS.Timeout>();
  * Execute one bot cycle: load state, make a decision, act on it.
  */
 async function runBotCycle(botId: string): Promise<void> {
-  const bot = storage.getBot(botId);
+  const bot = await storage.getBot(botId);
   if (!bot || bot.status !== "running") {
     stopBot(botId);
     return;
   }
 
   try {
-    storage.addBotLog(botId, "cycle", "Bot cycle started");
+    await storage.addBotLog(botId, "cycle", "Bot cycle started");
 
     // Special handler for reflection bots — use dedicated runReflection()
     if (bot.category === "reflection") {
-      storage.addBotLog(botId, "action", "Running vault reflection...");
+      await storage.addBotLog(botId, "action", "Running vault reflection...");
       const reflectionPath = await runReflection();
       if (reflectionPath) {
-        storage.addBotLog(botId, "result", `Reflection saved: ${reflectionPath}`);
-        storage.updateBot(botId, {
+        await storage.addBotLog(botId, "result", `Reflection saved: ${reflectionPath}`);
+        await storage.updateBot(botId, {
           totalRuns: (bot.total_runs || 0) + 1,
           lastActiveAt: Date.now(),
         });
@@ -45,13 +45,13 @@ async function runBotCycle(botId: string): Promise<void> {
           });
         } catch {}
       } else {
-        storage.addBotLog(botId, "result", "Not enough notes to reflect on yet — need at least 3 notes across folders");
+        await storage.addBotLog(botId, "result", "Not enough notes to reflect on yet — need at least 3 notes across folders");
       }
       return;
     }
 
     // Build context from memory + recent logs
-    const recentLogs = storage.getBotLogs(botId, 10);
+    const recentLogs = await storage.getBotLogs(botId, 10);
     const logContext = recentLogs.reverse().map((l: any) =>
       `[${new Date(l.created_at).toLocaleTimeString()}] ${l.type}: ${l.message}`
     ).join("\n");
@@ -92,7 +92,7 @@ If nothing needs to be done right now, use action "none".`;
     });
 
     const tokens = result.usage.totalTokens;
-    storage.updateBot(botId, {
+    await storage.updateBot(botId, {
       totalTokens: (bot.total_tokens || 0) + tokens,
       totalRuns: (bot.total_runs || 0) + 1,
       lastActiveAt: Date.now(),
@@ -107,33 +107,33 @@ If nothing needs to be done right now, use action "none".`;
       decision = { action: "none", reasoning: "Failed to parse decision" };
     }
 
-    storage.addBotLog(botId, "decision", decision.reasoning || decision.action, { action: decision.action });
+    await storage.addBotLog(botId, "decision", decision.reasoning || decision.action, { action: decision.action });
 
     // Execute decision
     if (decision.action === "department" && decision.department && decision.task) {
-      storage.addBotLog(botId, "action", `Dispatching to ${decision.department}: ${decision.task.slice(0, 100)}`);
+      await storage.addBotLog(botId, "action", `Dispatching to ${decision.department}: ${decision.task.slice(0, 100)}`);
       try {
         const deptResult = await executeDepartment(
           botId, { department: decision.department, task: decision.task },
           "medium" as IntelligenceLevel, estimateComplexity(decision.task),
         );
-        storage.addBotLog(botId, "result", `${decision.department} completed (${deptResult.totalTokens} tokens)`, {
+        await storage.addBotLog(botId, "result", `${decision.department} completed (${deptResult.totalTokens} tokens)`, {
           output: deptResult.finalOutput.slice(0, 500),
         });
-        storage.updateBot(botId, { totalTokens: (bot.total_tokens || 0) + tokens + deptResult.totalTokens });
+        await storage.updateBot(botId, { totalTokens: (bot.total_tokens || 0) + tokens + deptResult.totalTokens });
       } catch (e: any) {
-        storage.addBotLog(botId, "error", `Department failed: ${e.message}`);
+        await storage.addBotLog(botId, "error", `Department failed: ${e.message}`);
       }
     } else if (decision.action === "connector" && decision.connectorId) {
-      storage.addBotLog(botId, "action", `Calling connector: ${decision.connectorAction}`);
+      await storage.addBotLog(botId, "action", `Calling connector: ${decision.connectorAction}`);
       try {
         const connResult = await connectorRegistry.execute(decision.connectorId, decision.connectorAction, decision.params || {});
-        storage.addBotLog(botId, "result", connResult.ok ? "Connector action succeeded" : `Connector failed: ${connResult.error}`);
+        await storage.addBotLog(botId, "result", connResult.ok ? "Connector action succeeded" : `Connector failed: ${connResult.error}`);
       } catch (e: any) {
-        storage.addBotLog(botId, "error", `Connector failed: ${e.message}`);
+        await storage.addBotLog(botId, "error", `Connector failed: ${e.message}`);
       }
     } else if (decision.action === "notify" && decision.message) {
-      storage.addBotLog(botId, "notify", decision.message);
+      await storage.addBotLog(botId, "notify", decision.message);
       try {
         await storage.createNotification({
           userId: bot.user_id, type: "bot_alert",
@@ -142,8 +142,8 @@ If nothing needs to be done right now, use action "none".`;
       } catch {}
     } else if (decision.action === "update_memory" && decision.memoryUpdate) {
       const newMemory = { ...bot.memory, ...decision.memoryUpdate };
-      storage.updateBot(botId, { memory: newMemory });
-      storage.addBotLog(botId, "memory", "Memory updated", { update: decision.memoryUpdate });
+      await storage.updateBot(botId, { memory: newMemory });
+      await storage.addBotLog(botId, "memory", "Memory updated", { update: decision.memoryUpdate });
     }
 
     // Auto-save to Obsidian
@@ -160,15 +160,15 @@ If nothing needs to be done right now, use action "none".`;
     } catch {}
 
   } catch (e: any) {
-    storage.addBotLog(botId, "error", `Cycle failed: ${e.message}`);
+    await storage.addBotLog(botId, "error", `Cycle failed: ${e.message}`);
     console.error(`[Bot ${botId}] Cycle error:`, e.message);
   }
 }
 
-function startBot(botId: string, intervalMs = 60000): void {
+async function startBot(botId: string, intervalMs = 60000): Promise<void> {
   if (activeBots.has(botId)) return;
-  storage.updateBot(botId, { status: "running" });
-  storage.addBotLog(botId, "lifecycle", "Bot started");
+  await storage.updateBot(botId, { status: "running" });
+  await storage.addBotLog(botId, "lifecycle", "Bot started");
 
   // Run first cycle immediately
   runBotCycle(botId);
@@ -178,11 +178,11 @@ function startBot(botId: string, intervalMs = 60000): void {
   activeBots.set(botId, timer);
 }
 
-function stopBot(botId: string): void {
+async function stopBot(botId: string): Promise<void> {
   const timer = activeBots.get(botId);
   if (timer) { clearInterval(timer); activeBots.delete(botId); }
-  storage.updateBot(botId, { status: "stopped" });
-  storage.addBotLog(botId, "lifecycle", "Bot stopped");
+  await storage.updateBot(botId, { status: "stopped" });
+  await storage.addBotLog(botId, "lifecycle", "Bot stopped");
 }
 
 /**
@@ -191,77 +191,77 @@ function stopBot(botId: string): void {
 export function createBotRouter() {
   const router = Router();
 
-  router.get("/", (req: Request, res: Response) => {
+  router.get("/", async (req: Request, res: Response) => {
     const userId = req.user?.id || 1;
-    res.json(storage.getBotsByUser(userId));
+    res.json(await storage.getBotsByUser(userId));
   });
 
-  router.get("/:id", (req: Request, res: Response) => {
-    const bot = storage.getBot(req.params.id as string);
+  router.get("/:id", async (req: Request, res: Response) => {
+    const bot = await storage.getBot(req.params.id as string);
     if (!bot) return res.status(404).json({ error: "Not found" });
     res.json(bot);
   });
 
-  router.post("/", (req: Request, res: Response) => {
+  router.post("/", async (req: Request, res: Response) => {
     const userId = req.user?.id || 1;
     const { name, description, brainPrompt, brainModel, category, triggers, tools, rules } = req.body;
     if (!name || !brainPrompt) return res.status(400).json({ error: "Name and brainPrompt required" });
-    const bot = storage.createBot({
+    const bot = await storage.createBot({
       id: uuidv4(), userId, name, description, brainPrompt,
       brainModel, category, triggers, tools, rules,
     });
     res.json(bot);
   });
 
-  router.put("/:id", (req: Request, res: Response) => {
+  router.put("/:id", async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    const bot = storage.getBot(id);
+    const bot = await storage.getBot(id);
     if (!bot) return res.status(404).json({ error: "Not found" });
-    res.json(storage.updateBot(id, req.body));
+    res.json(await storage.updateBot(id, req.body));
   });
 
-  router.delete("/:id", (req: Request, res: Response) => {
+  router.delete("/:id", async (req: Request, res: Response) => {
     const id = req.params.id as string;
     stopBot(id);
-    storage.deleteBot(id);
+    await storage.deleteBot(id);
     res.json({ ok: true });
   });
 
-  router.post("/:id/start", (req: Request, res: Response) => {
+  router.post("/:id/start", async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const intervalMs = parseInt(req.body.intervalMs) || 60000;
-    startBot(id, intervalMs);
+    await startBot(id, intervalMs);
     res.json({ ok: true, status: "running" });
   });
 
-  router.post("/:id/stop", (req: Request, res: Response) => {
+  router.post("/:id/stop", async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    stopBot(id);
+    await stopBot(id);
     res.json({ ok: true, status: "stopped" });
   });
 
   router.post("/:id/run-once", async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    const bot = storage.getBot(id);
+    const bot = await storage.getBot(id);
     if (!bot) return res.status(404).json({ error: "Not found" });
     await runBotCycle(id);
     res.json({ ok: true });
   });
 
-  router.get("/:id/logs", (req: Request, res: Response) => {
+  router.get("/:id/logs", async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const limit = parseInt(req.query.limit as string) || 50;
-    res.json(storage.getBotLogs(id, limit));
+    res.json(await storage.getBotLogs(id, limit));
   });
 
   // Create the Vault Reflection bot (pre-built)
   router.post("/create-reflection-bot", async (req: Request, res: Response) => {
     const userId = req.user?.id || 1;
     // Check if one already exists
-    const existing = storage.getBotsByUser(userId).find((b: any) => b.category === "reflection");
+    const existing = (await storage.getBotsByUser(userId)).find((b: any) => b.category === "reflection");
     if (existing) return res.json(existing);
 
-    const bot = storage.createBot({
+    const bot = await storage.createBot({
       id: uuidv4(), userId,
       name: "Vault Thinker",
       description: "Periodically analyzes your Obsidian vault, finds patterns across notes, spots connections, and writes insight reports.",
