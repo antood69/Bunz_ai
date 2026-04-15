@@ -22,10 +22,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useEffect, useState } from "react";
-// import { useQuery } from "@tanstack/react-query";
-
-const ICON_MAP: Record<string, React.ElementType> = {};
-
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/boss", label: "Chat", icon: MessageSquare },

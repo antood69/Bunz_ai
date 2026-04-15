@@ -1,11 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { dbRun, dbGet, dbAll } from "./lib/db";
+import { dbRun, dbGet } from "./lib/db";
 import { insertWorkflowSchema, insertAgentSchema, insertJobSchema, insertMessageSchema, insertAuditReviewSchema } from "@shared/schema";
 import { runAgentChat } from "./ai";
 import { registerStripeRoutes } from "./stripe";
-import { createAuthRouter, createOwnerRouter, authMiddleware, ownerOnly, collectIntelligence } from "./auth";
+import { createAuthRouter, createOwnerRouter, authMiddleware, collectIntelligence } from "./auth";
 import { createConnectorsRouter, createWebhookInboundRouter } from "./connectors";
 import { createPipelineRouter } from "./pipelines";
 import { createBotRouter } from "./bots";
@@ -19,7 +19,7 @@ import { CODER_SYSTEM_PROMPT } from "./agents/coder";
 import { ART_SYSTEM_PROMPT } from "./agents/art";
 const REASONING_SYSTEM_PROMPT = "You are a reasoning agent. Think step by step.";
 import { classifyTier } from "./lib/tierClassifier";
-import { TIER_CREDIT_LIMITS, requireCredits, checkTokenBudget } from "./lib/rateLimiter";
+import { TIER_CREDIT_LIMITS, requireCredits } from "./lib/rateLimiter";
 import { INTELLIGENCE_TIERS } from "./departments/types";
 
 export async function registerRoutes(

@@ -11,7 +11,7 @@ import fs from "fs";
 import path from "path";
 import {
   type DepartmentId, type IntelligenceLevel, type TaskComplexity,
-  DEPARTMENTS, getModel, getActiveSubAgents, estimateComplexity,
+  DEPARTMENTS, getModel, getActiveSubAgents,
 } from "./types";
 
 // ── Interfaces ──────────────────────────────────────────────────────────────

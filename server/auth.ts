@@ -3,7 +3,6 @@ import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { storage } from "./storage";
 import { sendVerificationEmail, sendLoginAlertEmail, sendWelcomeEmail } from "./email";
-// TIER_CREDIT_LIMITS available from ./lib/rateLimiter if needed
 
 const OWNER_EMAIL = "reederb46@gmail.com";
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days

@@ -7,11 +7,3 @@
 
 export type { ChatMessage, Usage, ChatOptions, ChatResult } from "./lib/modelRouter";
 export { modelRouter, runAgentChat, runAgentChatWithUserKey, detectProvider, useMaxCompletionTokens, isImageGenerationModel } from "./lib/modelRouter";
-
-// Re-export the AiResponse type for backward compat
-export interface AiResponse {
-  reply: string;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-}

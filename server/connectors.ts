@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { storage } from "./storage";
-import { encryptCredentials, decryptCredentials, generateHmacSecret, verifyHmac, signHmac } from "./lib/connectorCrypto";
+import { encryptCredentials, decryptCredentials, generateHmacSecret, verifyHmac } from "./lib/connectorCrypto";
 import { connectorRegistry } from "./lib/connectorRegistry";
 
 // OAuth2 provider configs

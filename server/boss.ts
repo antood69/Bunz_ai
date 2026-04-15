@@ -13,7 +13,6 @@ import fs from "fs";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { modelRouter } from "./ai";
-import { isImageGenerationModel } from "./lib/modelRouter";
 import { eventBus } from "./lib/eventBus";
 import { storage } from "./storage";
 
@@ -51,10 +50,9 @@ import {
   type DepartmentId, type IntelligenceLevel,
   INTELLIGENCE_TIERS, DEPARTMENTS, detectDepartments, estimateComplexity,
 } from "./departments/types";
-import { executeDepartment, type DepartmentTask, type DepartmentResult } from "./departments/executor";
+import { executeDepartment, type DepartmentResult } from "./departments/executor";
 import { runAutonomous } from "./departments/autonomous";
 import { connectorRegistry } from "./lib/connectorRegistry";
-import { decryptCredentials } from "./lib/connectorCrypto";
 import { autoLinkNote, contextSearch } from "./lib/vaultBrain";
 
 // ── Boss System Prompt ──────────────────────────────────────────────────────

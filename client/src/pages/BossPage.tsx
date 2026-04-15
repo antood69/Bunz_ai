@@ -2,8 +2,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Bot, Send, Plus, MessageSquare, Copy, Check, ChevronLeft, ChevronRight,
   Search, Code2, FileText, BarChart3, ShieldCheck, Palette, Globe,
-  Loader2, CheckCircle, AlertCircle, Zap, Square, Layers,
-  Paperclip, Download, Image as ImageIcon, X, Brain,
+  Loader2, CheckCircle, AlertCircle, Zap, Square,
+  Paperclip, Download, X, Brain,
 } from "lucide-react";
 import IntelligencePicker, { type IntelligenceLevel } from "@/components/IntelligencePicker";
 import { useAgentStream, type WorkerStatus } from "@/hooks/useAgentStream";
