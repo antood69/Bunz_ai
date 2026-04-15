@@ -72,7 +72,8 @@ function buildTree(paths: string[]): TreeNode[] {
 
 export default function EditorPage() {
   const { toast } = useToast();
-  const [mode, setMode] = useState<"github" | "local">("local");
+  const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  const [mode, setMode] = useState<"github" | "local">(isLocal ? "local" : "github");
   const [selectedRepo, setSelectedRepo] = useState("");
   const [localRoot, setLocalRoot] = useState("");
   const [localInput, setLocalInput] = useState("");
@@ -188,10 +189,12 @@ export default function EditorPage() {
       {/* Top Bar */}
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-card/50 flex-shrink-0">
         <div className="flex items-center border border-border rounded-xl overflow-hidden">
-          <button className={`px-2 py-1 text-[11px] flex items-center gap-1 ${mode === "local" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
-            onClick={() => { setMode("local"); setSelFile(null); setContent(""); }}>
-            <HardDrive className="w-3 h-3" /> Local
-          </button>
+          {isLocal && (
+            <button className={`px-2 py-1 text-[11px] flex items-center gap-1 ${mode === "local" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
+              onClick={() => { setMode("local"); setSelFile(null); setContent(""); }}>
+              <HardDrive className="w-3 h-3" /> Local
+            </button>
+          )}
           <button className={`px-2 py-1 text-[11px] flex items-center gap-1 ${mode === "github" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
             onClick={() => { setMode("github"); setSelFile(null); setContent(""); }}>
             <GitBranch className="w-3 h-3" /> GitHub
@@ -242,7 +245,7 @@ export default function EditorPage() {
           {!hasSrc ? (
             <div className="p-3 text-xs text-muted-foreground text-center">
               {mode === "github" ? <><GitBranch className="w-6 h-6 mx-auto mb-2 opacity-20" /><p>Select a repo</p></> :
-                <><HardDrive className="w-6 h-6 mx-auto mb-2 opacity-20" /><p>Enter a folder path</p></>}
+                <><HardDrive className="w-6 h-6 mx-auto mb-2 opacity-20" /><p>Enter a local folder path</p></>}
             </div>
           ) : loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
