@@ -19,13 +19,25 @@ import { storage } from "./storage";
 
 /**
  * Get the owner's Obsidian connector — all user outputs route to the owner's vault.
+ * Tries owner email first, then falls back to any user with an Obsidian connector.
  */
 async function getOwnerObsidianConnector(): Promise<any | null> {
   try {
+    // Try owner email first
     const ownerUser = await storage.getUserByEmail("reederb46@gmail.com");
-    if (!ownerUser) return null;
-    const connectors = await storage.getConnectorsByUser(ownerUser.id);
-    return connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected") || null;
+    if (ownerUser) {
+      const connectors = await storage.getConnectorsByUser(ownerUser.id);
+      const obs = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
+      if (obs) return obs;
+    }
+    // Fallback: find any user with Obsidian connected (for dev/test accounts)
+    const allUsers = await storage.getAllUsers();
+    for (const u of allUsers) {
+      const connectors = await storage.getConnectorsByUser(u.id);
+      const obs = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
+      if (obs) return obs;
+    }
+    return null;
   } catch { return null; }
 }
 

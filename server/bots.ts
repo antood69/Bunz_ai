@@ -26,6 +26,30 @@ async function runBotCycle(botId: string): Promise<void> {
   try {
     storage.addBotLog(botId, "cycle", "Bot cycle started");
 
+    // Special handler for reflection bots — use dedicated runReflection()
+    if (bot.category === "reflection") {
+      storage.addBotLog(botId, "action", "Running vault reflection...");
+      const reflectionPath = await runReflection();
+      if (reflectionPath) {
+        storage.addBotLog(botId, "result", `Reflection saved: ${reflectionPath}`);
+        storage.updateBot(botId, {
+          totalRuns: (bot.total_runs || 0) + 1,
+          lastActiveAt: Date.now(),
+        });
+        try {
+          await storage.createNotification({
+            userId: bot.user_id, type: "bot_reflection",
+            title: "Vault Thinker generated insights",
+            message: `New reflection saved to ${reflectionPath}`,
+            link: "/bots",
+          });
+        } catch {}
+      } else {
+        storage.addBotLog(botId, "result", "Not enough notes to reflect on yet — need at least 3 notes across folders");
+      }
+      return;
+    }
+
     // Build context from memory + recent logs
     const recentLogs = storage.getBotLogs(botId, 10);
     const logContext = recentLogs.reverse().map((l: any) =>
