@@ -70,6 +70,11 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     return res.status(401).json({ error: "User not found" });
   }
 
+  // Block suspended users
+  if (user.role === "suspended") {
+    return res.status(403).json({ error: "Account suspended. Contact the platform owner." });
+  }
+
   req.user = {
     id: user.id,
     username: user.username,
@@ -83,12 +88,30 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   next();
 }
 
-// ── Owner-only guard ─────────────────────────────────────────────────────────
+// ── Role guards ──────────────────────────────────────────────────────────────
 export function ownerOnly(req: Request, res: Response, next: NextFunction) {
   if (!req.user || req.user.role !== "owner") {
     return res.status(403).json({ error: "Owner access only" });
   }
   next();
+}
+
+export function adminOrOwner(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || (req.user.role !== "owner" && req.user.role !== "admin")) {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+}
+
+// ── Audit logger ─────────────────────────────────────────────────────────────
+export function auditLog(userId: number, action: string, details?: string, metadata?: any) {
+  try {
+    storage.insertActivityEvent({
+      id: require("crypto").randomUUID(),
+      userId, type: "audit", title: action,
+      description: details, metadata,
+    });
+  } catch {}
 }
 
 // ── Intelligence collector (silently logs all AI interactions) ────────────────
@@ -682,15 +705,81 @@ export function createOwnerRouter(): Router {
     res.json({ total, byType, byQuality });
   });
 
-  // Update user role/tier (owner can change anyone)
+  // Update user role/tier
   router.patch("/users/:id", async (req: Request, res: Response) => {
+    const userId = Number(req.params.id);
     const { role, tier } = req.body;
     const updates: any = {};
     if (role) updates.role = role;
     if (tier) updates.tier = tier;
-    const user = await storage.updateUser(Number(req.params.id), updates);
+    const user = await storage.updateUser(userId, updates);
     if (!user) return res.status(404).json({ error: "User not found" });
+    auditLog(req.user!.id, `Updated user ${user.email}: ${JSON.stringify(updates)}`);
+
+    // Update plan tier if tier changed
+    if (tier) {
+      const TIER_TOKENS: Record<string, number> = { free: 3000, starter: 40000, pro: 200000, agency: 800000 };
+      const plan = await storage.getUserPlan(userId);
+      if (plan) {
+        await storage.updateUserPlan(plan.id, { tier, monthlyTokens: TIER_TOKENS[tier] || 3000 });
+      }
+    }
     res.json(user);
+  });
+
+  // Suspend/unsuspend user
+  router.post("/users/:id/suspend", async (req: Request, res: Response) => {
+    const userId = Number(req.params.id);
+    const user = await storage.getUser(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (user.role === "owner") return res.status(400).json({ error: "Cannot suspend owner" });
+    const newRole = user.role === "suspended" ? "user" : "suspended";
+    await storage.updateUser(userId, { role: newRole });
+    auditLog(req.user!.id, `${newRole === "suspended" ? "Suspended" : "Unsuspended"} user ${user.email}`);
+    res.json({ ok: true, role: newRole });
+  });
+
+  // Reset user token quota
+  router.post("/users/:id/reset-quota", async (req: Request, res: Response) => {
+    const userId = Number(req.params.id);
+    const plan = await storage.getUserPlan(userId);
+    if (!plan) return res.status(404).json({ error: "No plan found" });
+    await storage.updateUserPlan(plan.id, { tokensUsed: 0, periodStart: new Date().toISOString(), periodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() });
+    auditLog(req.user!.id, `Reset quota for user ${userId}`);
+    res.json({ ok: true });
+  });
+
+  // Delete user account
+  router.delete("/users/:id", async (req: Request, res: Response) => {
+    const userId = Number(req.params.id);
+    const user = await storage.getUser(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (user.role === "owner") return res.status(400).json({ error: "Cannot delete owner" });
+    // Delete user data
+    const { sqlite } = await import("./storage");
+    sqlite.prepare("DELETE FROM boss_messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)").run(userId);
+    sqlite.prepare("DELETE FROM conversations WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM agent_jobs WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM token_usage WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM user_plans WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM activity_events WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    auditLog(req.user!.id, `Deleted user ${user.email}`);
+    res.json({ ok: true });
+  });
+
+  // Audit log
+  router.get("/audit", async (req: Request, res: Response) => {
+    const limit = Number(req.query.limit) || 50;
+    const events = storage.getActivityEvents(req.user!.id, limit);
+    // Get all audit events across all users
+    const { sqlite } = await import("./storage");
+    const allAudit = sqlite.prepare("SELECT * FROM activity_events WHERE type = 'audit' ORDER BY created_at DESC LIMIT ?").all(limit) as any[];
+    res.json(allAudit.map((r: any) => ({
+      id: r.id, userId: r.user_id, type: r.type, title: r.title,
+      description: r.description, metadata: r.metadata ? JSON.parse(r.metadata) : null,
+      createdAt: r.created_at,
+    })));
   });
 
   return router;

@@ -531,6 +531,7 @@ function UserDetailDialog({
 // ---------------------------------------------------------------------------
 
 function UsersTab() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -628,18 +629,33 @@ function UsersTab() {
                     {formatDate(u.lastLoginAt)}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedUserId(u.id);
-                        setDetailOpen(true);
-                      }}
-                    >
-                      View
-                    </Button>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={u.tier}
+                        onChange={async (e) => {
+                          await fetch(`/api/owner/users/${u.id}`, {
+                            method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include",
+                            body: JSON.stringify({ tier: e.target.value }),
+                          });
+                          queryClient.invalidateQueries({ queryKey: ["/api/owner/users"] });
+                        }}
+                        className="h-6 bg-secondary border border-border rounded px-1 text-[10px]"
+                      >
+                        <option value="free">Free</option>
+                        <option value="starter">Starter</option>
+                        <option value="pro">Pro</option>
+                        <option value="agency">Agency</option>
+                      </select>
+                      {u.role !== "owner" && (
+                        <Button size="sm" variant="ghost" className={`h-6 px-1.5 text-[10px] ${u.role === "suspended" ? "text-emerald-400" : "text-amber-400"}`}
+                          onClick={async () => {
+                            await fetch(`/api/owner/users/${u.id}/suspend`, { method: "POST", credentials: "include" });
+                            queryClient.invalidateQueries({ queryKey: ["/api/owner/users"] });
+                          }}>
+                          {u.role === "suspended" ? "Unsuspend" : "Suspend"}
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -1072,6 +1088,39 @@ function IntelligenceTab() {
 }
 
 // ---------------------------------------------------------------------------
+// Audit Log Tab
+// ---------------------------------------------------------------------------
+function AuditTab() {
+  const { data: logs = [] } = useQuery<Array<{ id: string; userId: number; title: string; description: string; createdAt: number }>>({
+    queryKey: ["/api/owner/audit"],
+    refetchInterval: 10000,
+  });
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">Admin actions, user management events, and system changes</p>
+      {logs.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-8">No audit events yet</p>
+      ) : (
+        <div className="space-y-2">
+          {logs.map((l) => (
+            <div key={l.id} className="flex items-start gap-3 bg-card border border-border rounded-lg px-4 py-3">
+              <div className="flex-1">
+                <p className="text-sm text-foreground">{l.title}</p>
+                {l.description && <p className="text-xs text-muted-foreground mt-0.5">{l.description}</p>}
+              </div>
+              <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                {new Date(l.createdAt).toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Obsidian Vault Tab (Owner-only)
 // ---------------------------------------------------------------------------
 function ObsidianTab() {
@@ -1207,6 +1256,7 @@ export default function AdminPage() {
           <TabsTrigger value="users" className="text-xs">Users</TabsTrigger>
           <TabsTrigger value="intelligence" className="text-xs">Intelligence</TabsTrigger>
           <TabsTrigger value="obsidian" className="text-xs">Obsidian</TabsTrigger>
+          <TabsTrigger value="audit" className="text-xs">Audit Log</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -1223,6 +1273,10 @@ export default function AdminPage() {
 
         <TabsContent value="obsidian" className="mt-4">
           <ObsidianTab />
+        </TabsContent>
+
+        <TabsContent value="audit" className="mt-4">
+          <AuditTab />
         </TabsContent>
       </Tabs>
     </div>
