@@ -600,6 +600,8 @@ async function loadConversationsFromServer(): Promise<Conversation[]> {
             content: string;
             tokenCount: number | null;
             model: string | null;
+            type: string | null;
+            imageUrl: string | null;
             createdAt: number;
           }> = msgRes.ok ? await msgRes.json() : [];
 
@@ -611,6 +613,8 @@ async function loadConversationsFromServer(): Promise<Conversation[]> {
               content: m.content,
               timestamp: new Date(m.createdAt),
               tokenCount: m.tokenCount ?? undefined,
+              type: (m.type as "text" | "image") || undefined,
+              imageUrl: m.imageUrl || undefined,
             }));
 
           return {
@@ -683,21 +687,47 @@ export default function BossPage() {
   // Agent stream hook
   const streamState = useAgentStream(activeJobId);
 
-  // When stream completes, add synthesis as a message
+  // When stream completes, add synthesis as a message and re-sync from server
   useEffect(() => {
     if (streamState.isComplete && streamState.synthesisText && activeJobId) {
+      const firstImage = streamState.agentImages.length > 0 ? streamState.agentImages[0] : null;
       const synthesisMsg: Message = {
         id: genId(),
         role: "assistant",
         content: streamState.synthesisText,
         timestamp: new Date(),
         tokenCount: streamState.totalTokens,
+        type: firstImage ? "image" : undefined,
+        imageUrl: firstImage?.imageUrl,
       };
       setMessages((prev) => [...prev, synthesisMsg]);
       setActiveJobId(null);
       setIsLoading(false);
+
+      // Re-fetch messages from server so local state matches DB
+      // This ensures messages persist across navigation / page reload
+      if (serverConvId) {
+        fetch(`/api/conversations/${serverConvId}/messages`)
+          .then((r) => (r.ok ? r.json() : []))
+          .then((rawMsgs: Array<{ id: string; role: string; content: string; tokenCount: number | null; model: string | null; type: string | null; imageUrl: string | null; createdAt: number }>) => {
+            if (rawMsgs.length === 0) return;
+            const serverMessages: Message[] = rawMsgs
+              .filter((m) => m.role === "user" || m.role === "assistant")
+              .map((m) => ({
+                id: m.id,
+                role: m.role as "user" | "assistant",
+                content: m.content,
+                timestamp: new Date(m.createdAt),
+                tokenCount: m.tokenCount ?? undefined,
+                type: (m.type as "text" | "image") || undefined,
+                imageUrl: m.imageUrl || undefined,
+              }));
+            setMessages(serverMessages);
+          })
+          .catch(() => {});
+      }
     }
-  }, [streamState.isComplete, streamState.synthesisText, activeJobId, streamState.totalTokens]);
+  }, [streamState.isComplete, streamState.synthesisText, activeJobId, streamState.totalTokens, serverConvId]);
 
   // Handle stream errors
   useEffect(() => {
@@ -797,12 +827,35 @@ export default function BossPage() {
 
   const loadConversation = (conv: Conversation) => {
     setActiveId(conv.id);
+    // Load local messages immediately for responsiveness
     setMessages(conv.messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })));
     setError(null);
     setActiveJobId(null);
     setServerConvId(conv.serverId || null);
     if (isMobile) setSidebarOpen(false);
     setTimeout(() => textareaRef.current?.focus(), 50);
+
+    // Then refresh from server to pick up any messages missing from local state
+    if (conv.serverId) {
+      fetch(`/api/conversations/${conv.serverId}/messages`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((rawMsgs: Array<{ id: string; role: string; content: string; tokenCount: number | null; model: string | null; type: string | null; imageUrl: string | null; createdAt: number }>) => {
+          if (rawMsgs.length === 0) return;
+          const serverMessages: Message[] = rawMsgs
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              timestamp: new Date(m.createdAt),
+              tokenCount: m.tokenCount ?? undefined,
+              type: (m.type as "text" | "image") || undefined,
+              imageUrl: m.imageUrl || undefined,
+            }));
+          setMessages(serverMessages);
+        })
+        .catch(() => {});
+    }
   };
   // Check for running jobs on page load / conversation switch
   useEffect(() => {

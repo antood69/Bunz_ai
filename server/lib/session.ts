@@ -1,29 +1,39 @@
 import session from "express-session";
-import { RedisStore } from "connect-redis";
-import { redis } from "./redis";
+import createMemoryStore from "memorystore";
 
 /**
- * Express session middleware backed by Redis.
- * Survives server restarts and scales across processes.
+ * Express session middleware.
+ * Uses Redis in production, in-memory store for local development.
  */
-export function createRedisSessionMiddleware() {
-  const store = new RedisStore({
-    client: redis,
-    prefix: "bunz:sess:",
-    ttl: 30 * 24 * 60 * 60, // 30 days in seconds
-  });
+export async function createRedisSessionMiddleware() {
+  const cookieOpts = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+  };
 
-  return session({
-    store,
+  const sessionOpts: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || "bunz-session-secret-change-me",
     resave: false,
     saveUninitialized: false,
     name: "bunz.sid",
-    cookie: {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    },
-  });
+    cookie: cookieOpts,
+  };
+
+  if (process.env.REDIS_URL || process.env.NODE_ENV === "production") {
+    const { RedisStore } = await import("connect-redis");
+    const { redis } = await import("./redis.js");
+    sessionOpts.store = new RedisStore({
+      client: redis,
+      prefix: "bunz:sess:",
+      ttl: 30 * 24 * 60 * 60,
+    });
+  } else {
+    const MemoryStore = createMemoryStore(session);
+    sessionOpts.store = new MemoryStore({ checkPeriod: 86400000 });
+    console.log("[session] Using in-memory session store (no Redis)");
+  }
+
+  return session(sessionOpts);
 }

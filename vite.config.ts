@@ -18,6 +18,11 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    proxy: {
+      "/api": "http://localhost:3000",
+      "/sse": "http://localhost:3000",
+      "/generated": "http://localhost:3000",
+    },
     fs: {
       strict: true,
       deny: ["**/.*"],

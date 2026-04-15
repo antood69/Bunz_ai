@@ -247,6 +247,61 @@ sqlite.exec(`
     completed_at TEXT,
     created_at TEXT NOT NULL DEFAULT ''
   );
+  CREATE TABLE IF NOT EXISTS bots (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    icon TEXT DEFAULT 'Bot',
+    category TEXT DEFAULT 'general',
+    brain_prompt TEXT NOT NULL,
+    brain_model TEXT DEFAULT 'gpt-5.4',
+    memory TEXT DEFAULT '{}',
+    triggers TEXT DEFAULT '[]',
+    tools TEXT DEFAULT '[]',
+    rules TEXT DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'stopped',
+    last_active_at INTEGER,
+    total_runs INTEGER DEFAULT 0,
+    total_tokens INTEGER DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS bot_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bot_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    data TEXT,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS pipelines (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    trigger_type TEXT NOT NULL DEFAULT 'manual',
+    trigger_config TEXT,
+    steps TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'active',
+    last_run_at INTEGER,
+    run_count INTEGER DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS pipeline_runs (
+    id TEXT PRIMARY KEY,
+    pipeline_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    steps_completed INTEGER DEFAULT 0,
+    total_steps INTEGER DEFAULT 0,
+    output TEXT,
+    error TEXT,
+    total_tokens INTEGER DEFAULT 0,
+    started_at INTEGER NOT NULL,
+    completed_at INTEGER
+  );
   CREATE TABLE IF NOT EXISTS agent_executions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id INTEGER NOT NULL,
@@ -339,6 +394,7 @@ sqlite.exec(`
     glass_opacity REAL DEFAULT 0.08,
     sidebar_position TEXT DEFAULT 'left',
     compact_mode INTEGER DEFAULT 0,
+    default_repo TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   );
@@ -612,6 +668,8 @@ sqlite.exec(`
     content TEXT NOT NULL,
     token_count INTEGER DEFAULT 0,
     model TEXT,
+    type TEXT DEFAULT 'text',
+    image_url TEXT,
     created_at INTEGER NOT NULL
   );
 
@@ -770,7 +828,7 @@ try {
 
 // Auto-seed admin accounts
 try {
-  const bcrypt = require("bcryptjs");
+  const { default: bcrypt } = await import("bcryptjs");
   const seedAccounts = [
     { email: "test@bunz.io", password: "TestBunz123!", displayName: "Test Admin" },
     { email: "abigail.lowry@uky.edu", password: "lesboqueen", displayName: "Abigail Lowry" },
@@ -817,6 +875,13 @@ try {
 const safeAlter = (sql: string) => {
   try { sqlite.exec(sql); } catch (_) { /* column already exists */ }
 };
+
+// Boss messages image support
+safeAlter("ALTER TABLE boss_messages ADD COLUMN type TEXT DEFAULT 'text'");
+safeAlter("ALTER TABLE boss_messages ADD COLUMN image_url TEXT");
+
+// Default repo for Coder self-improvement loop
+safeAlter("ALTER TABLE user_preferences ADD COLUMN default_repo TEXT");
 
 // Marketplace listing type columns
 safeAlter("ALTER TABLE marketplace_listings ADD COLUMN listing_type TEXT DEFAULT 'service'");
@@ -1160,6 +1225,8 @@ export interface UserPreferences {
   glassOpacity: number;
   sidebarPosition: string;
   compactMode: number;
+  defaultRepo: string | null;
+  tradingDisclaimerAck?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -2016,6 +2083,7 @@ export class DatabaseStorage implements IStorage {
     glassOpacity: 0.08,
     sidebarPosition: 'left',
     compactMode: 0,
+    defaultRepo: null,
   };
 
   async getUserPreferences(userId: number): Promise<UserPreferences> {
@@ -2041,6 +2109,7 @@ export class DatabaseStorage implements IStorage {
       glassOpacity: row.glass_opacity,
       sidebarPosition: row.sidebar_position,
       compactMode: row.compact_mode,
+      defaultRepo: row.default_repo || null,
       tradingDisclaimerAck: row.trading_disclaimer_ack ?? 0,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -2052,8 +2121,8 @@ export class DatabaseStorage implements IStorage {
     const existing = sqlite.prepare('SELECT id FROM user_preferences WHERE user_id = ?').get(userId);
     if (!existing) {
       sqlite.prepare(`
-        INSERT INTO user_preferences (user_id, wallpaper_url, wallpaper_type, wallpaper_tint, accent_color, glass_blur, glass_opacity, sidebar_position, compact_mode, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO user_preferences (user_id, wallpaper_url, wallpaper_type, wallpaper_tint, accent_color, glass_blur, glass_opacity, sidebar_position, compact_mode, default_repo, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         userId,
         data.wallpaperUrl ?? null,
@@ -2064,6 +2133,7 @@ export class DatabaseStorage implements IStorage {
         data.glassOpacity ?? 0.08,
         data.sidebarPosition ?? 'left',
         data.compactMode ?? 0,
+        data.defaultRepo ?? null,
         now
       );
     } else {
@@ -2077,6 +2147,7 @@ export class DatabaseStorage implements IStorage {
       if (data.glassOpacity !== undefined) { fields.push('glass_opacity = ?'); values.push(data.glassOpacity); }
       if (data.sidebarPosition !== undefined) { fields.push('sidebar_position = ?'); values.push(data.sidebarPosition); }
       if (data.compactMode !== undefined) { fields.push('compact_mode = ?'); values.push(data.compactMode); }
+      if (data.defaultRepo !== undefined) { fields.push('default_repo = ?'); values.push(data.defaultRepo); }
       if ((data as any).tradingDisclaimerAck !== undefined) { fields.push('trading_disclaimer_ack = ?'); values.push((data as any).tradingDisclaimerAck); }
       if (fields.length > 0) {
         fields.push('updated_at = ?');
@@ -3338,8 +3409,7 @@ export class DatabaseStorage implements IStorage {
       sqlite.prepare('UPDATE user_dashboard_layouts SET layout = ?, updated_at = ? WHERE user_id = ?').run(JSON.stringify(layout), now, userId);
       return { id: existing.id, userId, layout, updatedAt: now };
     }
-    const { v4: uuidv4 } = require("uuid");
-    const id = uuidv4();
+    const id = crypto.randomUUID();
     sqlite.prepare('INSERT INTO user_dashboard_layouts (id, user_id, layout, updated_at) VALUES (?, ?, ?, ?)').run(id, userId, JSON.stringify(layout), now);
     return { id, userId, layout, updatedAt: now };
   }
@@ -3388,8 +3458,9 @@ export class DatabaseStorage implements IStorage {
     startOfPrevMonth.setMonth(startOfPrevMonth.getMonth() - 1);
     const startOfPrevMonthTs = startOfPrevMonth.getTime();
 
-    // Active agents (running jobs)
-    const activeAgents = (sqlite.prepare("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND status = 'running'").get(userId) as any)?.c || 0;
+    // Active agents: count currently running OR recently completed (last 30s) so fast jobs are visible
+    const recentWindow = Date.now() - 30000;
+    const activeAgents = (sqlite.prepare("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND (status = 'running' OR (status = 'complete' AND completed_at > ?))").get(userId, recentWindow) as any)?.c || 0;
     const prevActiveAgents = (sqlite.prepare("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND status = 'complete' AND completed_at > ? AND completed_at <= ?").get(userId, fourteenDaysAgo, sevenDaysAgo) as any)?.c || 0;
 
     // Tokens used (7d) - from token_usage table (authoritative record for all AI calls)
@@ -3467,6 +3538,27 @@ export class DatabaseStorage implements IStorage {
     return rows.map(r => ({ model: r.model || 'unknown', tokens: r.tokens || 0 }));
   }
 
+  // ── Department Performance Stats ──────────────────────────────────────────
+  getDepartmentStats(userId: number): Array<{ department: string; total: number; complete: number; failed: number; avgDurationMs: number; totalTokens: number }> {
+    const rows = sqlite.prepare(`
+      SELECT type as department,
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END) as complete,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+        AVG(CASE WHEN duration_ms > 0 THEN duration_ms ELSE NULL END) as avg_duration_ms,
+        SUM(COALESCE(token_count, 0)) as total_tokens
+      FROM agent_jobs WHERE user_id = ? GROUP BY type ORDER BY total DESC
+    `).all(userId) as any[];
+    return rows.map(r => ({
+      department: r.department,
+      total: r.total || 0,
+      complete: r.complete || 0,
+      failed: r.failed || 0,
+      avgDurationMs: Math.round(r.avg_duration_ms || 0),
+      totalTokens: r.total_tokens || 0,
+    }));
+  }
+
   // ── Phase 4: Connectors Hub ────────────────────────────────────────────────
 
   async getConnectorsByUser(userId: number): Promise<Connector[]> {
@@ -3513,6 +3605,134 @@ export class DatabaseStorage implements IStorage {
 
   async getWebhookEvents(connectorId: number, limit = 100): Promise<WebhookEvent[]> {
     return db.select().from(webhookEvents).where(eq(webhookEvents.connectorId, connectorId)).orderBy(desc(webhookEvents.id)).limit(limit).all();
+  }
+  // ── Bots ───────────────────────────────────────────────────────────────────
+  getBotsByUser(userId: number): any[] {
+    return (sqlite.prepare('SELECT * FROM bots WHERE user_id = ? ORDER BY updated_at DESC').all(userId) as any[]).map(r => ({
+      ...r, memory: JSON.parse(r.memory || '{}'), triggers: JSON.parse(r.triggers || '[]'),
+      tools: JSON.parse(r.tools || '[]'), rules: JSON.parse(r.rules || '[]'),
+    }));
+  }
+
+  getBot(id: string): any | null {
+    const r = sqlite.prepare('SELECT * FROM bots WHERE id = ?').get(id) as any;
+    if (!r) return null;
+    return { ...r, memory: JSON.parse(r.memory || '{}'), triggers: JSON.parse(r.triggers || '[]'),
+      tools: JSON.parse(r.tools || '[]'), rules: JSON.parse(r.rules || '[]') };
+  }
+
+  createBot(data: { id: string; userId: number; name: string; description?: string; brainPrompt: string; brainModel?: string; category?: string; triggers?: any[]; tools?: any[]; rules?: any[] }): any {
+    const now = Date.now();
+    sqlite.prepare('INSERT INTO bots (id, user_id, name, description, brain_prompt, brain_model, category, triggers, tools, rules, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+      data.id, data.userId, data.name, data.description || null, data.brainPrompt, data.brainModel || 'gpt-5.4',
+      data.category || 'general', JSON.stringify(data.triggers || []), JSON.stringify(data.tools || []),
+      JSON.stringify(data.rules || []), 'stopped', now, now
+    );
+    return this.getBot(data.id);
+  }
+
+  updateBot(id: string, data: any): any {
+    const fields: string[] = []; const values: any[] = [];
+    if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
+    if (data.description !== undefined) { fields.push('description = ?'); values.push(data.description); }
+    if (data.brainPrompt !== undefined) { fields.push('brain_prompt = ?'); values.push(data.brainPrompt); }
+    if (data.brainModel !== undefined) { fields.push('brain_model = ?'); values.push(data.brainModel); }
+    if (data.category !== undefined) { fields.push('category = ?'); values.push(data.category); }
+    if (data.memory !== undefined) { fields.push('memory = ?'); values.push(JSON.stringify(data.memory)); }
+    if (data.triggers !== undefined) { fields.push('triggers = ?'); values.push(JSON.stringify(data.triggers)); }
+    if (data.tools !== undefined) { fields.push('tools = ?'); values.push(JSON.stringify(data.tools)); }
+    if (data.rules !== undefined) { fields.push('rules = ?'); values.push(JSON.stringify(data.rules)); }
+    if (data.status !== undefined) { fields.push('status = ?'); values.push(data.status); }
+    if (data.lastActiveAt !== undefined) { fields.push('last_active_at = ?'); values.push(data.lastActiveAt); }
+    if (data.totalRuns !== undefined) { fields.push('total_runs = ?'); values.push(data.totalRuns); }
+    if (data.totalTokens !== undefined) { fields.push('total_tokens = ?'); values.push(data.totalTokens); }
+    fields.push('updated_at = ?'); values.push(Date.now()); values.push(id);
+    sqlite.prepare(`UPDATE bots SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    return this.getBot(id);
+  }
+
+  deleteBot(id: string): void {
+    sqlite.prepare('DELETE FROM bots WHERE id = ?').run(id);
+    sqlite.prepare('DELETE FROM bot_logs WHERE bot_id = ?').run(id);
+  }
+
+  addBotLog(botId: string, type: string, message: string, data?: any): void {
+    sqlite.prepare('INSERT INTO bot_logs (bot_id, type, message, data, created_at) VALUES (?, ?, ?, ?, ?)').run(
+      botId, type, message, data ? JSON.stringify(data) : null, Date.now()
+    );
+  }
+
+  getBotLogs(botId: string, limit = 50): any[] {
+    return (sqlite.prepare('SELECT * FROM bot_logs WHERE bot_id = ? ORDER BY created_at DESC LIMIT ?').all(botId, limit) as any[]).map(r => ({
+      ...r, data: r.data ? JSON.parse(r.data) : null,
+    }));
+  }
+
+  // ── Pipelines ──────────────────────────────────────────────────────────────
+  getPipelinesByUser(userId: number): any[] {
+    return (sqlite.prepare('SELECT * FROM pipelines WHERE user_id = ? ORDER BY updated_at DESC').all(userId) as any[]).map(r => ({
+      ...r, steps: JSON.parse(r.steps || '[]'), triggerConfig: r.trigger_config ? JSON.parse(r.trigger_config) : null,
+    }));
+  }
+
+  getPipeline(id: string): any | null {
+    const r = sqlite.prepare('SELECT * FROM pipelines WHERE id = ?').get(id) as any;
+    if (!r) return null;
+    return { ...r, steps: JSON.parse(r.steps || '[]'), triggerConfig: r.trigger_config ? JSON.parse(r.trigger_config) : null };
+  }
+
+  createPipeline(data: { id: string; userId: number; name: string; description?: string; triggerType: string; triggerConfig?: any; steps: any[] }): any {
+    const now = Date.now();
+    sqlite.prepare('INSERT INTO pipelines (id, user_id, name, description, trigger_type, trigger_config, steps, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+      data.id, data.userId, data.name, data.description || null, data.triggerType, data.triggerConfig ? JSON.stringify(data.triggerConfig) : null, JSON.stringify(data.steps), 'active', now, now
+    );
+    return this.getPipeline(data.id);
+  }
+
+  updatePipeline(id: string, data: any): any {
+    const fields: string[] = [];
+    const values: any[] = [];
+    if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
+    if (data.description !== undefined) { fields.push('description = ?'); values.push(data.description); }
+    if (data.triggerType !== undefined) { fields.push('trigger_type = ?'); values.push(data.triggerType); }
+    if (data.triggerConfig !== undefined) { fields.push('trigger_config = ?'); values.push(JSON.stringify(data.triggerConfig)); }
+    if (data.steps !== undefined) { fields.push('steps = ?'); values.push(JSON.stringify(data.steps)); }
+    if (data.status !== undefined) { fields.push('status = ?'); values.push(data.status); }
+    if (data.lastRunAt !== undefined) { fields.push('last_run_at = ?'); values.push(data.lastRunAt); }
+    if (data.runCount !== undefined) { fields.push('run_count = ?'); values.push(data.runCount); }
+    fields.push('updated_at = ?'); values.push(Date.now());
+    values.push(id);
+    sqlite.prepare(`UPDATE pipelines SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    return this.getPipeline(id);
+  }
+
+  deletePipeline(id: string): void {
+    sqlite.prepare('DELETE FROM pipelines WHERE id = ?').run(id);
+    sqlite.prepare('DELETE FROM pipeline_runs WHERE pipeline_id = ?').run(id);
+  }
+
+  createPipelineRun(data: { id: string; pipelineId: string; userId: number; totalSteps: number }): any {
+    sqlite.prepare('INSERT INTO pipeline_runs (id, pipeline_id, user_id, status, steps_completed, total_steps, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+      data.id, data.pipelineId, data.userId, 'running', 0, data.totalSteps, Date.now()
+    );
+    return sqlite.prepare('SELECT * FROM pipeline_runs WHERE id = ?').get(data.id);
+  }
+
+  updatePipelineRun(id: string, data: any): void {
+    const fields: string[] = [];
+    const values: any[] = [];
+    if (data.status !== undefined) { fields.push('status = ?'); values.push(data.status); }
+    if (data.stepsCompleted !== undefined) { fields.push('steps_completed = ?'); values.push(data.stepsCompleted); }
+    if (data.output !== undefined) { fields.push('output = ?'); values.push(data.output); }
+    if (data.error !== undefined) { fields.push('error = ?'); values.push(data.error); }
+    if (data.totalTokens !== undefined) { fields.push('total_tokens = ?'); values.push(data.totalTokens); }
+    if (data.completedAt !== undefined) { fields.push('completed_at = ?'); values.push(data.completedAt); }
+    values.push(id);
+    if (fields.length > 0) sqlite.prepare(`UPDATE pipeline_runs SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  }
+
+  getPipelineRuns(pipelineId: string, limit = 20): any[] {
+    return sqlite.prepare('SELECT * FROM pipeline_runs WHERE pipeline_id = ? ORDER BY started_at DESC LIMIT ?').all(pipelineId, limit) as any[];
   }
 }
 

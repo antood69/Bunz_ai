@@ -747,6 +747,21 @@ function AIPreferencesTab() {
     },
   });
 
+  // Fetch user preferences (for defaultRepo)
+  const { data: userPrefs } = useQuery<{ defaultRepo: string | null }>({
+    queryKey: ["/api/preferences"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/preferences", { credentials: "include" });
+        return res.ok ? res.json() : { defaultRepo: null };
+      } catch { return { defaultRepo: null }; }
+    },
+  });
+
+  useEffect(() => {
+    if (userPrefs?.defaultRepo) setDefaultRepo(userPrefs.defaultRepo);
+  }, [userPrefs]);
+
   // Fetch agent defaults for placeholder prompts
   const { data: agentDefaults } = useQuery<AgentDefaults>({
     queryKey: ["agent-prompt-defaults"],
@@ -776,6 +791,7 @@ function AIPreferencesTab() {
   const [defaultModel, setDefaultModel] = useState("gpt-5.4-mini");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [responseStyle, setResponseStyle] = useState("balanced");
+  const [defaultRepo, setDefaultRepo] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
 
   // Per-agent config state
@@ -868,6 +884,48 @@ function AIPreferencesTab() {
           </select>
           <p className="text-[11px] text-muted-foreground">
             This model will be used by default unless overridden per conversation.
+          </p>
+        </div>
+      </section>
+
+      {/* Default Repository */}
+      <section className="bg-card border border-border rounded-xl p-5">
+        <SectionHeader icon={Plug} title="Default Repository" description="The Coder department will use this repo when none is specified" />
+        <div className="space-y-2">
+          <Label htmlFor="default-repo" className="text-xs text-muted-foreground">Repository (owner/repo)</Label>
+          <div className="flex gap-2">
+            <Input
+              id="default-repo"
+              placeholder="e.g. antood69/bunz"
+              value={defaultRepo}
+              onChange={(e) => { setDefaultRepo(e.target.value); setHasChanges(true); }}
+              className="flex-1"
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!defaultRepo.includes("/")}
+              onClick={async () => {
+                try {
+                  await fetch("/api/preferences", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ defaultRepo: defaultRepo || null }),
+                  });
+                  queryClient.invalidateQueries({ queryKey: ["/api/preferences"] });
+                  toast({ title: "Default repository saved" });
+                } catch (err: any) {
+                  toast({ title: "Error", description: err.message, variant: "destructive" });
+                }
+              }}
+            >
+              <Save className="w-3.5 h-3.5 mr-1" />
+              Save
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            When you ask the Coder to make changes without specifying a repo, it will target this one. Requires GitHub to be connected.
           </p>
         </div>
       </section>

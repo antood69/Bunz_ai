@@ -6,6 +6,8 @@ import { runAgentChat } from "./ai";
 import { registerStripeRoutes } from "./stripe";
 import { createAuthRouter, createOwnerRouter, authMiddleware, ownerOnly, collectIntelligence } from "./auth";
 import { createConnectorsRouter, createWebhookInboundRouter } from "./connectors";
+import { createPipelineRouter } from "./pipelines";
+import { createBotRouter } from "./bots";
 import githubRouter from "./routes/github";
 import cookieParser from "cookie-parser";
 import { handleBossChat, cancelConversation } from "./boss";
@@ -35,8 +37,65 @@ export async function registerRoutes(
   app.use(authMiddleware);
   app.use("/api/owner", createOwnerRouter());
   app.use("/api/connectors", createConnectorsRouter());
+  app.use("/api/pipelines", createPipelineRouter());
+  app.use("/api/bots", createBotRouter());
   app.use("/api/webhooks/inbound", createWebhookInboundRouter());
   app.use("/api/github", githubRouter);
+
+  // ── Local File System Access (for Editor) ───────────────────────────────
+  app.get("/api/local/tree", async (req, res) => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const rootPath = path.resolve((req.query.root as string) || process.cwd());
+    if (!fs.existsSync(rootPath)) return res.status(404).json({ error: "Path not found" });
+
+    const ignored = new Set(["node_modules", ".git", "dist", ".tmp", ".next", "__pycache__", ".venv", "venv"]);
+    const walk = (dir: string, prefix = ""): Array<{ path: string; type: "blob" | "tree" }> => {
+      const entries: Array<{ path: string; type: "blob" | "tree" }> = [];
+      try {
+        const items = fs.readdirSync(dir, { withFileTypes: true });
+        for (const item of items) {
+          if (item.name.startsWith(".") && item.name !== ".env.example") continue;
+          if (ignored.has(item.name)) continue;
+          const rel = prefix ? `${prefix}/${item.name}` : item.name;
+          if (item.isDirectory()) {
+            entries.push({ path: rel, type: "tree" });
+            entries.push(...walk(path.join(dir, item.name), rel));
+          } else {
+            entries.push({ path: rel, type: "blob" });
+          }
+        }
+      } catch {}
+      return entries;
+    };
+    res.json({ tree: walk(rootPath), root: rootPath });
+  });
+
+  app.get("/api/local/file", async (req, res) => {
+    const fs = await import("fs");
+    const pathMod = await import("path");
+    const filePath = pathMod.resolve(req.query.path as string || "");
+    if (!filePath) return res.status(400).json({ error: "path required" });
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: `Not found: ${filePath}` });
+    try {
+      const content = fs.readFileSync(filePath, "utf-8");
+      res.json({ content, path: filePath });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/local/file", async (req, res) => {
+    const { path: rawPath, content } = req.body;
+    if (!rawPath || content === undefined) return res.status(400).json({ error: "path and content required" });
+    const fs = await import("fs");
+    const pathMod = await import("path");
+    const filePath = pathMod.resolve(rawPath);
+    const dir = pathMod.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, content, "utf-8");
+    res.json({ ok: true, path: filePath });
+  });
 
   // === WORKFLOWS ===
   app.get("/api/workflows", async (_req, res) => {
@@ -896,6 +955,34 @@ export async function registerRoutes(
     const userId = req.user?.id || 1;
     const data = storage.getModelUsageBreakdown(userId);
     res.json(data);
+  });
+
+  // ── Department Performance Stats ────────────────────────────────────────
+  app.get("/api/dashboard/department-stats", async (req, res) => {
+    const userId = req.user?.id || 1;
+    const data = storage.getDepartmentStats(userId);
+    res.json(data);
+  });
+
+  // ── Cost Estimation ───────────────────────────────────────────────────────
+  app.get("/api/dashboard/cost-estimate", async (req, res) => {
+    const userId = req.user?.id || 1;
+    const modelUsage = storage.getModelUsageBreakdown(userId);
+    // Approximate cost per 1M tokens by model family
+    const COST_PER_M: Record<string, number> = {
+      "claude-opus": 75, "claude-sonnet": 15, "claude-haiku": 1.25,
+      "gpt-5.4": 10, "gpt-5.4-mini": 0.6, "gpt-4.1": 8, "gpt-4.1-mini": 1.6,
+      "sonar-pro": 3, "sonar": 1, "gpt-image-1": 20,
+    };
+    let totalCost = 0;
+    const breakdown = modelUsage.map(m => {
+      const key = Object.keys(COST_PER_M).find(k => m.model.includes(k)) || "";
+      const rate = COST_PER_M[key] || 5; // default $5/M
+      const cost = (m.tokens / 1_000_000) * rate;
+      totalCost += cost;
+      return { model: m.model, tokens: m.tokens, costUsd: Math.round(cost * 100) / 100 };
+    });
+    res.json({ totalCostUsd: Math.round(totalCost * 100) / 100, breakdown });
   });
 
   // ── Dashboard Layout Persistence ────────────────────────────────────────

@@ -81,6 +81,7 @@ const API_KEY_CONNECTORS: ConnectorTemplate[] = [
   { provider: "github", name: "GitHub", description: "Repos, issues, pull requests, and code", type: "api_key", category: "Developer Tools", icon: "G", fields: [{ key: "apiKey", label: "Personal Access Token", placeholder: "ghp_..." }] },
   { provider: "slack", name: "Slack", description: "Send messages and manage channels", type: "api_key", category: "Communication", icon: "S", fields: [{ key: "apiKey", label: "Bot Token", placeholder: "xoxb-..." }] },
   { provider: "stripe", name: "Stripe", description: "Payments, customers, and invoices", type: "api_key", category: "Payments", icon: "$", fields: [{ key: "apiKey", label: "Secret Key", placeholder: "sk_..." }] },
+  { provider: "obsidian", name: "Obsidian Vault", description: "Read and search notes in your local Obsidian vault", type: "api_key", category: "Knowledge", icon: "◆", fields: [{ key: "vaultPath", label: "Vault Path", placeholder: "C:\\Users\\you\\Documents\\MyVault" }] },
 ];
 
 const OAUTH2_CONNECTORS: ConnectorTemplate[] = [
@@ -595,11 +596,12 @@ function ApiKeyModal({ open, template, onClose, onSuccess }: {
     setTestResult(null);
     try {
       // Create connector, test it, then either keep or delete based on result
+      const fieldKey = template!.fields?.[0]?.key || "apiKey";
       const res = await apiRequest("POST", "/api/connectors", {
         type: "api_key",
         provider: template!.provider,
         name: template!.name,
-        config: { apiKey: value.trim() },
+        config: { [fieldKey]: value.trim() },
       });
       const connector = await res.json();
       const testRes = await apiRequest("POST", `/api/connectors/${connector.id}/test`);
@@ -625,11 +627,12 @@ function ApiKeyModal({ open, template, onClose, onSuccess }: {
     if (!value.trim()) return;
     setSaving(true);
     try {
+      const fieldKey = template!.fields?.[0]?.key || "apiKey";
       await apiRequest("POST", "/api/connectors", {
         type: "api_key",
         provider: template!.provider,
         name: template!.name,
-        config: { apiKey: value.trim() },
+        config: { [fieldKey]: value.trim() },
       });
       toast({ title: `${template!.name} connected!` });
       onSuccess();

@@ -46,6 +46,7 @@ export async function runAutonomous(
   goal: string,
   level: IntelligenceLevel,
   signal?: AbortSignal,
+  github?: { token: string; repo: string },
 ): Promise<AutonomousPlan> {
   const bossModel = INTELLIGENCE_TIERS[level].bossModel;
   const plan: AutonomousPlan = {
@@ -127,6 +128,7 @@ export async function runAutonomous(
         const result: DepartmentResult = await executeDepartment(
           parentJobId, { department: step.department, task: taskWithContext },
           level, estimateComplexity(taskWithContext), signal,
+          step.department === "coder" ? github : undefined,
         );
 
         step.status = "complete";

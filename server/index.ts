@@ -2,6 +2,7 @@ import { config as dotenvConfig } from "dotenv";
 dotenvConfig();
 
 import express, { type Request, Response, NextFunction } from "express";
+import path from "path";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -25,9 +26,6 @@ app.use(
   }),
 );
 app.use(express.urlencoded({ extended: false }));
-
-// Redis-backed session store (survives restarts, scales across processes)
-app.use(createRedisSessionMiddleware());
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -65,6 +63,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Session store (Redis in production, in-memory for local dev)
+  app.use(await createRedisSessionMiddleware());
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
@@ -75,10 +76,16 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  serveStatic(app);
+  // Always serve generated images (Artist dept saves them here)
+  app.use("/generated", express.static(path.join(process.cwd(), "dist", "public", "generated")));
+
+  // In development, skip static serving — use Vite dev server for the client
+  if (process.env.NODE_ENV !== "development") {
+    serveStatic(app);
+  }
 
   const port = parseInt(process.env.PORT || "3000", 10);
-  httpServer.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
+  httpServer.listen({ port, host: "0.0.0.0" }, () => {
     log(`serving on port ${port}`);
   });
 })();

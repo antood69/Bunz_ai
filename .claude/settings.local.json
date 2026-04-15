@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(where cl.exe)",
+      "Bash(npm list *)",
+      "Bash(npm config *)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(npx cross-env *)",
+      "Bash(npm ls *)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //PID 29508 //F)",
+      "Bash(npx vite *)",
+      "Bash(taskkill //PID 35900 //F)",
+      "Bash(grep -rn \"status.*=.*'running'\" /c/Users/reede/OneDrive/Documents/bunz-1/server/*.ts)",
+      "Bash(sqlite3 data.db \".schema activity_events\")",
+      "Bash(grep -rn \"createAgentJob\\\\|createJob\" /c/Users/reede/OneDrive/Documents/bunz-1/server/*.ts)",
+      "Bash(taskkill //PID 35036 //F)"
+    ]
+  }
+}

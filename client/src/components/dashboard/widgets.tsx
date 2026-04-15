@@ -508,16 +508,6 @@ export function NotificationFeedWidget() {
   );
 }
 
-// ── 12. Upcoming Scheduled ───────────────────────────────────────────────
-export function UpcomingScheduledWidget() {
-  return (
-    <div className="h-full">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Upcoming Scheduled</p>
-      <EmptyState message="No scheduled workflows. Create a workflow with a cron trigger to see upcoming runs." />
-    </div>
-  );
-}
-
 // ── 13. Active Workflows Widget (NEW) ────────────────────────────────────
 export function ActiveWorkflowsWidget() {
   const [, setLocation] = useLocation();
@@ -809,34 +799,100 @@ export interface WidgetDefinition {
   props?: Record<string, any>;
 }
 
+// ── Department Performance Widget ─────────────────────────────────────────
+export function DepartmentPerformanceWidget() {
+  const { data = [] } = useQuery<Array<{ department: string; total: number; complete: number; failed: number; avgDurationMs: number; totalTokens: number }>>({
+    queryKey: ["/api/dashboard/department-stats"],
+    refetchInterval: 10000,
+  });
+
+  if (data.length === 0) return <EmptyState message="No department data yet. Run tasks to see performance." />;
+
+  return (
+    <div className="h-full">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Department Performance</p>
+      <div className="space-y-2.5">
+        {data.map((d) => {
+          const rate = d.total > 0 ? Math.round((d.complete / d.total) * 100) : 0;
+          const avgSec = d.avgDurationMs > 0 ? (d.avgDurationMs / 1000).toFixed(1) : "—";
+          const tokens = d.totalTokens >= 1000 ? `${(d.totalTokens / 1000).toFixed(1)}K` : String(d.totalTokens);
+          return (
+            <div key={d.department} className="flex items-center gap-3">
+              <div className="w-16 text-xs font-medium text-foreground capitalize truncate">{d.department}</div>
+              <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${rate}%` }}
+                />
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground flex-shrink-0 w-32 justify-end">
+                <span className={rate >= 80 ? "text-emerald-400" : rate >= 50 ? "text-yellow-400" : "text-red-400"}>{rate}%</span>
+                <span>{d.total} runs</span>
+                <span>{avgSec}s</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Cost Estimation Widget ───────────────────────────────────────────────
+export function CostEstimateWidget() {
+  const { data } = useQuery<{ totalCostUsd: number; breakdown: Array<{ model: string; tokens: number; costUsd: number }> }>({
+    queryKey: ["/api/dashboard/cost-estimate"],
+    refetchInterval: 30000,
+  });
+
+  if (!data) return <EmptyState message="No cost data available yet." />;
+
+  return (
+    <div className="h-full">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Estimated Cost</p>
+      <p className="text-2xl font-bold text-foreground mb-3">${data.totalCostUsd.toFixed(2)}</p>
+      <div className="space-y-1.5">
+        {data.breakdown.filter(b => b.costUsd > 0).slice(0, 6).map((b) => (
+          <div key={b.model} className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground truncate max-w-[140px]">{b.model}</span>
+            <span className="text-foreground font-medium">${b.costUsd.toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export const WIDGET_REGISTRY: WidgetDefinition[] = [
   { id: "kpi-agents", name: "Active Agents", description: "Shows count of currently running agents with period delta \u2014 click to manage", category: "stats", icon: Bot, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: ClickableAgentsKPI },
   { id: "kpi-tokens", name: "Tokens Used (Live)", description: "7-day token consumption with real-time updates", category: "stats", icon: Coins, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: KPICardWidget, props: { variant: "tokens" } },
   { id: "kpi-workflows", name: "Tasks Run", description: "Department tasks executed (30d) - click to view history", category: "stats", icon: Zap, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: ClickableTasksKPI },
   { id: "kpi-revenue", name: "Conversations", description: "Boss conversations this month", category: "stats", icon: DollarSign, defaultW: 3, defaultH: 2, minW: 2, minH: 2, component: KPICardWidget, props: { variant: "revenue" } },
-  { id: "active-workflows", name: "Active Workflows", description: "Live view of running workflows with inspect button", category: "workflows", icon: Play, defaultW: 6, defaultH: 5, minW: 4, minH: 3, component: ActiveWorkflowsWidget },
-  { id: "inactive-workflows", name: "Inactive Workflows", description: "Stopped workflows with run and edit buttons", category: "workflows", icon: Clock, defaultW: 6, defaultH: 5, minW: 4, minH: 3, component: InactiveWorkflowsWidget },
   { id: "agent-status", name: "Agent Status", description: "Live status of all 7 agent types", category: "activity", icon: Cpu, defaultW: 3, defaultH: 4, minW: 2, minH: 3, component: AgentStatusListWidget },
   { id: "token-chart", name: "Token Usage Chart", description: "Daily token usage bar chart (7d) \u2014 live", category: "charts", icon: BarChart3, defaultW: 6, defaultH: 4, minW: 4, minH: 3, component: TokenUsageChartWidget },
   { id: "workflow-chart", name: "Workflow Run Chart", description: "Workflow execution trend line (30d)", category: "charts", icon: TrendingUp, defaultW: 6, defaultH: 4, minW: 4, minH: 3, component: WorkflowRunChartWidget },
   { id: "recent-activity", name: "Recent Activity", description: "Live feed of jobs, workflows, and events", category: "activity", icon: Activity, defaultW: 4, defaultH: 5, minW: 3, minH: 3, component: RecentActivityWidget },
   { id: "quick-actions", name: "Quick Actions", description: "Shortcut buttons for common tasks", category: "actions", icon: Zap, defaultW: 3, defaultH: 3, minW: 2, minH: 2, component: QuickActionsWidget },
-  { id: "fiverr-revenue", name: "Fiverr Revenue", description: "Revenue chart from Fiverr deliveries", category: "charts", icon: DollarSign, defaultW: 6, defaultH: 4, minW: 4, minH: 3, component: FiverrRevenueWidget },
   { id: "active-jobs", name: "Active Jobs", description: "Monitor currently running BullMQ jobs", category: "activity", icon: Loader2, defaultW: 3, defaultH: 4, minW: 2, minH: 3, component: ActiveJobsMonitorWidget },
   { id: "model-usage", name: "Model Usage", description: "Pie chart of token usage by agent type", category: "charts", icon: PieChart, defaultW: 4, defaultH: 4, minW: 3, minH: 3, component: ModelUsageBreakdownWidget },
   { id: "notifications", name: "Notifications", description: "Recent in-app notifications", category: "activity", icon: MessageSquare, defaultW: 3, defaultH: 4, minW: 2, minH: 3, component: NotificationFeedWidget },
   { id: "system-health", name: "System Health", description: "Redis, DB, and uptime status", category: "stats", icon: Server, defaultW: 3, defaultH: 4, minW: 2, minH: 3, component: SystemHealthWidget },
-  { id: "upcoming-scheduled", name: "Upcoming Scheduled", description: "Upcoming cron and scheduled workflows", category: "activity", icon: Clock, defaultW: 3, defaultH: 3, minW: 2, minH: 2, component: UpcomingScheduledWidget },
+  { id: "dept-performance", name: "Department Performance", description: "Success rate, speed, and token usage per department", category: "stats", icon: BarChart3, defaultW: 4, defaultH: 4, minW: 3, minH: 3, component: DepartmentPerformanceWidget },
+  { id: "cost-estimate", name: "Cost Estimate", description: "Estimated API cost breakdown by model", category: "stats", icon: DollarSign, defaultW: 3, defaultH: 4, minW: 2, minH: 3, component: CostEstimateWidget },
 ];
 
-// ── Default Layout (updated: no revenue KPI, includes active/inactive workflows) ──
+// ── Default Layout v2 ──────────────────────────────────────────────────────
 export const DEFAULT_LAYOUT = [
-  { i: "kpi-agents", x: 0, y: 0, w: 4, h: 2 },
-  { i: "kpi-tokens", x: 4, y: 0, w: 4, h: 2 },
-  { i: "kpi-revenue", x: 8, y: 0, w: 4, h: 2 },
-  { i: "recent-activity", x: 0, y: 2, w: 6, h: 5 },
-  { i: "token-chart", x: 6, y: 2, w: 6, h: 4 },
-  { i: "quick-actions", x: 0, y: 7, w: 4, h: 3 },
-  { i: "model-usage", x: 4, y: 7, w: 4, h: 4 },
-  { i: "system-health", x: 8, y: 7, w: 4, h: 4 },
+  // Row 1: KPIs
+  { i: "kpi-agents", x: 0, y: 0, w: 3, h: 2 },
+  { i: "kpi-tokens", x: 3, y: 0, w: 3, h: 2 },
+  { i: "kpi-workflows", x: 6, y: 0, w: 3, h: 2 },
+  { i: "kpi-revenue", x: 9, y: 0, w: 3, h: 2 },
+  // Row 2: Charts + Activity
+  { i: "token-chart", x: 0, y: 2, w: 6, h: 4 },
+  { i: "recent-activity", x: 6, y: 2, w: 6, h: 5 },
+  // Row 3: Insights
+  { i: "dept-performance", x: 0, y: 6, w: 4, h: 4 },
+  { i: "model-usage", x: 4, y: 6, w: 4, h: 4 },
+  { i: "cost-estimate", x: 8, y: 6, w: 4, h: 4 },
 ];

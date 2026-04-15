@@ -1,6 +1,24 @@
 /**
  * Department Types — 4 departments, 3 intelligence levels, sub-agent configs.
+ * Each department loads its operating instructions from workflows/*.md
  */
+import fs from "fs";
+import path from "path";
+
+// Load department instruction files (WAT framework)
+function loadInstructions(dept: string): string {
+  try {
+    const filePath = path.join(process.cwd(), "workflows", `${dept}.md`);
+    if (fs.existsSync(filePath)) return "\n\n" + fs.readFileSync(filePath, "utf-8");
+  } catch {}
+  return "";
+}
+const DEPT_INSTRUCTIONS: Record<string, string> = {
+  research: loadInstructions("research"),
+  coder: loadInstructions("coder"),
+  writer: loadInstructions("writer"),
+  artist: loadInstructions("artist"),
+};
 
 export type IntelligenceLevel = "entry" | "medium" | "max";
 export type DepartmentId = "research" | "coder" | "artist" | "writer";
@@ -226,6 +244,16 @@ Be punchy and action-oriented. Every word counts.`,
     ],
   },
 };
+
+// Inject workflow instructions into each department's sub-agents
+for (const [deptId, dept] of Object.entries(DEPARTMENTS)) {
+  const instructions = DEPT_INSTRUCTIONS[deptId] || "";
+  if (instructions) {
+    for (const agent of dept.subAgents) {
+      agent.systemPrompt += instructions;
+    }
+  }
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

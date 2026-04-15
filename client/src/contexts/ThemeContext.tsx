@@ -78,6 +78,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.style.setProperty("--wallpaper-tint-opacity", String(customization.wallpaperTint));
     root.style.setProperty("--glass-blur", `${customization.glassBlur}px`);
     root.style.setProperty("--panel-bg-opacity", String(customization.glassOpacity));
+    // Compact mode: toggle class on root element
+    if (customization.compactMode) {
+      root.classList.add("compact");
+    } else {
+      root.classList.remove("compact");
+    }
   }, [customization]);
 
   // Fetch preferences on mount

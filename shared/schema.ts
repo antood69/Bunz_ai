@@ -377,6 +377,8 @@ export const bossMessages = sqliteTable("boss_messages", {
   content: text("content").notNull(),
   tokenCount: integer("token_count").default(0),
   model: text("model"),
+  type: text("type").default("text"), // text | image
+  imageUrl: text("image_url"),
   createdAt: integer("created_at").notNull(),
 });
 export type BossMessage = typeof bossMessages.$inferSelect;

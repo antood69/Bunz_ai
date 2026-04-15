@@ -15,12 +15,27 @@ async function requireGitHub(req: Request, res: Response, next: Function) {
   const userId = (req as any).user?.id;
   if (!userId) return res.status(401).json({ error: "Not authenticated" });
 
-  const token = await storage.getGitHubToken(userId);
+  // Check users.github_token first (set via OAuth login)
+  let token = await storage.getGitHubToken(userId);
+
+  // Fallback: check connectors table for GitHub API key connector
+  if (!token) {
+    try {
+      const connectors = await storage.getConnectorsByUser(userId);
+      const ghConnector = connectors.find((c: any) => c.provider === "github" && c.status === "connected");
+      if (ghConnector) {
+        const { decryptCredentials } = await import("../lib/connectorCrypto.js");
+        const config = decryptCredentials(ghConnector.config);
+        token = config.apiKey || null;
+      }
+    } catch {}
+  }
+
   if (!token) {
     return res.status(403).json({
       error: "GitHub not connected",
       action: "connect_github",
-      message: "Connect your GitHub account to use repo features. Go to Settings → Connect GitHub.",
+      message: "Connect your GitHub account via Settings → Connectors → GitHub.",
     });
   }
 

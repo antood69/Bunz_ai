@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { storage } from "../storage";
 import { decryptCredentials } from "./connectorCrypto";
 import type { Connector } from "@shared/schema";
@@ -32,13 +34,22 @@ const PROVIDER_ACTIONS: Record<string, ConnectorAction[]> = {
   ],
   google: [
     { name: "list_emails", description: "List recent Gmail messages", params: { maxResults: { type: "number" } } },
-    { name: "list_files", description: "List Google Drive files", params: { pageSize: { type: "number" } } },
+    { name: "list_files", description: "List Google Drive files", params: { pageSize: { type: "number" }, query: { type: "string", description: "Search query (e.g. name contains 'report')" } } },
+    { name: "read_file", description: "Read a Google Drive file's content", params: { fileId: { type: "string", required: true } } },
+    { name: "search_files", description: "Search Google Drive by name or content", params: { query: { type: "string", required: true }, pageSize: { type: "number" } } },
     { name: "list_events", description: "List Google Calendar events", params: { maxResults: { type: "number" } } },
   ],
   notion: [
     { name: "list_pages", description: "Search Notion pages", params: { query: { type: "string" } } },
+    { name: "read_page", description: "Read a Notion page's content blocks", params: { pageId: { type: "string", required: true } } },
     { name: "create_page", description: "Create a new Notion page", params: { parentId: { type: "string", required: true }, title: { type: "string", required: true }, content: { type: "string" } } },
     { name: "query_database", description: "Query a Notion database", params: { databaseId: { type: "string", required: true } } },
+  ],
+  obsidian: [
+    { name: "list_notes", description: "List notes in Obsidian vault", params: { folder: { type: "string", description: "Subfolder path (optional)" } } },
+    { name: "read_note", description: "Read a note's content", params: { path: { type: "string", required: true, description: "Relative path from vault root (e.g. 'Projects/plan.md')" } } },
+    { name: "search_notes", description: "Search notes by content", params: { query: { type: "string", required: true } } },
+    { name: "write_note", description: "Create or update a note", params: { path: { type: "string", required: true }, content: { type: "string", required: true } } },
   ],
   custom_rest: [
     { name: "get", description: "HTTP GET request", params: { path: { type: "string", required: true }, query: { type: "object" } } },
@@ -97,6 +108,14 @@ async function testApiKey(provider: string, config: Record<string, any>): Promis
           headers: { Authorization: `Bearer ${config.apiKey}` },
         });
         if (!res.ok) return { ok: false, error: `Stripe API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "obsidian": {
+        const vaultPath = config.vaultPath;
+        if (!vaultPath) return { ok: false, error: "No vault path configured" };
+        if (!fs.existsSync(vaultPath)) return { ok: false, error: `Vault path not found: ${vaultPath}` };
+        const stat = fs.statSync(vaultPath);
+        if (!stat.isDirectory()) return { ok: false, error: "Vault path is not a directory" };
         return { ok: true };
       }
       case "custom_rest": {
@@ -189,6 +208,8 @@ async function executeAction(connector: Connector, action: string, params: Recor
         return executeGoogle(config, action, params);
       case "notion":
         return executeNotion(config, action, params);
+      case "obsidian":
+        return executeObsidian(config, action, params);
       case "custom_rest":
         return executeCustomRest(config, action, params);
       default:
@@ -278,8 +299,31 @@ async function executeGoogle(config: Record<string, any>, action: string, params
       return { ok: res.ok, data: await res.json() };
     }
     case "list_files": {
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files?pageSize=${params.pageSize || 10}`, { headers });
+      let url = `https://www.googleapis.com/drive/v3/files?pageSize=${params.pageSize || 20}&fields=files(id,name,mimeType,modifiedTime,size,webViewLink)`;
+      if (params.query) url += `&q=${encodeURIComponent(params.query)}`;
+      const res = await fetch(url, { headers });
       return { ok: res.ok, data: await res.json() };
+    }
+    case "search_files": {
+      const q = `name contains '${params.query.replace(/'/g, "\\'")}'`;
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&pageSize=${params.pageSize || 20}&fields=files(id,name,mimeType,modifiedTime,size,webViewLink)`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "read_file": {
+      // First get file metadata to check type
+      const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${params.fileId}?fields=id,name,mimeType`, { headers });
+      if (!metaRes.ok) return { ok: false, error: `Failed to get file metadata: ${metaRes.status}` };
+      const meta = await metaRes.json() as any;
+      // For Google Docs/Sheets/Slides, export as text
+      if (meta.mimeType?.startsWith("application/vnd.google-apps.")) {
+        const exportType = meta.mimeType.includes("spreadsheet") ? "text/csv" : "text/plain";
+        const expRes = await fetch(`https://www.googleapis.com/drive/v3/files/${params.fileId}/export?mimeType=${encodeURIComponent(exportType)}`, { headers });
+        return { ok: expRes.ok, data: { ...meta, content: await expRes.text() } };
+      }
+      // For regular files, download content
+      const dlRes = await fetch(`https://www.googleapis.com/drive/v3/files/${params.fileId}?alt=media`, { headers });
+      const content = await dlRes.text();
+      return { ok: dlRes.ok, data: { ...meta, content: content.slice(0, 50000) } };
     }
     case "list_events": {
       const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=${params.maxResults || 10}`, { headers });
@@ -298,6 +342,23 @@ async function executeNotion(config: Record<string, any>, action: string, params
         method: "POST", headers, body: JSON.stringify({ query: params.query || "", filter: { property: "object", value: "page" } }),
       });
       return { ok: res.ok, data: await res.json() };
+    }
+    case "read_page": {
+      // Get page properties
+      const pageRes = await fetch(`https://api.notion.com/v1/pages/${params.pageId}`, { headers });
+      if (!pageRes.ok) return { ok: false, error: `Failed to get page: ${pageRes.status}` };
+      const page = await pageRes.json() as any;
+      // Get page content blocks
+      const blocksRes = await fetch(`https://api.notion.com/v1/blocks/${params.pageId}/children?page_size=100`, { headers });
+      const blocks = blocksRes.ok ? await blocksRes.json() as any : { results: [] };
+      // Extract text from blocks
+      const textContent = (blocks.results || []).map((b: any) => {
+        const type = b.type;
+        const block = b[type];
+        if (!block?.rich_text) return "";
+        return block.rich_text.map((rt: any) => rt.plain_text || "").join("");
+      }).filter(Boolean).join("\n");
+      return { ok: true, data: { page, content: textContent, blocks: blocks.results } };
     }
     case "create_page": {
       const res = await fetch("https://api.notion.com/v1/pages", {
@@ -318,6 +379,71 @@ async function executeNotion(config: Record<string, any>, action: string, params
     }
     default:
       return { ok: false, error: `Unknown Notion action: ${action}` };
+  }
+}
+
+async function executeObsidian(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const vaultPath = config.vaultPath;
+  if (!vaultPath || !fs.existsSync(vaultPath)) return { ok: false, error: "Vault path not found" };
+
+  switch (action) {
+    case "list_notes": {
+      const dir = params.folder ? path.join(vaultPath, params.folder) : vaultPath;
+      if (!fs.existsSync(dir)) return { ok: false, error: `Folder not found: ${params.folder}` };
+      const walk = (d: string, prefix = ""): string[] => {
+        const entries = fs.readdirSync(d, { withFileTypes: true });
+        const files: string[] = [];
+        for (const e of entries) {
+          if (e.name.startsWith(".")) continue;
+          const rel = prefix ? `${prefix}/${e.name}` : e.name;
+          if (e.isDirectory()) files.push(...walk(path.join(d, e.name), rel));
+          else if (e.name.endsWith(".md")) files.push(rel);
+        }
+        return files;
+      };
+      return { ok: true, data: walk(dir) };
+    }
+    case "read_note": {
+      const filePath = path.join(vaultPath, params.path);
+      if (!filePath.startsWith(vaultPath)) return { ok: false, error: "Path traversal not allowed" };
+      if (!fs.existsSync(filePath)) return { ok: false, error: `Note not found: ${params.path}` };
+      const content = fs.readFileSync(filePath, "utf-8");
+      return { ok: true, data: { path: params.path, content } };
+    }
+    case "search_notes": {
+      const query = params.query.toLowerCase();
+      const results: Array<{ path: string; match: string }> = [];
+      const walk = (d: string, prefix = "") => {
+        const entries = fs.readdirSync(d, { withFileTypes: true });
+        for (const e of entries) {
+          if (e.name.startsWith(".")) continue;
+          const rel = prefix ? `${prefix}/${e.name}` : e.name;
+          if (e.isDirectory()) walk(path.join(d, e.name), rel);
+          else if (e.name.endsWith(".md")) {
+            const content = fs.readFileSync(path.join(d, e.name), "utf-8");
+            if (content.toLowerCase().includes(query) || e.name.toLowerCase().includes(query)) {
+              const idx = content.toLowerCase().indexOf(query);
+              const matchStart = Math.max(0, idx - 50);
+              const matchEnd = Math.min(content.length, idx + query.length + 50);
+              results.push({ path: rel, match: content.slice(matchStart, matchEnd).trim() });
+            }
+          }
+          if (results.length >= 20) return;
+        }
+      };
+      walk(vaultPath);
+      return { ok: true, data: results };
+    }
+    case "write_note": {
+      const filePath = path.join(vaultPath, params.path);
+      if (!filePath.startsWith(vaultPath)) return { ok: false, error: "Path traversal not allowed" };
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(filePath, params.content, "utf-8");
+      return { ok: true, data: { path: params.path, written: true } };
+    }
+    default:
+      return { ok: false, error: `Unknown Obsidian action: ${action}` };
   }
 }
 

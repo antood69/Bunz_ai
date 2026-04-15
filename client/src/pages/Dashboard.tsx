@@ -1,151 +1,246 @@
-import { useMemo, useCallback, useRef } from "react";
-import { Grip, Lock, Unlock, X, Save, Loader2 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-// @ts-expect-error — react-grid-layout v2 ESM exports differ from @types (v1)
-import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
-import "react-grid-layout/css/styles.css";
-import { WIDGET_REGISTRY, DEFAULT_LAYOUT } from "@/components/dashboard/widgets";
-import { useDashboardLayout } from "@/components/dashboard/useDashboardLayout";
-import { WidgetCatalog } from "@/components/dashboard/WidgetCatalog";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Bot, Coins, Zap, MessageSquare, BarChart3, DollarSign,
+  CheckCircle2, XCircle, Loader2, Activity,
+} from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell,
+} from "recharts";
 
-export default function Dashboard() {
-  const {
-    layout,
-    editMode,
-    setEditMode,
-    onLayoutChange,
-    addWidget,
-    removeWidget,
-    isLoading,
-    isSaving,
-  } = useDashboardLayout();
+// ── Types ──────────────────────────────────────────────────────────────
+interface DashboardStats {
+  activeAgents: number;
+  tokensUsed7d: number;
+  workflowsRun30d: number;
+  revenueThisMonth: number;
+  deltas: {
+    activeAgentsDelta: number;
+    tokensDelta: number;
+    workflowsDelta: number;
+    revenueDelta: number;
+  };
+}
 
-  const { containerRef, width } = useContainerWidth({ initialWidth: 1200 });
+// ── Helpers ────────────────────────────────────────────────────────────
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
 
-  // Build a map of widget definitions
-  const widgetMap = useMemo(() => {
-    const map = new Map<string, (typeof WIDGET_REGISTRY)[number]>();
-    for (const w of WIDGET_REGISTRY) map.set(w.id, w);
-    return map;
-  }, []);
-
-  // Compute layout with static flags for locking
-  const gridLayout = useMemo(() => {
-    return layout.map(l => ({ ...l, static: !editMode }));
-  }, [layout, editMode]);
-
-  // Active widgets based on current layout
-  const activeWidgets = useMemo(() => {
-    return gridLayout
-      .map(l => ({ layout: l, def: widgetMap.get(l.i) }))
-      .filter((w): w is { layout: typeof w.layout; def: NonNullable<typeof w.def> } => !!w.def);
-  }, [gridLayout, widgetMap]);
-
-  const handleLayoutChange = useCallback(
-    (newLayout: any[]) => {
-      if (editMode) {
-        onLayoutChange(newLayout);
-      }
-    },
-    [editMode, onLayoutChange]
+function DeltaBadge({ value }: { value: number }) {
+  if (value === 0) return <span className="text-[10px] text-muted-foreground">—</span>;
+  const positive = value > 0;
+  return (
+    <span className={`text-[10px] font-medium ${positive ? "text-emerald-400" : "text-red-400"}`}>
+      {positive ? "+" : ""}{value}%
+    </span>
   );
+}
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+const PIE_COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#6ee7b7", "#fbbf24", "#f87171"];
+
+// ── Component ──────────────────────────────────────────────────────────
+export default function Dashboard() {
+  const { data: stats } = useQuery<DashboardStats>({
+    queryKey: ["/api/dashboard/stats"],
+    refetchInterval: 5000,
+  });
+
+  const { data: tokenChart = [] } = useQuery<{ date: string; tokens: number }[]>({
+    queryKey: ["/api/dashboard/token-usage"],
+    refetchInterval: 10000,
+  });
+
+  const { data: modelUsage = [] } = useQuery<{ model: string; tokens: number }[]>({
+    queryKey: ["/api/dashboard/model-usage"],
+    refetchInterval: 30000,
+  });
+
+  const { data: deptStats = [] } = useQuery<Array<{ department: string; total: number; complete: number; failed: number; avgDurationMs: number; totalTokens: number }>>({
+    queryKey: ["/api/dashboard/department-stats"],
+    refetchInterval: 10000,
+  });
+
+  const { data: costData } = useQuery<{ totalCostUsd: number; breakdown: Array<{ model: string; tokens: number; costUsd: number }> }>({
+    queryKey: ["/api/dashboard/cost-estimate"],
+    refetchInterval: 30000,
+  });
+
+  const { data: activityData = [] } = useQuery<Array<{ id: string; type: string; title: string; description: string; createdAt: number }>>({
+    queryKey: ["/api/activity"],
+    refetchInterval: 10000,
+  });
+
+  const kpis = [
+    { label: "Active Agents", value: stats?.activeAgents ?? 0, delta: stats?.deltas?.activeAgentsDelta ?? 0, icon: Bot, color: "text-blue-400" },
+    { label: "Tokens (7d)", value: formatTokens(stats?.tokensUsed7d ?? 0), delta: stats?.deltas?.tokensDelta ?? 0, icon: Coins, color: "text-purple-400" },
+    { label: "Tasks (30d)", value: stats?.workflowsRun30d ?? 0, delta: stats?.deltas?.workflowsDelta ?? 0, icon: Zap, color: "text-amber-400" },
+    { label: "Conversations", value: stats?.revenueThisMonth ?? 0, delta: stats?.deltas?.revenueDelta ?? 0, icon: MessageSquare, color: "text-emerald-400" },
+  ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
+        <p className="text-sm text-muted-foreground mt-1">Real-time metrics & controls</p>
+      </div>
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground text-sm mt-1">Bunz command center — real-time metrics & controls</p>
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map((kpi) => (
+          <div key={kpi.label} className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">{kpi.label}</span>
+              <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
+            </div>
+            <div className="flex items-end justify-between">
+              <span className="text-2xl font-bold text-foreground">{kpi.value}</span>
+              <DeltaBadge value={kpi.delta} />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {editMode && (
-              <WidgetCatalog layout={layout} onAdd={addWidget} />
+        ))}
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Token Usage Chart */}
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+            <BarChart3 className="w-3.5 h-3.5 inline mr-1" />Token Usage (7d)
+          </p>
+          <div className="h-48">
+            {tokenChart.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tokenChart}>
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#888" }} tickFormatter={(d) => d.slice(5)} />
+                  <YAxis tick={{ fontSize: 10, fill: "#888" }} tickFormatter={(v) => formatTokens(v)} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#1a1a2e", border: "1px solid #333", borderRadius: 8, fontSize: 12 }}
+                    labelStyle={{ color: "#888" }}
+                    formatter={(v: number) => [formatTokens(v), "Tokens"]}
+                  />
+                  <Bar dataKey="tokens" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-muted-foreground text-sm">No token data yet</div>
             )}
-            <Button
-              variant={editMode ? "default" : "outline"}
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setEditMode(!editMode)}
-            >
-              {editMode ? <><Lock className="w-4 h-4" /> Lock Layout</> : <><Unlock className="w-4 h-4" /> Edit Mode</>}
-            </Button>
-            {isSaving && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Save className="w-3 h-3 animate-pulse" /> Saving...
+          </div>
+        </div>
+
+        {/* Model Usage Pie */}
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Model Usage</p>
+          <div className="h-48 flex items-center">
+            {modelUsage.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={modelUsage} dataKey="tokens" nameKey="model" cx="50%" cy="50%" outerRadius={70} innerRadius={40} paddingAngle={2}>
+                    {modelUsage.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#1a1a2e", border: "1px solid #333", borderRadius: 8, fontSize: 12 }}
+                    formatter={(v: number) => [formatTokens(v), "Tokens"]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="w-full text-center text-muted-foreground text-sm">No model data yet</div>
+            )}
+            {modelUsage.length > 0 && (
+              <div className="space-y-1.5 ml-2 min-w-[100px]">
+                {modelUsage.slice(0, 5).map((m, i) => (
+                  <div key={m.model} className="flex items-center gap-2 text-xs">
+                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+                    <span className="text-muted-foreground truncate">{m.model}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
         </div>
+      </div>
 
-        {/* Grid Layout — nuclear lock: pointer-events:none on wrapper blocks
-            all drag/resize at the grid level; pointer-events:auto on widget
-            content keeps buttons/links/text interactive when locked. */}
-        <div ref={containerRef} className={!editMode ? "pointer-events-none" : ""}>
-          <ResponsiveGridLayout
-            className="layout"
-            width={width}
-            layouts={{ lg: gridLayout }}
-            breakpoints={{ lg: 1200, md: 900, sm: 600 }}
-            cols={{ lg: 12, md: 9, sm: 6 }}
-            rowHeight={60}
-            isDraggable={editMode}
-            isResizable={editMode}
-            onLayoutChange={handleLayoutChange}
-            draggableHandle=".drag-handle"
-            compactType="vertical"
-            margin={[16, 16]}
-          >
-            {activeWidgets.map(({ layout: l, def }) => {
-              const WidgetComponent = def.component;
-              return (
-                <div key={l.i} data-grid={{ ...l, minW: def.minW, minH: def.minH }}>
-                  <Card className={`h-full bg-card border border-border hover:border-border/80 transition-colors overflow-hidden relative group ${!editMode ? "pointer-events-auto" : ""}`}>
-                    {/* Edit mode controls */}
-                    {editMode && (
-                      <>
-                        <div className="drag-handle absolute top-0 left-0 right-0 h-6 bg-gradient-to-b from-muted/40 to-transparent cursor-move flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                          <Grip className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                        <button
-                          onClick={() => removeWidget(l.i)}
-                          className="absolute top-1 right-1 p-1 rounded-md bg-destructive/10 hover:bg-destructive/20 text-destructive opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </>
-                    )}
-                    <CardContent className="h-full pt-4 pb-3 px-4">
-                      <WidgetComponent {...(def.props || {})} />
-                    </CardContent>
-                  </Card>
-                </div>
-              );
-            })}
-          </ResponsiveGridLayout>
+      {/* Bottom Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Department Performance */}
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Department Performance</p>
+          {deptStats.length > 0 ? (
+            <div className="space-y-3">
+              {deptStats.map((d) => {
+                const rate = d.total > 0 ? Math.round((d.complete / d.total) * 100) : 0;
+                return (
+                  <div key={d.department}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-foreground capitalize">{d.department}</span>
+                      <span className="text-xs text-muted-foreground">{d.total} runs · {rate}%</span>
+                    </div>
+                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${rate}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No department data yet. Run tasks to see stats.</p>
+          )}
         </div>
 
-        {/* Empty state when no widgets */}
-        {activeWidgets.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <p className="text-lg font-medium mb-2">No widgets on your dashboard</p>
-            <p className="text-sm mb-4">Click "Edit Mode" and then "Add Widget" to customize your dashboard.</p>
-            <Button variant="outline" onClick={() => setEditMode(true)}>
-              <Unlock className="w-4 h-4 mr-2" /> Enter Edit Mode
-            </Button>
-          </div>
-        )}
+        {/* Cost Estimate */}
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            <DollarSign className="w-3.5 h-3.5 inline mr-1" />Estimated Cost
+          </p>
+          <p className="text-3xl font-bold text-foreground mb-3">${costData?.totalCostUsd?.toFixed(2) ?? "0.00"}</p>
+          {costData?.breakdown && costData.breakdown.filter(b => b.costUsd > 0).length > 0 ? (
+            <div className="space-y-2">
+              {costData.breakdown.filter(b => b.costUsd > 0).map((b) => (
+                <div key={b.model} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground truncate mr-2">{b.model}</span>
+                  <span className="text-foreground font-medium">${b.costUsd.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">No cost data yet</p>
+          )}
+        </div>
+
+        {/* Recent Activity */}
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+            <Activity className="w-3.5 h-3.5 inline mr-1" />Recent Activity
+          </p>
+          {activityData.length > 0 ? (
+            <div className="space-y-2">
+              {activityData.slice(0, 8).map((evt) => {
+                const isComplete = evt.type.includes("complete");
+                const isFailed = evt.type.includes("failed");
+                const Icon = isComplete ? CheckCircle2 : isFailed ? XCircle : Zap;
+                const color = isComplete ? "text-emerald-400" : isFailed ? "text-red-400" : "text-blue-400";
+                const ago = Date.now() - evt.createdAt;
+                const timeStr = ago < 60000 ? "now" : ago < 3600000 ? `${Math.floor(ago / 60000)}m` : `${Math.floor(ago / 3600000)}h`;
+                return (
+                  <div key={evt.id} className="flex items-start gap-2">
+                    <Icon className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${color}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-foreground truncate">{evt.title}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{evt.description}</p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground flex-shrink-0">{timeStr}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No activity yet. Use Boss Chat to get started.</p>
+          )}
+        </div>
       </div>
     </div>
   );

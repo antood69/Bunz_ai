@@ -195,10 +195,22 @@ export function useAgentStream(jobId: string | null): StreamState {
         const data = JSON.parse(e.data);
         // Flush any remaining tokens
         flushTokenBuffer();
+        // Extract image URLs from department results
+        const deptImages: Array<{ agent: string; imageUrl: string; prompt?: string }> = [];
+        if (Array.isArray(data.departments)) {
+          for (const dept of data.departments) {
+            if (dept.imageUrl) {
+              deptImages.push({ agent: dept.id, imageUrl: dept.imageUrl });
+            }
+          }
+        }
         setState((prev) => {
           // Use the authoritative synthesis from the server if our streamed buffer is empty/incomplete
           const buffered = prev.synthesisText + (synthesisBufferRef.current || "");
           const finalSynthesis = buffered.trim() ? buffered : (data.synthesis || buffered);
+          // Merge any department images not already captured via agent_image events
+          const existingUrls = new Set(prev.agentImages.map(img => img.imageUrl));
+          const mergedImages = [...prev.agentImages, ...deptImages.filter(img => !existingUrls.has(img.imageUrl))];
           return {
             ...prev,
             isStreaming: false,
@@ -208,6 +220,7 @@ export function useAgentStream(jobId: string | null): StreamState {
             currentStep: "Complete",
             totalTokens: data.totalTokens || prev.totalTokens,
             agentOutputs: data.agentOutputs || prev.agentOutputs,
+            agentImages: mergedImages,
           };
         });
         synthesisBufferRef.current = "";

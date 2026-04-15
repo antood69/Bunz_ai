@@ -18,6 +18,8 @@ import {
   Cpu,
   Trophy,
   Building2,
+  ListChecks,
+  Code,
 } from "lucide-react";
 import TokenCounter from "./TokenCounter";
 import NotificationBell from "./NotificationBell";
@@ -37,6 +39,10 @@ const ICON_MAP: Record<string, React.ElementType> = {
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/boss", label: "Chat", icon: MessageSquare },
+  { href: "/editor", label: "Editor", icon: Code },
+  { href: "/tasks", label: "Tasks", icon: ListChecks },
+  { href: "/workflows", label: "Workflows", icon: GitBranch },
+  { href: "/bots", label: "Bots", icon: Bot },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -339,7 +345,9 @@ export default function AppLayout({ children, allowPublic = false }: { children:
           </div>
         )}
 
-        <main className={`flex-1 overflow-y-auto overscroll-contain ${isMobile ? "pb-16" : ""}`}>
+        <main className={`flex-1 overflow-y-auto overscroll-contain ${isMobile ? "pb-16" : ""} ${
+          hasWallpaper ? "bg-background/70 backdrop-blur-sm" : ""
+        }`}>
           {children}
         </main>
       </div>

@@ -263,3 +263,18 @@
 .pointer-events-none .react-grid-item .react-resizable-handle {
   display: none !important;
 }
+
+/* ── Compact Mode ─────────────────────────────────────────────────── */
+.compact main { @apply text-sm; }
+.compact .px-4 { padding-left: 0.5rem; padding-right: 0.5rem; }
+.compact .px-6 { padding-left: 1rem; padding-right: 1rem; }
+.compact .py-4 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+.compact .py-6 { padding-top: 1rem; padding-bottom: 1rem; }
+.compact .p-4 { padding: 0.5rem; }
+.compact .p-6 { padding: 1rem; }
+.compact .gap-4 { gap: 0.5rem; }
+.compact .gap-6 { gap: 1rem; }
+.compact .space-y-4 > * + * { margin-top: 0.5rem; }
+.compact .space-y-6 > * + * { margin-top: 1rem; }
+.compact .h-14 { height: 2.75rem; }
+.compact .h-12 { height: 2.5rem; }

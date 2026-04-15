@@ -9,17 +9,28 @@
  * - Stripped: legacy delegation, Fiverr tools, worker JSON formats
  */
 
+import fs from "fs";
+import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { modelRouter } from "./ai";
 import { isImageGenerationModel } from "./lib/modelRouter";
 import { eventBus } from "./lib/eventBus";
 import { storage } from "./storage";
+
+// Load Boss operating instructions from WAT framework
+let bossInstructions = "";
+try {
+  const instrPath = path.join(process.cwd(), "workflows", "boss.md");
+  if (fs.existsSync(instrPath)) bossInstructions = "\n\n" + fs.readFileSync(instrPath, "utf-8");
+} catch {}
 import {
   type DepartmentId, type IntelligenceLevel,
   INTELLIGENCE_TIERS, DEPARTMENTS, detectDepartments, estimateComplexity,
 } from "./departments/types";
 import { executeDepartment, type DepartmentTask, type DepartmentResult } from "./departments/executor";
 import { runAutonomous } from "./departments/autonomous";
+import { connectorRegistry } from "./lib/connectorRegistry";
+import { decryptCredentials } from "./lib/connectorCrypto";
 
 // ── Boss System Prompt ──────────────────────────────────────────────────────
 
@@ -56,7 +67,7 @@ User says: "write me a blog about ai"
 BAD task: "write a blog about ai"
 GOOD task: "Write a 1200-word blog post about current AI trends in 2026. Structure: intro paragraph, 5-7 sections with h2 headers covering major developments (LLMs, agents, open source, enterprise adoption, regulation), conclusion with forward-looking statement. Tone: professional but accessible. Include specific company names and product references where relevant."
 
-Always enhance vague requests into detailed, actionable prompts.`;
+Always enhance vague requests into detailed, actionable prompts.` + bossInstructions;
 
 // ── Parse Boss dispatch decision ────────────────────────────────────────────
 
@@ -181,6 +192,62 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   });
 
   try {
+    // ── Build system prompt with connected services context ────────────────
+    let systemPrompt = BOSS_SYSTEM_PROMPT;
+    try {
+      const connectors = await storage.getConnectorsByUser(userId);
+      const connected = connectors.filter((c: any) => c.status === "connected");
+      if (connected.length > 0) {
+        const serviceList = connected.map((c: any) => `- ${c.name} (${c.provider})`).join("\n");
+        systemPrompt += `\n\nCONNECTED SERVICES (available for department tasks):\n${serviceList}\nWhen a user's request involves data from these services, mention it in the department task description so the department knows to pull from the connected source.`;
+      }
+    } catch {}
+
+    // ── RAG: search Obsidian vault for relevant context ────────────────────
+    let vaultContext = "";
+    try {
+      const connectors = await storage.getConnectorsByUser(userId);
+      const obsConnector = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
+      if (obsConnector) {
+        // Extract key terms from the message (skip common words)
+        const stopWords = new Set(["the", "a", "an", "is", "are", "was", "were", "be", "been", "to", "of", "in", "for", "on", "with", "at", "by", "from", "and", "or", "but", "not", "this", "that", "it", "my", "me", "we", "our", "can", "do", "how", "what", "about", "make", "write", "create", "help", "please", "want", "need", "get", "give"]);
+        const keywords = message.toLowerCase().split(/\W+/).filter(w => w.length > 3 && !stopWords.has(w));
+        const searchTerms = keywords.slice(0, 3);
+
+        if (searchTerms.length > 0) {
+          const searchResults: Array<{ path: string; match: string }> = [];
+          for (const term of searchTerms) {
+            const result = await connectorRegistry.execute(obsConnector.id, "search_notes", { query: term });
+            if (result.ok && Array.isArray(result.data)) {
+              for (const r of result.data) {
+                if (!searchResults.some(s => s.path === r.path)) {
+                  searchResults.push(r);
+                }
+              }
+            }
+            if (searchResults.length >= 5) break;
+          }
+
+          if (searchResults.length > 0) {
+            // Read the top 3 most relevant notes (truncated)
+            const noteContents: string[] = [];
+            for (const r of searchResults.slice(0, 3)) {
+              const readResult = await connectorRegistry.execute(obsConnector.id, "read_note", { path: r.path });
+              if (readResult.ok && readResult.data?.content) {
+                noteContents.push(`--- ${r.path} ---\n${readResult.data.content.slice(0, 1500)}`);
+              }
+            }
+            if (noteContents.length > 0) {
+              vaultContext = `\n\nRELEVANT NOTES FROM USER'S KNOWLEDGE BASE:\n${noteContents.join("\n\n")}\n\nUse this context to provide better, more personalized answers. Reference specific notes if relevant.`;
+              console.log(`[RAG] Found ${noteContents.length} relevant notes for query: "${searchTerms.join(", ")}"`);
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error("[RAG] Vault search failed:", e.message);
+    }
+
     // ── Call Boss AI to decide: direct answer or dispatch ─────────────────
     const bossResult = await modelRouter.chat({
       model: bossModel,
@@ -188,7 +255,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
         ...history.slice(-20).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
         { role: "user" as const, content: message },
       ],
-      systemPrompt: BOSS_SYSTEM_PROMPT,
+      systemPrompt: systemPrompt + vaultContext,
       signal: abortController.signal,
     });
 
@@ -223,8 +290,22 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       // Check if any department is "autonomous" — run the autonomous loop instead
       const hasAutonomous = plan.departments.some((d: any) => d.id === "autonomous");
       if (hasAutonomous) {
+        // Resolve GitHub context for autonomous coder steps
+        let autoGithub: { token: string; repo: string } | undefined;
+        try {
+          const ghToken = await storage.getGitHubToken(userId);
+          if (ghToken) {
+            const repoMatch = message.match(/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/)?.[1];
+            let repo = repoMatch?.includes("/") ? repoMatch : null;
+            if (!repo) {
+              const prefs = await storage.getUserPreferences(userId);
+              repo = prefs.defaultRepo || null;
+            }
+            if (repo) autoGithub = { token: ghToken, repo };
+          }
+        } catch {}
         const autoTask = plan.departments.find((d: any) => d.id === "autonomous");
-        runAutonomous(parentJobId, autoTask?.task || message, level, abortController.signal)
+        runAutonomous(parentJobId, autoTask?.task || message, level, abortController.signal, autoGithub)
           .then(async (autoPlan) => {
             const finalContent = autoPlan.finalOutput || "Autonomous task completed.";
             await storage.createBossMessage({
@@ -247,6 +328,11 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
         };
       }
 
+      // Log department dispatch activity
+      try {
+        storage.insertActivityEvent({ id: uuidv4(), userId, type: "department_dispatch", title: "Dispatched to " + plan.departments.map((d:any) => d.id).join(", "), description: message.slice(0, 200), metadata: { level, departments: plan.departments.map((d:any) => d.id) } });
+      } catch (e: any) { console.error("[Activity] Failed to log dispatch:", e.message); }
+
       // Execute departments asynchronously — results flow back via eventBus
       executeDepartments(parentJobId, conversationId, userId, level, message, plan.departments, abortController.signal)
         .catch(err => {
@@ -263,15 +349,34 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     }
 
     // Log activity event
-      try {
-        storage.insertActivityEvent({ id: uuidv4(), userId, type: plan ? "department_dispatch" : "boss_direct", title: plan ? "Dispatched to " + plan.departments.map((d:any) => d.id).join(", ") : "Boss answered: " + message.slice(0, 60), description: message.slice(0, 200), metadata: { level } });
-      } catch {}
+    try {
+      storage.insertActivityEvent({ id: uuidv4(), userId, type: "boss_direct", title: "Boss answered: " + message.slice(0, 60), description: message.slice(0, 200), metadata: { level } });
+    } catch (e: any) { console.error("[Activity] Failed to log event:", e.message); }
 
     // ── DIRECT MODE: Boss answers directly ──────────────────────────────
     await storage.createBossMessage({
       id: uuidv4(), conversationId, role: "assistant", content: bossResult.content,
       tokenCount: bossTokens, model: bossModel, createdAt: Date.now(),
     });
+
+    // Auto-save Boss direct answers to Obsidian
+    try {
+      const connectors = await storage.getConnectorsByUser(userId);
+      const obsConnector = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
+      if (obsConnector) {
+        const timestamp = new Date().toISOString().slice(0, 10);
+        const slug = message.slice(0, 50).replace(/[^a-zA-Z0-9]+/g, "-").replace(/-+$/, "").toLowerCase();
+        // Save Boss response
+        const bossPath = `Boss/${timestamp}-${slug}.md`;
+        const header = `# ${message.slice(0, 80)}\n*${new Date().toLocaleString()} | Boss Direct | Level: ${level}*\n\n---\n\n`;
+        await connectorRegistry.execute(obsConnector.id, "write_note", { path: bossPath, content: header + bossResult.content });
+        // Save input
+        const inputPath = `Inputs/${timestamp}-${slug}.md`;
+        const inputContent = `# Prompt\n*${new Date().toLocaleString()} | Level: ${level} | Direct (Boss)*\n\n---\n\n${message}`;
+        await connectorRegistry.execute(obsConnector.id, "write_note", { path: inputPath, content: inputContent });
+      }
+    } catch (e: any) { console.error("[Boss] Obsidian auto-save failed:", e.message); }
+
     activeAbortControllers.delete(conversationId);
 
     return {
@@ -359,9 +464,15 @@ async function executeDepartments(
       try {
         const ghToken = await storage.getGitHubToken(userId);
         if (ghToken) {
+          // Try explicit repo from message first, then fall back to user's default repo
           const repoMatch = originalMessage.match(/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/)?.[1];
-          if (repoMatch?.includes("/")) {
-            github = { token: ghToken, repo: repoMatch };
+          let repo = repoMatch?.includes("/") ? repoMatch : null;
+          if (!repo) {
+            const prefs = await storage.getUserPreferences(userId);
+            repo = prefs.defaultRepo || null;
+          }
+          if (repo) {
+            github = { token: ghToken, repo };
           }
         }
       } catch {}
@@ -433,6 +544,77 @@ Present each department's output clearly. For code, keep it in code blocks. For 
       eventBus.emit(parentJobId, "token", { workerType: "boss", text: chunk, isSynthesis: true });
     }
 
+    // ── Post-synthesis: auto-save to Obsidian vault by department ────────
+    try {
+      const connectors = await storage.getConnectorsByUser(userId);
+      const obsConnector = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
+
+      if (obsConnector) {
+        // Check if user specified a custom path
+        const customPath = originalMessage.match(/(?:at|to|in)\s+([^\s,."]+\.md)/i)?.[1];
+        const timestamp = new Date().toISOString().slice(0, 10);
+        const slug = originalMessage.slice(0, 50).replace(/[^a-zA-Z0-9]+/g, "-").replace(/-+$/, "").toLowerCase();
+        const savedPaths: string[] = [];
+
+        if (customPath) {
+          // User specified exact path — save full synthesis there
+          const result = await connectorRegistry.execute(obsConnector.id, "write_note", { path: customPath, content: synthesis.content });
+          if (result.ok) savedPaths.push(customPath);
+        } else {
+          // Auto-organize: save each department's output to its own folder
+          for (const r of deptResults) {
+            const deptFolder = r.department.charAt(0).toUpperCase() + r.department.slice(1);
+            const notePath = `${deptFolder}/${timestamp}-${slug}.md`;
+            const header = `# ${originalMessage.slice(0, 80)}\n*Generated: ${new Date().toLocaleString()} | Department: ${deptFolder}*\n\n---\n\n`;
+            const result = await connectorRegistry.execute(obsConnector.id, "write_note", { path: notePath, content: header + r.finalOutput });
+            if (result.ok) savedPaths.push(notePath);
+          }
+
+          // Save the full synthesis
+          const synthPath = deptResults.length > 1 ? `Synthesis/${timestamp}-${slug}.md` : `${deptResults[0].department.charAt(0).toUpperCase() + deptResults[0].department.slice(1)}/${timestamp}-${slug}.md`;
+          if (deptResults.length > 1) {
+            const header = `# ${originalMessage.slice(0, 80)}\n*Synthesized: ${new Date().toLocaleString()} | Departments: ${departments.map(d => d.id).join(", ")}*\n\n---\n\n`;
+            const result = await connectorRegistry.execute(obsConnector.id, "write_note", { path: synthPath, content: header + synthesis.content });
+            if (result.ok) savedPaths.push(synthPath);
+          }
+
+          // Save the user's original prompt to an Inputs log
+          const inputPath = `Inputs/${timestamp}-${slug}.md`;
+          const inputContent = `# Prompt\n*${new Date().toLocaleString()} | Level: ${level} | Departments: ${departments.map(d => d.id).join(", ")}*\n\n---\n\n${originalMessage}`;
+          const inputResult = await connectorRegistry.execute(obsConnector.id, "write_note", { path: inputPath, content: inputContent });
+          if (inputResult.ok) savedPaths.push(inputPath);
+        }
+
+        if (savedPaths.length > 0) {
+          console.log(`[Boss] Auto-saved to Obsidian: ${savedPaths.join(", ")}`);
+          const pathList = savedPaths.map(p => `\`${p}\``).join(", ");
+          eventBus.emit(parentJobId, "token", { workerType: "boss", text: `\n\n📁 *Saved to Obsidian vault: ${pathList}*`, isSynthesis: true });
+        }
+      }
+
+      // Detect Notion write requests
+      const notionMatch = originalMessage.match(/(?:write|save|store|put|export|create)\b.*?(?:notion)\b/i);
+      if (notionMatch) {
+        const notionConnector = connectors.find((c: any) => c.provider === "notion" && c.status === "connected");
+        if (notionConnector) {
+          const searchResult = await connectorRegistry.execute(notionConnector.id, "list_pages", { query: "" });
+          if (searchResult.ok && searchResult.data?.results?.length > 0) {
+            const parentId = searchResult.data.results[0].id;
+            const title = originalMessage.slice(0, 80);
+            const writeResult = await connectorRegistry.execute(notionConnector.id, "create_page", {
+              parentId, title, content: synthesis.content.slice(0, 2000),
+            });
+            if (writeResult.ok) {
+              console.log(`[Boss] Created Notion page: ${title}`);
+              eventBus.emit(parentJobId, "token", { workerType: "boss", text: `\n\n✅ *Created Notion page: ${title}*`, isSynthesis: true });
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error("[Boss] Connector write-back failed:", e.message);
+    }
+
     // Build final content with image markers
     let finalContent = synthesis.content;
     const imageResults = deptResults.filter(r => r.imageUrl);
@@ -440,10 +622,13 @@ Present each department's output clearly. For code, keep it in code blocks. For 
       finalContent += "\n\n" + imageResults.map(r => `[Image was generated successfully]`).join("\n");
     }
 
-    // Store final response
+    // Store final response (include image URL if Artist dept produced one)
+    const firstImage = deptResults.find(r => r.imageUrl);
     await storage.createBossMessage({
       id: uuidv4(), conversationId, role: "assistant", content: finalContent,
       tokenCount: totalTokens, model: bossModel, createdAt: Date.now(),
+      type: firstImage ? "image" : "text",
+      imageUrl: firstImage?.imageUrl || null,
     });
 
     await storage.updateAgentJob(parentJobId, {
@@ -459,6 +644,14 @@ Present each department's output clearly. For code, keep it in code blocks. For 
     // Update user plan tokens
     const plan = await storage.getUserPlan(userId);
     if (plan) await storage.updateUserPlan(plan.id, { tokensUsed: plan.tokensUsed + totalTokens });
+
+    // Log task completion activity + notification
+    try {
+      const deptList = departments.map(d => d.id).join(", ");
+      storage.insertActivityEvent({ id: uuidv4(), userId, type: "task_complete", title: "Task completed: " + deptList, description: originalMessage.slice(0, 200), metadata: { departments: departments.map(d => d.id), totalTokens } });
+      const tokenStr = totalTokens >= 1000 ? `${(totalTokens / 1000).toFixed(1)}K` : String(totalTokens);
+      await storage.createNotification({ userId, type: "task_complete", title: `Task completed (${deptList})`, message: `${originalMessage.slice(0, 100)} — ${tokenStr} tokens`, link: "/tasks" });
+    } catch (e: any) { console.error("[Activity] Failed to log completion:", e.message); }
 
     // ── Emit completion ─────────────────────────────────────────────────
     eventBus.emit(parentJobId, "complete", {

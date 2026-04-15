@@ -19,6 +19,10 @@ import ConnectorsPage from "@/pages/ConnectorsPage";
 import BossPage from "@/pages/BossPage";
 import AnalyticsStubPage from "@/pages/AnalyticsStubPage";
 import NotificationsPage from "@/pages/NotificationsPage";
+import TasksPage from "@/pages/TasksPage";
+import WorkflowsPage from "@/pages/WorkflowsPage";
+import EditorPage from "@/pages/EditorPage";
+import BotsPage from "@/pages/BotsPage";
 import AppLayout from "@/components/AppLayout";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -45,6 +49,10 @@ function AppRouter() {
             <Route path="/admin" component={AdminPage} />
             <Route path="/connectors" component={ConnectorsPage} />
             <Route path="/tools" component={ToolsPage} />
+            <Route path="/tasks" component={TasksPage} />
+            <Route path="/workflows" component={WorkflowsPage} />
+            <Route path="/editor" component={EditorPage} />
+            <Route path="/bots" component={BotsPage} />
 
 
             {/* Redirects */}

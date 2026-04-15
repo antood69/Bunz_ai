@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
   MessageSquare,
-  GitBranch,
+  ListChecks,
   Package,
   Menu,
   X,
@@ -12,13 +12,13 @@ import {
   LogOut,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/contexts/ThemeContext";
 
 // Primary 5 tabs shown in the bottom bar
 const primaryTabs = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/boss", label: "Chat", icon: MessageSquare },
-  { href: "/workflows", label: "Editor", icon: GitBranch },
-  { href: "/workshop", label: "Workshop", icon: Package },
+  { href: "/tasks", label: "Tasks", icon: ListChecks },
 ];
 
 // All remaining nav items shown in the "More" drawer
@@ -30,6 +30,8 @@ export default function MobileTabBar() {
   const [location] = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
   const { isOwner, logout } = useAuth();
+  const { wallpaperUrl, wallpaperType } = useTheme();
+  const hasWallpaper = !!(wallpaperUrl && wallpaperType !== "none");
 
   const isActive = (href: string) =>
     href === "/" ? location === "/" : location.startsWith(href);
@@ -41,7 +43,9 @@ export default function MobileTabBar() {
     <>
       {/* Bottom tab bar */}
       <div
-        className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 flex items-center"
+        className={`fixed bottom-0 left-0 right-0 border-t border-border z-50 flex items-center ${
+          hasWallpaper ? "bg-card/80 backdrop-blur-xl" : "bg-card"
+        }`}
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", height: "calc(64px + env(safe-area-inset-bottom, 0px))" }}
       >
         {/* Primary tabs */}
@@ -96,7 +100,9 @@ export default function MobileTabBar() {
 
           {/* Slide-up drawer */}
           <div
-            className="fixed bottom-16 left-0 right-0 z-50 bg-card border-t border-border rounded-t-2xl shadow-2xl"
+            className={`fixed bottom-16 left-0 right-0 z-50 border-t border-border rounded-t-2xl shadow-2xl ${
+              hasWallpaper ? "bg-card/80 backdrop-blur-xl" : "bg-card"
+            }`}
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
             {/* Drag handle + close */}
