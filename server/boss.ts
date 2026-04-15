@@ -24,20 +24,30 @@ async function getOwnerObsidianConnector(): Promise<any | null> {
   try {
     // Try owner email first
     const ownerUser = await storage.getUserByEmail("reederb46@gmail.com");
+    console.log(`[Obsidian lookup] ownerUser by email: ${ownerUser ? `id=${ownerUser.id}, role=${(ownerUser as any).role}` : "NOT FOUND"}`);
     if (ownerUser) {
       const connectors = await storage.getConnectorsByUser(ownerUser.id);
+      console.log(`[Obsidian lookup] connectors for user ${ownerUser.id}: ${connectors.length} total, providers: [${connectors.map((c: any) => `${c.provider}(${c.status})`).join(", ")}]`);
       const obs = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
       if (obs) return obs;
     }
     // Fallback: find any user with Obsidian connected (for dev/test accounts)
     const allUsers = await storage.getAllUsers();
+    console.log(`[Obsidian lookup] fallback: checking ${allUsers.length} users`);
     for (const u of allUsers) {
       const connectors = await storage.getConnectorsByUser(u.id);
+      if (connectors.length > 0) {
+        console.log(`[Obsidian lookup] user ${u.id} (${(u as any).email}): [${connectors.map((c: any) => `${c.provider}(${c.status})`).join(", ")}]`);
+      }
       const obs = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
       if (obs) return obs;
     }
+    console.log(`[Obsidian lookup] NO obsidian connector found in any user`);
     return null;
-  } catch { return null; }
+  } catch (err: any) {
+    console.error(`[Obsidian lookup] ERROR: ${err.message}`, err.stack);
+    return null;
+  }
 }
 
 // Load Boss operating instructions from WAT framework
