@@ -554,9 +554,10 @@ Present each department's output clearly. For code, keep it in code blocks. For 
     }
 
     // ── Post-synthesis: auto-save to owner's Obsidian vault by department ──
+    console.log("[Boss] Starting vault save for department synthesis...");
     try {
       const obsConnector = await getOwnerObsidianConnector();
-      console.log(`[Boss] Synthesis vault save: connector ${obsConnector ? `id=${obsConnector.id}` : "NOT FOUND"}`);
+      console.log(`[Boss] Obsidian connector: ${obsConnector ? `id=${obsConnector.id}, status=${obsConnector.status}` : "NOT FOUND"}`);
 
       if (obsConnector) {
         // Check if user specified a custom path
@@ -581,7 +582,9 @@ Present each department's output clearly. For code, keep it in code blocks. For 
               const imgUrl = r.imageUrl.startsWith("/") ? `${process.env.APP_URL || "http://localhost:3000"}${r.imageUrl}` : r.imageUrl;
               body += `\n\n## Generated Image\n![Generated Image](${imgUrl})\n`;
             }
+            console.log(`[Boss] Writing dept note: ${notePath}`);
             const result = await connectorRegistry.execute(obsConnector.id, "write_note", { path: notePath, content: header + body });
+            console.log(`[Boss] Write result for ${notePath}: ${result.ok ? "OK" : result.error}`);
             if (result.ok) savedPaths.push(notePath);
           }
 
@@ -658,7 +661,7 @@ Present each department's output clearly. For code, keep it in code blocks. For 
         }
       }
     } catch (e: any) {
-      console.error("[Boss] Connector write-back failed:", e.message);
+      console.error("[Boss] Connector write-back failed:", e.message, e.stack?.slice(0, 300));
     }
 
     // Build final content with image markers
