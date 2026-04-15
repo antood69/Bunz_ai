@@ -433,7 +433,7 @@ function GigDialog({ gig, pipelines, onClose, onSave }: {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Briefcase className="w-6 h-6 text-primary" />
@@ -449,7 +449,7 @@ function GigDialog({ gig, pipelines, onClose, onSave }: {
               <div className="col-span-2">
                 <Label className="text-xs">Service Title</Label>
                 <Input value={title} onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Professional SEO Blog Article" className="mt-1 h-10" />
+                  placeholder="e.g. Professional SEO Blog Article" className="mt-1 h-11 text-base" />
               </div>
               <div>
                 <Label className="text-xs">Category</Label>
@@ -527,8 +527,8 @@ function GigDialog({ gig, pipelines, onClose, onSave }: {
                   </div>
                   <div>
                     <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">What's included</Label>
-                    <Input value={tier.description} onChange={(e) => updateTier(i, "description", e.target.value)}
-                      className="h-9 text-sm mt-1" placeholder="e.g. 1500 words, 2 revisions" />
+                    <Textarea value={tier.description} onChange={(e) => updateTier(i, "description", e.target.value)}
+                      rows={2} className="text-sm mt-1 resize-none" placeholder="e.g. 1500 words, 2 revisions, SEO optimized" />
                   </div>
                 </div>
               ))}
