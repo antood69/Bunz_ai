@@ -10,8 +10,8 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 // Read lazily so dotenv has time to load
-function getTursoUrl() { return process.env.TURSO_DATABASE_URL; }
-function getTursoToken() { return process.env.TURSO_AUTH_TOKEN; }
+function getTursoUrl() { return process.env.TURSO_DATABASE_URL?.trim(); }
+function getTursoToken() { return process.env.TURSO_AUTH_TOKEN?.trim(); }
 export function useTurso() { return !!(getTursoUrl() && getTursoToken()); }
 
 let _turso: Client | null = null;
