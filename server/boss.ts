@@ -169,8 +169,11 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     /\b(picture|image|photo|illustration|logo|icon|art|drawing|painting)\b.*\b(of|for|about|depicting|showing|featuring)\b/i,
   ];
   const isArtRequest = ART_PATTERNS.some(p => p.test(message));
+  // Only short-circuit to Artist if the message is SHORT and purely about images
+  // Longer messages with "picture" mentioned are multi-part requests for Boss to route
+  const isShortArtOnly = isArtRequest && message.split(/\s+/).length <= 20;
 
-  if (isArtRequest) {
+  if (isShortArtOnly) {
     return handleArtShortCircuit(input, level, abortController);
   }
 
