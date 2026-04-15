@@ -466,6 +466,29 @@ export async function registerRoutes(
     res.json(msgs);
   });
 
+  // Delete a single conversation
+  app.delete("/api/conversations/:id", async (req, res) => {
+    const id = req.params.id as string;
+    try {
+      sqlite.prepare("DELETE FROM boss_messages WHERE conversation_id = ?").run(id);
+      sqlite.prepare("DELETE FROM conversations WHERE id = ?").run(id);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Delete all conversations for the user
+  app.delete("/api/conversations", async (req, res) => {
+    const userId = req.user?.id || 1;
+    try {
+      const convs = await storage.getConversationsByUser(userId);
+      for (const c of convs) {
+        sqlite.prepare("DELETE FROM boss_messages WHERE conversation_id = ?").run(c.id);
+      }
+      sqlite.prepare("DELETE FROM conversations WHERE user_id = ?").run(userId);
+      res.json({ ok: true, deleted: convs.length });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   // === AGENT JOBS ===
   app.get("/api/jobs", async (req, res) => {
     const { conversationId, status } = req.query as { conversationId?: string; status?: string };

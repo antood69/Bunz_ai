@@ -1044,18 +1044,36 @@ export default function BossPage() {
             <p className="text-[11px] text-muted-foreground px-3 py-2">No conversations yet.</p>
           ) : (
             conversations.map((conv) => (
-              <button
+              <div
                 key={conv.id}
-                onClick={() => loadConversation(conv)}
-                className={`w-full flex items-start gap-2 px-3 py-2 rounded-md text-left text-sm transition-colors ${
+                className={`group w-full flex items-center gap-1 px-3 py-2 rounded-md text-left text-sm transition-colors cursor-pointer ${
                   activeId === conv.id
                     ? "bg-primary/15 text-primary"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                 }`}
+                onClick={() => loadConversation(conv)}
               >
-                <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 opacity-60" />
-                <span className="truncate text-xs leading-relaxed">{conv.title}</span>
-              </button>
+                <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
+                <span className="truncate text-xs leading-relaxed flex-1">{conv.title}</span>
+                <button
+                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400 transition-opacity flex-shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (conv.serverId) {
+                      fetch(`/api/conversations/${conv.serverId}`, { method: "DELETE", credentials: "include" }).catch(() => {});
+                    }
+                    setConversations((prev) => {
+                      const updated = prev.filter((c) => c.id !== conv.id);
+                      saveConversations(updated);
+                      return updated;
+                    });
+                    if (activeId === conv.id) startNewChat();
+                  }}
+                  title="Delete"
+                >
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                </button>
+              </div>
             ))
           )}
         </nav>

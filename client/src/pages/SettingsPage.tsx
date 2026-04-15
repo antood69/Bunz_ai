@@ -332,6 +332,28 @@ function GeneralTab() {
         </div>
       </section>
 
+      {/* Clear Chat History */}
+      <section className="bg-card border border-border rounded-xl p-5">
+        <SectionHeader icon={Trash2} title="Chat History" description="Manage your Boss Chat conversations" />
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-foreground">Clear All Conversations</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Delete all Boss Chat conversations and messages. This cannot be undone.</p>
+          </div>
+          <Button variant="destructive" size="sm" className="text-xs" onClick={async () => {
+            if (!confirm("Are you sure? This will delete ALL your chat history.")) return;
+            try {
+              await fetch("/api/conversations", { method: "DELETE", credentials: "include" });
+              localStorage.removeItem("bunz-conversations");
+              toast({ title: "All conversations deleted" });
+            } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+          }}>
+            <Trash2 className="w-3 h-3 mr-1.5" />
+            Clear All
+          </Button>
+        </div>
+      </section>
+
       {/* Account Deletion */}
       <section className="bg-card border border-border rounded-xl p-5">
         <SectionHeader icon={Trash2} title="Danger Zone" description="Irreversible account actions" />
