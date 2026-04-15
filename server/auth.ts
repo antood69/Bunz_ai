@@ -408,10 +408,15 @@ export function createAuthRouter(): Router {
   });
 
   // ── GitHub OAuth ─────────────────────────────────────────────────────────
-  router.get("/github", (_req: Request, res: Response) => {
+  router.get("/github", (req: Request, res: Response) => {
     const clientId = process.env.GITHUB_CLIENT_ID;
     if (!clientId) return res.status(500).json({ error: "GitHub OAuth not configured" });
-    const redirectUri = `${process.env.APP_URL || ""}/api/auth/github/callback`;
+    // Auto-detect base URL from the incoming request, fall back to APP_URL
+    const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
+    const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost:3000";
+    const baseUrl = process.env.APP_URL || `${proto}://${host}`;
+    const redirectUri = `${baseUrl}/api/auth/github/callback`;
+    console.log(`[OAuth] GitHub redirect_uri: ${redirectUri}`);
     const scope = "user:email,repo";
     res.redirect(`https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}`);
   });
@@ -517,10 +522,14 @@ export function createAuthRouter(): Router {
   });
 
   // ── Google OAuth ─────────────────────────────────────────────────────────
-  router.get("/google", (_req: Request, res: Response) => {
+  router.get("/google", (req: Request, res: Response) => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (!clientId) return res.status(500).json({ error: "Google OAuth not configured" });
-    const redirectUri = `${process.env.APP_URL || ""}/api/auth/google/callback`;
+    const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
+    const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost:3000";
+    const baseUrl = process.env.APP_URL || `${proto}://${host}`;
+    const redirectUri = `${baseUrl}/api/auth/google/callback`;
+    console.log(`[OAuth] Google redirect_uri: ${redirectUri}`);
     const scope = "openid email profile";
     res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline`);
   });
@@ -530,7 +539,10 @@ export function createAuthRouter(): Router {
     if (!code) return res.redirect("/#/login?error=no_code");
 
     try {
-      const redirectUri = `${process.env.APP_URL || ""}/api/auth/google/callback`;
+      const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
+      const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost:3000";
+      const baseUrl = process.env.APP_URL || `${proto}://${host}`;
+      const redirectUri = `${baseUrl}/api/auth/google/callback`;
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
