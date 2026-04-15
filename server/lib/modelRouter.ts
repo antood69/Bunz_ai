@@ -196,8 +196,8 @@ async function callOpenAIImage(opts: ChatOptions, apiKey?: string): Promise<Chat
       model,
       prompt,
       n: 1,
-      size: "1024x1024",
-      quality: "medium",
+      size: "1536x1024",
+      quality: "high",
       }),
   });
   if (!res.ok) {

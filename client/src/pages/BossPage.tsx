@@ -158,7 +158,7 @@ function WorkflowProgress({
               <img
                 src={img.imageUrl}
                 alt={img.prompt || "Generated image"}
-                className="rounded-lg max-w-full h-auto max-h-[400px] border border-border cursor-pointer hover:opacity-90 transition-opacity"
+                className="rounded-lg max-w-full h-auto max-h-[80vh] border border-border cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => window.open(img.imageUrl, '_blank')}
                 loading="lazy"
               />
@@ -319,7 +319,7 @@ function renderMarkdown(text: string): JSX.Element {
           const [, alt, url] = imgMatch;
           parts.push(
             <div key={key++} className="my-3 group relative inline-block">
-              <img src={url} alt={alt} className="max-w-full max-h-[400px] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(url, '_blank')} />
+              <img src={url} alt={alt} className="max-w-full max-h-[80vh] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(url, '_blank')} />
               <a href={url} download className="absolute top-2 right-2 p-1.5 rounded-lg bg-background/80 backdrop-blur border border-border opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background">
                 <Download className="w-4 h-4 text-foreground" />
               </a>
@@ -334,7 +334,7 @@ function renderMarkdown(text: string): JSX.Element {
           const fileUrl = `/api/files/${fileUrlMatch[1]}`;
           parts.push(
             <div key={key++} className="my-3 group relative inline-block">
-              <img src={fileUrl} alt="Generated image" className="max-w-full max-h-[400px] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(fileUrl, '_blank')} />
+              <img src={fileUrl} alt="Generated image" className="max-w-full max-h-[80vh] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(fileUrl, '_blank')} />
               <a href={fileUrl} download className="absolute top-2 right-2 p-1.5 rounded-lg bg-background/80 backdrop-blur border border-border opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background">
                 <Download className="w-4 h-4 text-foreground" />
               </a>
@@ -458,7 +458,7 @@ function MessageBubble({
               <img
                 src={msg.imageUrl}
                 alt={msg.content || "Generated image"}
-                className="rounded-lg max-w-full h-auto max-h-[512px] mb-2"
+                className="rounded-lg max-w-full h-auto max-h-[80vh] mb-2"
                 loading="lazy"
               />
               <p className="text-xs text-muted-foreground">{msg.content}</p>
@@ -513,7 +513,7 @@ function MessageBubble({
                       <img
                         src={img.imageUrl}
                         alt={img.prompt || "Generated image"}
-                        className="rounded-lg max-w-full h-auto max-h-[512px] border border-border"
+                        className="rounded-lg max-w-full h-auto max-h-[80vh] border border-border"
                         loading="lazy"
                       />
                       <a
