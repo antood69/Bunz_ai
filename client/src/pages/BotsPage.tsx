@@ -34,9 +34,9 @@ function timeAgo(ts: number | null): string {
 }
 
 const LOG_COLORS: Record<string, string> = {
-  cycle: "text-muted-foreground", decision: "text-blue-400", action: "text-amber-400",
-  result: "text-emerald-400", error: "text-red-400", notify: "text-purple-400",
-  memory: "text-cyan-400", lifecycle: "text-primary",
+  cycle: "text-muted-foreground", decision: "text-blue-500", action: "text-amber-500",
+  result: "text-emerald-500", error: "text-red-500", notify: "text-purple-500",
+  memory: "text-cyan-500", lifecycle: "text-primary",
 };
 
 // ── Bot Builder Dialog ───────────────────────────────────────────────
@@ -64,16 +64,16 @@ function BotBuilderDialog({ open, bot, onClose, onSave }: {
           <div><Label className="text-xs">Description</Label><Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="What does this bot do?" className="mt-1" /></div>
           <div><Label className="text-xs">Brain (System Prompt)</Label>
             <textarea value={brain} onChange={(e) => setBrain(e.target.value)} rows={6}
-              className="w-full mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm resize-y min-h-[100px]"
+              className="w-full mt-1 bg-background border border-border rounded-xl px-3 py-2 text-sm resize-y min-h-[100px]"
               placeholder="You are a trading bot specializing in..." /></div>
           <div><Label className="text-xs">Model</Label>
-            <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full mt-1 bg-background border border-border rounded-md px-2 py-1.5 text-sm">
+            <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full mt-1 bg-background border border-border rounded-xl px-2 py-1.5 text-sm">
               <option value="gpt-5.4-mini">GPT-5.4 Mini (fast)</option><option value="gpt-5.4">GPT-5.4 (balanced)</option>
               <option value="claude-sonnet-4-6">Claude Sonnet</option><option value="claude-opus-4-6">Claude Opus</option>
             </select></div>
           <div><Label className="text-xs">Rules (one per line)</Label>
             <textarea value={rulesText} onChange={(e) => setRulesText(e.target.value)} rows={3}
-              className="w-full mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm resize-y"
+              className="w-full mt-1 bg-background border border-border rounded-xl px-3 py-2 text-sm resize-y"
               placeholder="Max 2% drawdown per day&#10;Confirm trades over $1000" /></div>
         </div>
         <DialogFooter>
@@ -139,7 +139,7 @@ function BotAssistant({ onClose, onCreate }: { onClose: () => void; onCreate: (d
             <p className="text-xs mt-2 max-w-md mx-auto">Describe your idea and I'll ask about data sources, triggers, decision logic, constraints, and anything else I need to design it properly.</p>
             <div className="flex flex-wrap gap-2 justify-center mt-4">
               {["Trading bot for futures", "Content pipeline for Fiverr", "GitHub issue monitor", "Daily research digest"].map(s => (
-                <button key={s} onClick={() => { setInput(s); }} className="text-xs px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors">{s}</button>
+                <button key={s} onClick={() => { setInput(s); }} className="text-xs px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all">{s}</button>
               ))}
             </div>
           </div>
@@ -164,7 +164,7 @@ function BotAssistant({ onClose, onCreate }: { onClose: () => void; onCreate: (d
       {botConfig && (
         <div className="mx-4 mb-2 border border-emerald-500/30 bg-emerald-500/10 rounded-xl px-4 py-3 flex items-center justify-between">
           <div>
-            <span className="text-sm font-medium text-emerald-400">Bot ready: {botConfig.name}</span>
+            <span className="text-sm font-medium text-emerald-500">Bot ready: {botConfig.name}</span>
             <p className="text-[11px] text-muted-foreground mt-0.5">{botConfig.category} · {botConfig.rules?.length || 0} rules · {botConfig.tools?.length || 0} tools</p>
           </div>
           <Button size="sm" className="gap-1" onClick={() => { onCreate(botConfig); }}>
@@ -268,13 +268,13 @@ export default function BotsPage() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {bots.map((b) => (
-            <div key={b.id} className="border border-border rounded-xl bg-card p-4 space-y-3">
+            <div key={b.id} className="border border-border rounded-2xl bg-card p-5 space-y-3 gemini-card transition-all">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${b.status === "running" ? "bg-emerald-500/15" : "bg-secondary"}`}>
-                    <Bot className={`w-4 h-4 ${b.status === "running" ? "text-emerald-400" : "text-muted-foreground"}`} />
+                    <Bot className={`w-4 h-4 ${b.status === "running" ? "text-emerald-500" : "text-muted-foreground"}`} />
                   </div>
                   <div>
                     <h3 className="text-sm font-medium text-foreground">{b.name}</h3>
@@ -286,20 +286,20 @@ export default function BotsPage() {
                 </div>
                 <div className="flex items-center gap-1">
                   <button onClick={() => { setEditBot(b); setBuilderOpen(true); }} className="p-1 text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => deleteMut.mutate(b.id)} className="p-1 text-muted-foreground hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => deleteMut.mutate(b.id)} className="p-1 text-muted-foreground hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
               {b.description && <p className="text-xs text-muted-foreground">{b.description}</p>}
-              <div className="grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
+              <div className="grid grid-cols-3 gap-3 text-[10px] text-muted-foreground">
                 <div><Clock className="w-3 h-3 inline mr-0.5" /> {timeAgo(b.last_active_at)}</div>
                 <div><Zap className="w-3 h-3 inline mr-0.5" /> {b.total_runs} runs</div>
                 <div><Activity className="w-3 h-3 inline mr-0.5" /> {b.total_tokens >= 1000 ? `${(b.total_tokens / 1000).toFixed(1)}K` : b.total_tokens} tok</div>
               </div>
-              <div className="flex items-center gap-2 pt-1 border-t border-border">
+              <div className="flex items-center gap-3 pt-1 border-t border-border">
                 {b.status === "running" ? (
-                  <Button size="sm" variant="outline" className="flex-1 h-7 text-xs text-red-400" onClick={() => stopMut.mutate(b.id)}><Square className="w-3 h-3 mr-1" /> Stop</Button>
+                  <Button size="sm" variant="outline" className="flex-1 h-7 text-xs text-red-500" onClick={() => stopMut.mutate(b.id)}><Square className="w-3 h-3 mr-1" /> Stop</Button>
                 ) : (
-                  <Button size="sm" variant="outline" className="flex-1 h-7 text-xs text-emerald-400" onClick={() => startMut.mutate(b.id)}><Play className="w-3 h-3 mr-1" /> Start</Button>
+                  <Button size="sm" variant="outline" className="flex-1 h-7 text-xs text-emerald-500" onClick={() => startMut.mutate(b.id)}><Play className="w-3 h-3 mr-1" /> Start</Button>
                 )}
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => runOnceMut.mutate(b.id)} disabled={runOnceMut.isPending}>
                   {runOnceMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
@@ -309,7 +309,7 @@ export default function BotsPage() {
                 </Button>
               </div>
               {logsOpen === b.id && logs.length > 0 && (
-                <div className="border border-border rounded-lg bg-secondary/30 p-2 max-h-48 overflow-y-auto space-y-1">
+                <div className="border border-border rounded-xl bg-secondary/30 p-3 max-h-48 overflow-y-auto space-y-1">
                   {logs.map((l) => (
                     <div key={l.id} className="text-[10px] flex items-start gap-1.5">
                       <span className="text-muted-foreground/50 flex-shrink-0">{new Date(l.created_at).toLocaleTimeString()}</span>

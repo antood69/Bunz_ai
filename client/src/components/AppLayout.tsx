@@ -10,14 +10,6 @@ import {
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
-  Package,
-  Briefcase,
-  Target,
-  BookOpen,
-  Layers,
-  Cpu,
-  Trophy,
-  Building2,
   ListChecks,
   Code,
 } from "lucide-react";
@@ -30,11 +22,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+// import { useQuery } from "@tanstack/react-query";
 
-const ICON_MAP: Record<string, React.ElementType> = {
-  Briefcase, Target, BookOpen, Layers, Cpu, Trophy, Building2,
-};
+const ICON_MAP: Record<string, React.ElementType> = {};
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -48,17 +38,16 @@ const navItems = [
 
 function BunzLogo() {
   return (
-    <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-label="Bunz">
-      <rect x="2" y="2" width="28" height="28" rx="6" stroke="hsl(239 84% 67%)" strokeWidth="2" />
-      <path d="M10 22V10l6 8 6-8v12" stroke="hsl(263 70% 58%)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center flex-shrink-0">
+      <span className="text-white font-bold text-sm">B</span>
+    </div>
   );
 }
 
 function UserAvatar({ name, email }: { name?: string; email?: string }) {
   const initial = (name ?? email ?? "?")[0].toUpperCase();
   return (
-    <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-semibold text-primary flex-shrink-0 select-none">
+    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-blue-500 flex items-center justify-center text-xs font-semibold text-white flex-shrink-0 select-none">
       {initial}
     </div>
   );
@@ -82,21 +71,19 @@ export default function AppLayout({ children, allowPublic = false }: { children:
     });
   };
 
-  // Fetch installed mods for sidebar
-  const { data: installedMods = [] } = useQuery<{ slug: string; name: string; icon: string; route: string }[]>({
-    queryKey: ["/api/workshop/installed"],
-    enabled: isAuthenticated,
-    staleTime: 60000,
-  });
+  // Mods disabled for now
+  // const { data: installedMods = [] } = useQuery<{ slug: string; name: string; icon: string; route: string }[]>({
+  //   queryKey: ["/api/workshop/installed"],
+  //   enabled: isAuthenticated,
+  //   staleTime: 60000,
+  // });
 
-  // Redirect to login if not authenticated (skip for public pages)
   useEffect(() => {
     if (!allowPublic && !isLoading && !isAuthenticated) {
       window.location.href = "/#/login";
     }
   }, [isLoading, isAuthenticated, allowPublic]);
 
-  // While loading auth, show nothing to prevent flash (but allow public pages through)
   if (isLoading && !allowPublic) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -105,7 +92,6 @@ export default function AppLayout({ children, allowPublic = false }: { children:
     );
   }
 
-  // If not authenticated and not public, render nothing (redirect is in progress)
   if (!isAuthenticated && !allowPublic) {
     return null;
   }
@@ -114,29 +100,30 @@ export default function AppLayout({ children, allowPublic = false }: { children:
 
   return (
     <div className="flex h-screen overflow-hidden bg-background relative">
-      {/* Wallpaper background layer */}
       <WallpaperLayer />
 
-      {/* Sidebar — desktop only */}
+      {/* ── Sidebar (desktop) ── */}
       <aside
-        className={`hidden md:flex flex-shrink-0 border-r border-border flex-col relative z-10 transition-all duration-200 ${
-          sidebarCollapsed ? "w-14" : "w-56"
+        className={`hidden md:flex flex-shrink-0 flex-col relative z-10 transition-all duration-200 ${
+          sidebarCollapsed ? "w-[68px]" : "w-60"
         } ${
           hasWallpaper
-            ? "bg-sidebar/80 backdrop-blur-xl"
-            : "bg-sidebar"
+            ? "bg-sidebar/80 backdrop-blur-xl border-r border-border/50"
+            : "bg-sidebar border-r border-border"
         }`}
       >
-        {/* Logo + collapse toggle */}
-        <div className={`flex items-center h-14 border-b border-border ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"}`}>
-          <div className={`flex items-center gap-2.5 ${sidebarCollapsed ? "justify-center" : ""}`}>
+        {/* Logo area */}
+        <div className={`flex items-center h-14 ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"}`}>
+          <div className={`flex items-center gap-3 ${sidebarCollapsed ? "justify-center" : ""}`}>
             <BunzLogo />
-            {!sidebarCollapsed && <span className="font-semibold text-sm tracking-tight text-foreground">Bunz</span>}
+            {!sidebarCollapsed && (
+              <span className="font-semibold text-[15px] tracking-tight text-foreground">Bunz</span>
+            )}
           </div>
           {!sidebarCollapsed && (
             <button
               onClick={toggleSidebar}
-              className="p-1 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+              className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
               title="Collapse sidebar"
             >
               <PanelLeftClose className="w-4 h-4" />
@@ -144,12 +131,11 @@ export default function AppLayout({ children, allowPublic = false }: { children:
           )}
         </div>
 
-        {/* Expand button when collapsed */}
         {sidebarCollapsed && (
-          <div className="flex justify-center py-2 border-b border-border">
+          <div className="flex justify-center py-2">
             <button
               onClick={toggleSidebar}
-              className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+              className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
               title="Expand sidebar"
             >
               <PanelLeftOpen className="w-4 h-4" />
@@ -159,13 +145,13 @@ export default function AppLayout({ children, allowPublic = false }: { children:
 
         {/* User info */}
         {!sidebarCollapsed && (
-          <div className="px-3 py-3 border-b border-border">
-            <div className="flex items-center gap-2 px-2 py-1.5 rounded-md">
+          <div className="px-3 py-3">
+            <div className="flex items-center gap-3 px-2 py-2 rounded-xl bg-secondary/50">
               <UserAvatar name={user?.displayName} email={user?.email} />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-foreground truncate">{displayLabel}</p>
+                <p className="text-sm font-medium text-foreground truncate">{displayLabel}</p>
                 {isOwner && (
-                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-primary">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary">
                     <ShieldAlert className="w-2.5 h-2.5" />
                     Owner
                   </span>
@@ -175,13 +161,13 @@ export default function AppLayout({ children, allowPublic = false }: { children:
           </div>
         )}
         {sidebarCollapsed && (
-          <div className="flex justify-center py-2 border-b border-border">
+          <div className="flex justify-center py-3">
             <UserAvatar name={user?.displayName} email={user?.email} />
           </div>
         )}
 
         {/* Navigation */}
-        <nav className={`flex-1 py-3 space-y-0.5 overflow-y-auto overscroll-contain ${sidebarCollapsed ? "px-1" : "px-2"}`}>
+        <nav className={`flex-1 py-2 space-y-1 overflow-y-auto overscroll-contain ${sidebarCollapsed ? "px-2" : "px-3"}`}>
           {navItems.map((item) => {
             const isActive =
               location === item.href ||
@@ -191,53 +177,20 @@ export default function AppLayout({ children, allowPublic = false }: { children:
                 <div
                   data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                   title={sidebarCollapsed ? item.label : undefined}
-                  className={`flex items-center rounded-md cursor-pointer transition-colors ${
-                    sidebarCollapsed ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2 text-sm"
+                  className={`flex items-center rounded-xl cursor-pointer transition-all duration-150 ${
+                    sidebarCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 text-sm"
                   } ${
                     isActive
-                      ? "bg-primary/15 text-primary font-medium"
+                      ? "bg-primary/12 text-primary font-medium"
                       : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                   }`}
                 >
-                  <item.icon className="w-4 h-4 flex-shrink-0" />
+                  <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "" : ""}`} />
                   {!sidebarCollapsed && item.label}
                 </div>
               </Link>
             );
           })}
-
-          {/* Mods removed */}
-          {false && installedMods.length > 0 && (
-            <>
-              {!sidebarCollapsed && (
-                <div className="px-3 pt-3 pb-1">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">My Mods</p>
-                </div>
-              )}
-              {sidebarCollapsed && <div className="border-t border-border my-1" />}
-              {installedMods.map((mod) => {
-                const ModIcon = ICON_MAP[mod.icon] || Package;
-                const isActive = location === mod.route || location.startsWith(mod.route + "/");
-                return (
-                  <Link key={mod.slug} href={mod.route}>
-                    <div
-                      title={sidebarCollapsed ? mod.name : undefined}
-                      className={`flex items-center rounded-md cursor-pointer transition-colors ${
-                        sidebarCollapsed ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2 text-sm"
-                      } ${
-                        isActive
-                          ? "bg-primary/15 text-primary font-medium"
-                          : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                      }`}
-                    >
-                      <ModIcon className="w-4 h-4 flex-shrink-0" />
-                      {!sidebarCollapsed && mod.name}
-                    </div>
-                  </Link>
-                );
-              })}
-            </>
-          )}
 
           {/* Admin link — owner only */}
           {isOwner && (
@@ -245,15 +198,15 @@ export default function AppLayout({ children, allowPublic = false }: { children:
               <div
                 data-testid="nav-admin"
                 title={sidebarCollapsed ? "Admin" : undefined}
-                className={`flex items-center rounded-md cursor-pointer transition-colors ${
-                  sidebarCollapsed ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2 text-sm"
+                className={`flex items-center rounded-xl cursor-pointer transition-all duration-150 ${
+                  sidebarCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 text-sm"
                 } ${
                   location === "/admin"
-                    ? "bg-primary/15 text-primary font-medium"
+                    ? "bg-primary/12 text-primary font-medium"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                 }`}
               >
-                <ShieldAlert className="w-4 h-4 flex-shrink-0" />
+                <ShieldAlert className="w-[18px] h-[18px] flex-shrink-0" />
                 {!sidebarCollapsed && "Admin"}
               </div>
             </Link>
@@ -262,32 +215,32 @@ export default function AppLayout({ children, allowPublic = false }: { children:
 
         {!sidebarCollapsed && <TokenCounter />}
 
-        {/* Bottom section: plan + logout */}
-        <div className={`py-3 border-t border-border space-y-1 ${sidebarCollapsed ? "px-1" : "px-3"}`}>
+        {/* Bottom section */}
+        <div className={`py-3 border-t border-border/50 space-y-1 ${sidebarCollapsed ? "px-2" : "px-3"}`}>
           {!sidebarCollapsed ? (
             <>
               <Link href="/settings?tab=pricing">
                 <div
-                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-secondary cursor-pointer transition-colors group"
+                  className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-secondary cursor-pointer transition-colors group"
                   data-testid="sidebar-plan-badge"
                 >
-                  <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium text-primary flex-shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-medium text-primary flex-shrink-0">
                     N
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-foreground truncate">Free Tier</p>
+                    <p className="text-sm font-medium text-foreground truncate">Free Tier</p>
                     <p className="text-[11px] text-muted-foreground">2 / 2 agents used</p>
                   </div>
-                  <Zap className="w-3 h-3 text-primary opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                  <Zap className="w-3.5 h-3.5 text-primary opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                 </div>
               </Link>
 
               <button
                 onClick={logout}
                 data-testid="sidebar-logout"
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer transition-colors"
               >
-                <LogOut className="w-4 h-4 flex-shrink-0" />
+                <LogOut className="w-[18px] h-[18px] flex-shrink-0" />
                 Logout
               </button>
             </>
@@ -296,52 +249,47 @@ export default function AppLayout({ children, allowPublic = false }: { children:
               onClick={logout}
               data-testid="sidebar-logout"
               title="Logout"
-              className="w-full flex items-center justify-center py-2 rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer transition-colors"
+              className="w-full flex items-center justify-center p-2.5 rounded-xl text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer transition-colors"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-[18px] h-[18px]" />
             </button>
           )}
         </div>
       </aside>
 
-      {/* Main content */}
+      {/* ── Main content ── */}
       <div className="flex-1 flex flex-col overflow-hidden relative z-10">
-        {/* Mobile top header bar */}
+        {/* Mobile top header */}
         {isMobile && (
           <div
-            className={`flex md:hidden h-14 items-center justify-between px-4 border-b border-border shrink-0 ${
+            className={`flex md:hidden h-14 items-center justify-between px-4 shrink-0 ${
               hasWallpaper
-                ? "bg-card/80 backdrop-blur-xl"
-                : "bg-card"
+                ? "bg-card/80 backdrop-blur-xl border-b border-border/50"
+                : "bg-card border-b border-border"
             }`}
           >
-            {/* Left spacer to center the logo */}
             <div className="w-8" />
-            {/* Centered logo */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <BunzLogo />
-              <span className="font-semibold text-sm tracking-tight text-foreground">Bunz</span>
+              <span className="font-semibold text-[15px] tracking-tight text-foreground">Bunz</span>
             </div>
-            {/* Right: notification bell */}
             <div className="flex items-center">
               <NotificationBell />
             </div>
           </div>
         )}
 
-        {/* Desktop top bar with notification bell */}
+        {/* Desktop top bar */}
         {!isMobile && (
           <div
-            className={`h-12 border-b border-border flex items-center justify-end px-4 gap-3 shrink-0 ${
+            className={`h-12 flex items-center justify-end px-5 gap-3 shrink-0 ${
               hasWallpaper
-                ? "bg-card/80 backdrop-blur-xl"
-                : "bg-card"
+                ? "bg-card/80 backdrop-blur-xl border-b border-border/50"
+                : "bg-card border-b border-border"
             }`}
           >
             <NotificationBell />
-            <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-semibold text-primary">
-              {(user?.displayName || user?.email || "U").charAt(0).toUpperCase()}
-            </div>
+            <UserAvatar name={user?.displayName} email={user?.email} />
           </div>
         )}
 
@@ -352,10 +300,7 @@ export default function AppLayout({ children, allowPublic = false }: { children:
         </main>
       </div>
 
-      {/* Mobile bottom tab bar */}
       {isMobile && <MobileTabBar />}
-
-      {/* Onboarding tour for first-time users */}
       {isAuthenticated && <OnboardingTour />}
     </div>
   );

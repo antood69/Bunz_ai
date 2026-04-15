@@ -32,7 +32,7 @@ const tiers = [
     price: { monthly: 12, annual: 9 },
     description: "For individuals building AI workflows",
     icon: Zap,
-    color: "text-emerald-400",
+    color: "text-emerald-500",
     accent: "border-emerald-500/40",
     badgeVariant: null as null,
     features: [
@@ -76,7 +76,7 @@ const tiers = [
     price: { monthly: 99, annual: 79 },
     description: "For teams and client work",
     icon: Building2,
-    color: "text-violet-400",
+    color: "text-violet-500",
     accent: "border-violet-500",
     badgeVariant: null as null,
     features: [
@@ -130,7 +130,7 @@ function FAQ() {
         {faqs.map((faq, i) => (
           <div
             key={i}
-            className="border border-border rounded-lg overflow-hidden"
+            className="border border-border rounded-xl overflow-hidden"
             data-testid={`faq-item-${i}`}
           >
             <button
@@ -191,12 +191,12 @@ export default function PricingPage() {
 
       {/* Success / Cancel banners */}
       {checkoutSuccess && (
-        <div className="mb-6 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400 text-center">
+        <div className="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-500 text-center">
           Subscription activated! Welcome to Bunz {annual ? "Annual" : "Monthly"} — let's get it. 🔥
         </div>
       )}
       {checkoutCanceled && (
-        <div className="mb-6 rounded-lg border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm text-orange-400 text-center">
+        <div className="mb-6 rounded-xl border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm text-orange-400 text-center">
           Checkout was canceled — no charge was made. Upgrade whenever you're ready.
         </div>
       )}
@@ -237,7 +237,7 @@ export default function PricingPage() {
             data-testid="billing-annual"
           >
             Annual
-            <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded-full">
+            <span className="text-[11px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
               Save 20%
             </span>
           </button>
@@ -255,7 +255,7 @@ export default function PricingPage() {
             <div
               key={tier.id}
               data-testid={`tier-card-${tier.id}`}
-              className={`relative rounded-xl border-2 ${tier.accent} bg-card p-5 flex flex-col transition-shadow hover:shadow-lg hover:shadow-primary/5 ${
+              className={`relative rounded-2xl border-2 ${tier.accent} bg-card p-6 flex flex-col transition-all hover:shadow-lg hover:shadow-primary/5 ${
                 tier.id === "pro" ? "ring-1 ring-primary/20" : ""
               }`}
             >
@@ -269,7 +269,7 @@ export default function PricingPage() {
 
               {/* Tier header */}
               <div className="flex items-center gap-2 mb-3">
-                <div className={`p-1.5 rounded-md ${tier.id === "pro" ? "bg-primary/15" : tier.id === "agency" ? "bg-violet-500/15" : tier.id === "starter" ? "bg-emerald-500/15" : "bg-secondary"}`}>
+                <div className={`p-1.5 rounded-xl ${tier.id === "pro" ? "bg-primary/15" : tier.id === "agency" ? "bg-violet-500/15" : tier.id === "starter" ? "bg-emerald-500/15" : "bg-secondary"}`}>
                   <Icon className={`w-4 h-4 ${tier.color}`} />
                 </div>
                 <span className="font-semibold text-sm text-foreground">{tier.name}</span>
@@ -321,7 +321,7 @@ export default function PricingPage() {
               <ul className="space-y-2 flex-1">
                 {tier.features.map((f) => (
                   <li key={f} className="flex items-start gap-2 text-xs text-muted-foreground">
-                    <Check className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${tier.id === "pro" ? "text-primary" : tier.id === "agency" ? "text-violet-400" : tier.id === "starter" ? "text-emerald-400" : "text-muted-foreground"}`} />
+                    <Check className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${tier.id === "pro" ? "text-primary" : tier.id === "agency" ? "text-violet-500" : tier.id === "starter" ? "text-emerald-500" : "text-muted-foreground"}`} />
                     {f}
                   </li>
                 ))}
@@ -332,7 +332,7 @@ export default function PricingPage() {
       </div>
 
       {/* Usage meters callout */}
-      <div className="mt-8 rounded-xl border border-border bg-card px-6 py-5 flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-8">
+      <div className="mt-8 rounded-2xl border border-border bg-card px-6 py-5 flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-8">
         <div className="flex-1">
           <p className="text-sm font-medium text-foreground mb-0.5">Your current usage</p>
           <p className="text-xs text-muted-foreground">Free tier — tracked against your plan limits in real time</p>
@@ -349,13 +349,13 @@ export default function PricingPage() {
               <div key={meter.label} className="min-w-[120px]" data-testid={`meter-${meter.label.toLowerCase().replace(/ /g, '-')}`}>
                 <div className="flex justify-between text-[11px] mb-1">
                   <span className="text-muted-foreground">{meter.label}</span>
-                  <span className={`font-medium tabular-nums ${danger ? "text-orange-400" : "text-foreground"}`}>
+                  <span className={`font-medium tabular-nums ${danger ? "text-orange-500" : "text-foreground"}`}>
                     {meter.used}/{meter.limit}
                   </span>
                 </div>
                 <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${danger ? "bg-orange-400" : "bg-primary"}`}
+                    className={`h-full rounded-full transition-all ${danger ? "bg-orange-500" : "bg-primary"}`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>

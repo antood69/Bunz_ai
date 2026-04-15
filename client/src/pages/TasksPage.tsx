@@ -18,10 +18,10 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  running: { label: "Running", color: "bg-blue-500/15 text-blue-400 border-blue-500/30", icon: Loader2 },
-  pending: { label: "Pending", color: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30", icon: Clock },
-  complete: { label: "Complete", color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30", icon: CheckCircle2 },
-  failed: { label: "Failed", color: "bg-red-500/15 text-red-400 border-red-500/30", icon: XCircle },
+  running: { label: "Running", color: "bg-blue-500/15 text-blue-500 border-blue-500/30", icon: Loader2 },
+  pending: { label: "Pending", color: "bg-yellow-500/15 text-yellow-500 border-yellow-500/30", icon: Clock },
+  complete: { label: "Complete", color: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30", icon: CheckCircle2 },
+  failed: { label: "Failed", color: "bg-red-500/15 text-red-500 border-red-500/30", icon: XCircle },
 };
 
 interface AgentJob {
@@ -88,7 +88,7 @@ function JobRow({ job, onStop, onDelete }: { job: AgentJob; onStop: (id: string)
   }
 
   return (
-    <div className="border border-border rounded-lg bg-card hover:bg-card/80 transition-colors">
+    <div className="border border-border rounded-2xl bg-card hover:bg-card/80 transition-all gemini-card">
       <div
         className="flex items-center gap-3 px-4 py-3 cursor-pointer"
         onClick={() => setExpanded(!expanded)}
@@ -99,7 +99,7 @@ function JobRow({ job, onStop, onDelete }: { job: AgentJob; onStop: (id: string)
         </div>
 
         {/* Type icon */}
-        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <div className="w-8 h-8 rounded-xl bg-primary/12 flex items-center justify-center flex-shrink-0">
           <TypeIcon className="w-4 h-4 text-primary" />
         </div>
 
@@ -132,11 +132,11 @@ function JobRow({ job, onStop, onDelete }: { job: AgentJob; onStop: (id: string)
         {/* Actions */}
         <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           {job.status === "running" && (
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-yellow-400 hover:text-yellow-300" onClick={() => onStop(job.id)} title="Stop">
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-yellow-500 hover:text-yellow-400" onClick={() => onStop(job.id)} title="Stop">
               <Square className="w-3.5 h-3.5" />
             </Button>
           )}
-          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400" onClick={() => onDelete(job.id)} title="Delete">
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500" onClick={() => onDelete(job.id)} title="Delete">
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
         </div>
@@ -153,7 +153,7 @@ function JobRow({ job, onStop, onDelete }: { job: AgentJob; onStop: (id: string)
           </div>
 
           {/* Meta */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
             <div><span className="text-muted-foreground">Job ID:</span> <span className="text-foreground font-mono">{job.id.slice(0, 8)}</span></div>
             <div><span className="text-muted-foreground">Conv:</span> <span className="text-foreground font-mono">{job.conversationId.slice(0, 8)}</span></div>
             <div><span className="text-muted-foreground">Created:</span> <span className="text-foreground">{new Date(job.createdAt).toLocaleString()}</span></div>
@@ -164,7 +164,7 @@ function JobRow({ job, onStop, onDelete }: { job: AgentJob; onStop: (id: string)
           {outputPreview && (
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-1">Output</p>
-              <pre className="text-xs bg-secondary/50 border border-border rounded-lg p-3 overflow-x-auto max-h-60 whitespace-pre-wrap text-foreground">
+              <pre className="text-xs bg-secondary/50 border border-border rounded-xl p-4 overflow-x-auto max-h-60 whitespace-pre-wrap text-foreground">
                 {outputPreview.slice(0, 2000)}
               </pre>
             </div>
@@ -271,13 +271,13 @@ export default function TasksPage() {
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
           { label: "Total", value: totalJobs, color: "text-foreground" },
-          { label: "Running", value: runningJobs, color: "text-blue-400" },
-          { label: "Completed", value: completedJobs, color: "text-emerald-400" },
-          { label: "Failed", value: failedJobs, color: "text-red-400" },
+          { label: "Running", value: runningJobs, color: "text-blue-500" },
+          { label: "Completed", value: completedJobs, color: "text-emerald-500" },
+          { label: "Failed", value: failedJobs, color: "text-red-500" },
           { label: "Success Rate", value: `${successRate}%`, color: "text-primary" },
         ].map((stat) => (
-          <div key={stat.label} className="bg-card border border-border rounded-lg px-4 py-3">
-            <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{stat.label}</p>
+          <div key={stat.label} className="bg-card border border-border rounded-2xl px-5 py-4">
+            <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
             <p className={`text-lg font-semibold ${stat.color}`}>{stat.value}</p>
           </div>
         ))}
@@ -314,7 +314,7 @@ export default function TasksPage() {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="h-8 bg-secondary border border-border rounded-md px-2 text-xs text-foreground"
+            className="h-8 bg-secondary border border-border rounded-xl px-2 text-xs text-foreground"
           >
             <option value="all">All types</option>
             {jobTypes.map((t) => (
@@ -329,7 +329,7 @@ export default function TasksPage() {
       </div>
 
       {/* Job list */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         {isLoading ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin mr-2" />

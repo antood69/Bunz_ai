@@ -99,7 +99,7 @@ function AgentStatusCard({ worker }: { worker: WorkerStatus }) {
   };
 
   return (
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${statusColors[worker.status]}`}>
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs transition-all ${statusColors[worker.status]}`}>
       <Icon className="w-3.5 h-3.5 flex-shrink-0" />
       <span className="font-medium">{label}</span>
       {worker.status === "running" && <Loader2 className="w-3 h-3 animate-spin" />}
@@ -132,7 +132,7 @@ function WorkflowProgress({
   const pipelineLabel = isDeptDispatch ? "Department Pipeline" : "Agent Pipeline";
 
   return (
-    <div className="space-y-2 p-3 bg-card/50 border border-border rounded-xl">
+    <div className="space-y-2 p-4 bg-card/50 border border-border rounded-2xl">
       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
         <Zap className="w-3 h-3" />
         <span className="font-medium">{pipelineLabel}</span>
@@ -200,7 +200,7 @@ function StreamingStatusBar({
   if (!isStreaming && totalTokens === 0) return null;
 
   return (
-    <div className="flex items-center gap-3 px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-[10px] text-muted-foreground">
+    <div className="flex items-center gap-3 px-4 py-2 bg-muted/30 border border-border rounded-xl text-[10px] text-muted-foreground">
       {isStreaming ? (
         <>
           <span className="flex items-center gap-1">
@@ -232,18 +232,18 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
     });
   };
   return (
-    <div className="relative group my-3 rounded-lg overflow-hidden border border-border">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/60 border-b border-border">
+    <div className="relative group my-3 rounded-xl overflow-hidden border border-border">
+      <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-border">
         <span className="text-[11px] text-muted-foreground font-mono">{lang || "code"}</span>
         <button
           onClick={copy}
-          className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
         >
           {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre className="bg-muted/40 p-3 overflow-x-auto text-sm font-mono text-foreground leading-relaxed">
+      <pre className="bg-muted/30 p-4 overflow-x-auto text-sm font-mono text-foreground leading-relaxed">
         <code>{code}</code>
       </pre>
     </div>
@@ -419,14 +419,14 @@ function MessageBubble({
         onMouseLeave={() => setShowTime(false)}
       >
         {!isUser && (
-          <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <Bot className="w-3.5 h-3.5 text-primary" />
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Bot className="w-4 h-4 text-white" />
           </div>
         )}
         <div
-          className={`max-w-[75%] rounded-2xl px-4 py-3 ${
+          className={`max-w-[75%] rounded-2xl px-5 py-3.5 ${
             isUser
-              ? "bg-primary/20 border border-primary/30 text-foreground ml-auto"
+              ? "bg-primary/10 text-foreground ml-auto"
               : "bg-card border border-border text-foreground w-full max-w-none flex-1"
           }`}
         >
@@ -1025,31 +1025,31 @@ export default function BossPage() {
 
   return (
     <div className="flex h-full overflow-hidden bg-background">
-      {/* ── Sidebar ────────────────────────────────────────────────────────── */}
+      {/* ── Chat Sidebar ── */}
       <div
         className={`flex-shrink-0 border-r border-border bg-sidebar flex flex-col transition-all duration-200 ${
-          sidebarOpen ? "w-56" : "w-0"
+          sidebarOpen ? "w-60" : "w-0"
         } overflow-hidden`}
       >
-        <div className="p-3 border-b border-border">
+        <div className="p-3">
           <button
             onClick={startNewChat}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium transition-colors"
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-primary/10 hover:bg-primary/15 text-primary text-sm font-medium transition-all"
           >
             <Plus className="w-4 h-4 flex-shrink-0" />
             New Chat
           </button>
         </div>
-        <nav className="flex-1 overflow-y-auto overscroll-contain px-2 py-2 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto overscroll-contain px-2 py-1 space-y-0.5">
           {conversations.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground px-3 py-2">No conversations yet.</p>
+            <p className="text-xs text-muted-foreground px-3 py-3">No conversations yet.</p>
           ) : (
             conversations.map((conv) => (
               <div
                 key={conv.id}
-                className={`group w-full flex items-center gap-1 px-3 py-2 rounded-md text-left text-sm transition-colors cursor-pointer ${
+                className={`group w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left text-sm transition-all cursor-pointer ${
                   activeId === conv.id
-                    ? "bg-primary/15 text-primary"
+                    ? "bg-primary/12 text-primary font-medium"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                 }`}
                 onClick={() => loadConversation(conv)}
@@ -1057,7 +1057,7 @@ export default function BossPage() {
                 <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
                 <span className="truncate text-xs leading-relaxed flex-1">{conv.title}</span>
                 <button
-                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400 transition-opacity flex-shrink-0"
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 transition-opacity flex-shrink-0 rounded-lg hover:bg-destructive/10"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (conv.serverId) {
@@ -1072,7 +1072,7 @@ export default function BossPage() {
                   }}
                   title="Delete"
                 >
-                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  <X className="w-3 h-3" />
                 </button>
               </div>
             ))
@@ -1084,7 +1084,7 @@ export default function BossPage() {
       <div className="flex-shrink-0 flex items-center">
         <button
           onClick={() => setSidebarOpen((v) => !v)}
-          className="w-4 h-10 flex items-center justify-center bg-border hover:bg-primary/20 text-muted-foreground hover:text-primary rounded-r transition-colors self-center"
+          className="w-5 h-12 flex items-center justify-center hover:bg-secondary text-muted-foreground hover:text-foreground rounded-r-lg transition-colors self-center"
         >
           {sidebarOpen ? <ChevronLeft className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         </button>
@@ -1093,23 +1093,23 @@ export default function BossPage() {
       {/* ── Main chat area ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {isEmpty ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6 overflow-y-auto">
+          <div className="flex-1 flex flex-col items-center justify-center gap-8 px-6 overflow-y-auto">
             <div className="relative">
-              <div className="w-16 h-16 rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center shadow-lg shadow-primary/10">
-                <Bot className="w-8 h-8 text-primary" />
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
+                <Bot className="w-7 h-7 text-white" />
               </div>
-              <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-background" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-green-400 border-2 border-background" />
             </div>
             <div className="text-center space-y-2">
-              <h1 className="text-2xl font-bold text-foreground tracking-tight">Hey, I'm The Boss.</h1>
-              <p className="text-muted-foreground text-sm">What are we building today?</p>
+              <h1 className="text-2xl font-semibold text-foreground tracking-tight">What can I help with?</h1>
+              <p className="text-muted-foreground text-[15px]">Research, write, code, create art, or run workflows.</p>
             </div>
-            <div className="flex flex-wrap gap-2 justify-center max-w-lg">
+            <div className="flex flex-wrap gap-2.5 justify-center max-w-xl">
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s}
                   onClick={() => sendMessage(s)}
-                  className="px-4 py-2 rounded-xl bg-card border border-border text-sm text-foreground hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                  className="px-5 py-2.5 rounded-full bg-card border border-border text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 hover:shadow-sm transition-all"
                 >
                   {s}
                 </button>
@@ -1117,8 +1117,8 @@ export default function BossPage() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto overscroll-contain px-4 md:px-8 py-6 space-y-2">
-            <div className="max-w-5xl mx-auto space-y-2">
+          <div className="flex-1 overflow-y-auto overscroll-contain px-4 md:px-8 py-8 space-y-4">
+            <div className="max-w-3xl mx-auto space-y-4">
               {messages.map((msg) => (
                 <MessageBubble
                   key={msg.id}
@@ -1128,10 +1128,10 @@ export default function BossPage() {
               ))}
               {isLoading && !activeJobId && (
                 <div className="flex gap-3">
-                  <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Bot className="w-3.5 h-3.5 text-primary" />
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Bot className="w-4 h-4 text-white" />
                   </div>
-                  <div className="bg-card border border-border rounded-2xl px-4 py-3">
+                  <div className="bg-card border border-border rounded-2xl px-5 py-3.5">
                     <TypingDots />
                   </div>
                 </div>
@@ -1142,22 +1142,22 @@ export default function BossPage() {
         )}
 
         {/* ── Input area ── */}
-        <div className="border-t border-border bg-background px-4 md:px-8 py-4">
-          <div className="max-w-5xl mx-auto">
+        <div className="bg-background px-4 md:px-8 py-4">
+          <div className="max-w-3xl mx-auto">
             {/* Attached files preview */}
             {attachedFiles.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2">
+              <div className="flex flex-wrap gap-2 mb-3">
                 {attachedFiles.map(f => (
-                  <div key={f.id} className="relative group flex items-center gap-2 bg-muted/50 border border-border rounded-lg px-3 py-1.5">
+                  <div key={f.id} className="relative group flex items-center gap-2 bg-secondary border border-border rounded-xl px-3 py-2">
                     {f.mimeType.startsWith("image/") ? (
-                      <img src={f.url} alt={f.name} className="w-8 h-8 rounded object-cover" />
+                      <img src={f.url} alt={f.name} className="w-8 h-8 rounded-lg object-cover" />
                     ) : (
                       <FileText className="w-4 h-4 text-muted-foreground" />
                     )}
                     <span className="text-xs text-foreground truncate max-w-[120px]">{f.name}</span>
                     <button
                       onClick={() => removeAttachment(f.id)}
-                      className="w-4 h-4 rounded-full bg-destructive/80 text-white flex items-center justify-center hover:bg-destructive transition-colors"
+                      className="w-5 h-5 rounded-full bg-destructive/80 text-white flex items-center justify-center hover:bg-destructive transition-colors"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -1165,8 +1165,7 @@ export default function BossPage() {
                 ))}
               </div>
             )}
-            <div className="flex items-end gap-3 bg-card border border-border rounded-xl px-4 py-3 shadow-sm focus-within:border-primary/50 transition-colors">
-              {/* File upload button */}
+            <div className="flex items-end gap-2 bg-card border border-border rounded-2xl px-4 py-2 shadow-sm focus-within:border-primary/50 focus-within:shadow-md transition-all">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1177,26 +1176,26 @@ export default function BossPage() {
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
                 title="Attach file"
                 disabled={isLoading}
               >
-                <Paperclip className="w-4 h-4" />
+                <Paperclip className="w-[18px] h-[18px]" />
               </button>
               <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder="Message The Boss..."
+                placeholder="Ask me anything..."
                 rows={1}
-                className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none leading-6 min-h-[24px] max-h-[144px]"
+                className="flex-1 bg-transparent text-[15px] text-foreground placeholder:text-muted-foreground resize-none outline-none leading-6 min-h-[24px] max-h-[144px] py-1.5"
                 disabled={isLoading}
               />
               {isLoading ? (
                 <button
                   onClick={cancelJobs}
-                  className="flex-shrink-0 w-8 h-8 rounded-lg bg-destructive flex items-center justify-center text-destructive-foreground hover:bg-destructive/90 transition-colors"
+                  className="flex-shrink-0 w-9 h-9 rounded-xl bg-destructive flex items-center justify-center text-destructive-foreground hover:bg-destructive/90 transition-colors"
                   title="Stop all running jobs"
                 >
                   <Square className="w-4 h-4" />
@@ -1205,18 +1204,18 @@ export default function BossPage() {
                 <button
                   onClick={() => sendMessage(input)}
                   disabled={!input.trim() && attachedFiles.length === 0 || isLoading}
-                  className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                  className="flex-shrink-0 w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
                 >
                   <Send className="w-4 h-4" />
                 </button>
               )}
             </div>
-            <div className="flex items-center justify-between mt-1.5 px-1">
-              <p className="text-[10px] text-muted-foreground">Enter to send &middot; Shift+Enter for newline</p>
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between mt-2 px-1">
+              <p className="text-[11px] text-muted-foreground">Enter to send · Shift+Enter for newline</p>
+              <div className="flex items-center gap-3">
                 <IntelligencePicker value={selectedLevel} onChange={setSelectedLevel} compact />
                 {charCount > 0 && (
-                  <p className={`text-[10px] ${charCount > 2000 ? "text-destructive" : "text-muted-foreground"}`}>
+                  <p className={`text-[11px] ${charCount > 2000 ? "text-destructive" : "text-muted-foreground"}`}>
                     {charCount.toLocaleString()}
                   </p>
                 )}

@@ -30,16 +30,16 @@ function formatTokens(n: number): string {
 }
 
 function DeltaBadge({ value }: { value: number }) {
-  if (value === 0) return <span className="text-[10px] text-muted-foreground">—</span>;
+  if (value === 0) return <span className="text-[11px] text-muted-foreground">—</span>;
   const positive = value > 0;
   return (
-    <span className={`text-[10px] font-medium ${positive ? "text-emerald-400" : "text-red-400"}`}>
+    <span className={`text-[11px] font-medium ${positive ? "text-emerald-500" : "text-red-500"}`}>
       {positive ? "+" : ""}{value}%
     </span>
   );
 }
 
-const PIE_COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#6ee7b7", "#fbbf24", "#f87171"];
+const PIE_COLORS = ["#4285f4", "#8b5cf6", "#a78bfa", "#c4b5fd", "#818cf8", "#6ee7b7", "#fbbf24", "#f87171"];
 
 // ── Component ──────────────────────────────────────────────────────────
 export default function Dashboard() {
@@ -74,30 +74,32 @@ export default function Dashboard() {
   });
 
   const kpis = [
-    { label: "Active Agents", value: stats?.activeAgents ?? 0, delta: stats?.deltas?.activeAgentsDelta ?? 0, icon: Bot, color: "text-blue-400" },
-    { label: "Tokens (7d)", value: formatTokens(stats?.tokensUsed7d ?? 0), delta: stats?.deltas?.tokensDelta ?? 0, icon: Coins, color: "text-purple-400" },
-    { label: "Tasks (30d)", value: stats?.workflowsRun30d ?? 0, delta: stats?.deltas?.workflowsDelta ?? 0, icon: Zap, color: "text-amber-400" },
-    { label: "Conversations", value: stats?.revenueThisMonth ?? 0, delta: stats?.deltas?.revenueDelta ?? 0, icon: MessageSquare, color: "text-emerald-400" },
+    { label: "Active Agents", value: stats?.activeAgents ?? 0, delta: stats?.deltas?.activeAgentsDelta ?? 0, icon: Bot, color: "text-blue-500" },
+    { label: "Tokens (7d)", value: formatTokens(stats?.tokensUsed7d ?? 0), delta: stats?.deltas?.tokensDelta ?? 0, icon: Coins, color: "text-violet-500" },
+    { label: "Tasks (30d)", value: stats?.workflowsRun30d ?? 0, delta: stats?.deltas?.workflowsDelta ?? 0, icon: Zap, color: "text-amber-500" },
+    { label: "Conversations", value: stats?.revenueThisMonth ?? 0, delta: stats?.deltas?.revenueDelta ?? 0, icon: MessageSquare, color: "text-emerald-500" },
   ];
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">Real-time metrics & controls</p>
+        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Dashboard</h1>
+        <p className="text-[15px] text-muted-foreground mt-1">Real-time metrics & controls</p>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi) => (
-          <div key={kpi.label} className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">{kpi.label}</span>
-              <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
+          <div key={kpi.label} className="bg-card border border-border rounded-2xl p-5 gemini-card">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{kpi.label}</span>
+              <div className={`w-9 h-9 rounded-xl bg-secondary flex items-center justify-center ${kpi.color}`}>
+                <kpi.icon className="w-[18px] h-[18px]" />
+              </div>
             </div>
             <div className="flex items-end justify-between">
-              <span className="text-2xl font-bold text-foreground">{kpi.value}</span>
+              <span className="text-3xl font-semibold text-foreground tracking-tight">{kpi.value}</span>
               <DeltaBadge value={kpi.delta} />
             </div>
           </div>
@@ -107,22 +109,23 @@ export default function Dashboard() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Token Usage Chart */}
-        <div className="bg-card border border-border rounded-xl p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            <BarChart3 className="w-3.5 h-3.5 inline mr-1" />Token Usage (7d)
+        <div className="bg-card border border-border rounded-2xl p-6">
+          <p className="text-sm font-medium text-foreground mb-4 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-muted-foreground" />
+            Token Usage (7d)
           </p>
-          <div className="h-48">
+          <div className="h-52">
             {tokenChart.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={tokenChart}>
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#888" }} tickFormatter={(d) => d.slice(5)} />
-                  <YAxis tick={{ fontSize: 10, fill: "#888" }} tickFormatter={(v) => formatTokens(v)} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(d) => d.slice(5)} />
+                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => formatTokens(v)} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: "#1a1a2e", border: "1px solid #333", borderRadius: 8, fontSize: 12 }}
-                    labelStyle={{ color: "#888" }}
+                    contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
+                    labelStyle={{ color: "hsl(var(--muted-foreground))" }}
                     formatter={(v: number) => [formatTokens(v), "Tokens"]}
                   />
-                  <Bar dataKey="tokens" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="tokens" fill="hsl(217 91% 60%)" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -132,17 +135,17 @@ export default function Dashboard() {
         </div>
 
         {/* Model Usage Pie */}
-        <div className="bg-card border border-border rounded-xl p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Model Usage</p>
-          <div className="h-48 flex items-center">
+        <div className="bg-card border border-border rounded-2xl p-6">
+          <p className="text-sm font-medium text-foreground mb-4">Model Usage</p>
+          <div className="h-52 flex items-center">
             {modelUsage.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={modelUsage} dataKey="tokens" nameKey="model" cx="50%" cy="50%" outerRadius={70} innerRadius={40} paddingAngle={2}>
+                  <Pie data={modelUsage} dataKey="tokens" nameKey="model" cx="50%" cy="50%" outerRadius={75} innerRadius={45} paddingAngle={2}>
                     {modelUsage.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ backgroundColor: "#1a1a2e", border: "1px solid #333", borderRadius: 8, fontSize: 12 }}
+                    contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
                     formatter={(v: number) => [formatTokens(v), "Tokens"]}
                   />
                 </PieChart>
@@ -151,7 +154,7 @@ export default function Dashboard() {
               <div className="w-full text-center text-muted-foreground text-sm">No model data yet</div>
             )}
             {modelUsage.length > 0 && (
-              <div className="space-y-1.5 ml-2 min-w-[100px]">
+              <div className="space-y-2 ml-3 min-w-[100px]">
                 {modelUsage.slice(0, 5).map((m, i) => (
                   <div key={m.model} className="flex items-center gap-2 text-xs">
                     <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
@@ -167,20 +170,20 @@ export default function Dashboard() {
       {/* Bottom Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Department Performance */}
-        <div className="bg-card border border-border rounded-xl p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Department Performance</p>
+        <div className="bg-card border border-border rounded-2xl p-6">
+          <p className="text-sm font-medium text-foreground mb-4">Department Performance</p>
           {deptStats.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {deptStats.map((d) => {
                 const rate = d.total > 0 ? Math.round((d.complete / d.total) * 100) : 0;
                 return (
                   <div key={d.department}>
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-1.5">
                       <span className="text-sm font-medium text-foreground capitalize">{d.department}</span>
                       <span className="text-xs text-muted-foreground">{d.total} runs · {rate}%</span>
                     </div>
-                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-primary" style={{ width: `${rate}%` }} />
+                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${rate}%` }} />
                     </div>
                   </div>
                 );
@@ -192,53 +195,55 @@ export default function Dashboard() {
         </div>
 
         {/* Cost Estimate */}
-        <div className="bg-card border border-border rounded-xl p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            <DollarSign className="w-3.5 h-3.5 inline mr-1" />Estimated Cost
+        <div className="bg-card border border-border rounded-2xl p-6">
+          <p className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-muted-foreground" />
+            Estimated Cost
           </p>
-          <p className="text-3xl font-bold text-foreground mb-3">${costData?.totalCostUsd?.toFixed(2) ?? "0.00"}</p>
+          <p className="text-3xl font-semibold text-foreground mb-4 tracking-tight">${costData?.totalCostUsd?.toFixed(2) ?? "0.00"}</p>
           {costData?.breakdown && costData.breakdown.filter(b => b.costUsd > 0).length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {costData.breakdown.filter(b => b.costUsd > 0).map((b) => (
-                <div key={b.model} className="flex items-center justify-between text-xs">
+                <div key={b.model} className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground truncate mr-2">{b.model}</span>
                   <span className="text-foreground font-medium">${b.costUsd.toFixed(2)}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">No cost data yet</p>
+            <p className="text-sm text-muted-foreground">No cost data yet</p>
           )}
         </div>
 
         {/* Recent Activity */}
-        <div className="bg-card border border-border rounded-xl p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            <Activity className="w-3.5 h-3.5 inline mr-1" />Recent Activity
+        <div className="bg-card border border-border rounded-2xl p-6">
+          <p className="text-sm font-medium text-foreground mb-4 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-muted-foreground" />
+            Recent Activity
           </p>
           {activityData.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {activityData.slice(0, 8).map((evt) => {
                 const isComplete = evt.type.includes("complete");
                 const isFailed = evt.type.includes("failed");
                 const Icon = isComplete ? CheckCircle2 : isFailed ? XCircle : Zap;
-                const color = isComplete ? "text-emerald-400" : isFailed ? "text-red-400" : "text-blue-400";
+                const color = isComplete ? "text-emerald-500" : isFailed ? "text-red-500" : "text-blue-500";
                 const ago = Date.now() - evt.createdAt;
                 const timeStr = ago < 60000 ? "now" : ago < 3600000 ? `${Math.floor(ago / 60000)}m` : `${Math.floor(ago / 3600000)}h`;
                 return (
-                  <div key={evt.id} className="flex items-start gap-2">
-                    <Icon className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${color}`} />
+                  <div key={evt.id} className="flex items-start gap-3">
+                    <Icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${color}`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-foreground truncate">{evt.title}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{evt.description}</p>
+                      <p className="text-sm text-foreground truncate">{evt.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{evt.description}</p>
                     </div>
-                    <span className="text-[10px] text-muted-foreground flex-shrink-0">{timeStr}</span>
+                    <span className="text-xs text-muted-foreground flex-shrink-0">{timeStr}</span>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No activity yet. Use Boss Chat to get started.</p>
+            <p className="text-sm text-muted-foreground">No activity yet. Use Chat to get started.</p>
           )}
         </div>
       </div>

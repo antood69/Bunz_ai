@@ -112,7 +112,7 @@ function formatDate(iso: string | null) {
 function StatusBadge({ status }: { status: string }) {
   if (status === "connected") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-green-500/10 text-xs text-green-500 border border-green-500/20">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-green-500/10 text-xs text-green-500 border border-green-500/20">
         <CheckCircle2 className="w-3 h-3" />
         Connected
       </span>
@@ -120,14 +120,14 @@ function StatusBadge({ status }: { status: string }) {
   }
   if (status === "error") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/10 text-xs text-red-500 border border-red-500/20">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-red-500/10 text-xs text-red-500 border border-red-500/20">
         <XCircle className="w-3 h-3" />
         Error
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted text-xs text-muted-foreground border border-border">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-muted text-xs text-muted-foreground border border-border">
       <AlertTriangle className="w-3 h-3" />
       Disconnected
     </span>
@@ -136,22 +136,22 @@ function StatusBadge({ status }: { status: string }) {
 
 function ConnectorIcon({ icon, provider }: { icon: string; provider: string }) {
   const colors: Record<string, string> = {
-    openai: "bg-emerald-500/20 text-emerald-400",
+    openai: "bg-emerald-500/20 text-emerald-500",
     anthropic: "bg-orange-500/20 text-orange-400",
     github: "bg-gray-500/20 text-gray-300",
     slack: "bg-purple-500/20 text-purple-400",
     stripe: "bg-indigo-500/20 text-indigo-400",
-    google: "bg-blue-500/20 text-blue-400",
+    google: "bg-blue-500/20 text-blue-500",
     notion: "bg-gray-500/20 text-gray-300",
     hubspot: "bg-orange-500/20 text-orange-400",
     discord: "bg-indigo-500/20 text-indigo-400",
-    dropbox: "bg-blue-500/20 text-blue-400",
+    dropbox: "bg-blue-500/20 text-blue-500",
     custom_rest: "bg-cyan-500/20 text-cyan-400",
     custom_webhook: "bg-yellow-500/20 text-yellow-400",
     custom_oauth2: "bg-pink-500/20 text-pink-400",
   };
   return (
-    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold ${colors[provider] || "bg-primary/20 text-primary"}`}>
+    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${colors[provider] || "bg-primary/20 text-primary"}`}>
       {icon}
     </div>
   );
@@ -252,7 +252,7 @@ export default function ConnectorsPage() {
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-xl bg-primary/12 flex items-center justify-center">
           <Plug className="w-5 h-5 text-primary" />
         </div>
         <div>
@@ -288,7 +288,7 @@ export default function ConnectorsPage() {
               {connectors.map((c) => {
                 const template = ALL_CONNECTORS.find((t) => t.provider === c.provider);
                 return (
-                  <div key={c.id} className="bg-card border border-border rounded-xl p-5 flex flex-col gap-3 hover:border-primary/40 transition-colors">
+                  <div key={c.id} className="bg-card border border-border rounded-2xl p-5 flex flex-col gap-3 hover:border-primary/40 transition-all">
                     <div className="flex items-start gap-3">
                       <ConnectorIcon icon={template?.icon || c.provider[0].toUpperCase()} provider={c.provider} />
                       <div className="flex-1 min-w-0">
@@ -306,7 +306,7 @@ export default function ConnectorsPage() {
                       )}
                     </div>
                     {c.lastError && c.status === "error" && (
-                      <p className="text-xs text-red-400 bg-red-500/10 rounded-md px-2 py-1 truncate">{c.lastError}</p>
+                      <p className="text-xs text-red-500 bg-red-500/10 rounded-xl px-2 py-1 truncate">{c.lastError}</p>
                     )}
                     <div className="flex items-center gap-2 pt-1 border-t border-border">
                       <Button
@@ -322,7 +322,7 @@ export default function ConnectorsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        className="h-7 text-xs text-red-500 hover:text-red-300 hover:bg-red-500/10"
                         onClick={() => setDeleteTarget(c)}
                       >
                         <Trash2 className="w-3 h-3 mr-1" />
@@ -343,7 +343,7 @@ export default function ConnectorsPage() {
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">API Key Connectors</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {API_KEY_CONNECTORS.map((t) => (
-                <div key={t.provider} className="bg-card border border-border rounded-xl p-5 flex flex-col gap-3 hover:border-primary/40 transition-colors">
+                <div key={t.provider} className="bg-card border border-border rounded-2xl p-6 flex flex-col gap-3 hover:border-primary/40 transition-all">
                   <div className="flex items-start gap-3">
                     <ConnectorIcon icon={t.icon} provider={t.provider} />
                     <div className="flex-1 min-w-0">
@@ -352,7 +352,7 @@ export default function ConnectorsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-[11px] text-muted-foreground border border-border">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-secondary text-[11px] text-muted-foreground border border-border">
                       <Key className="w-3 h-3" />
                       API Key
                     </span>
@@ -378,7 +378,7 @@ export default function ConnectorsPage() {
               {OAUTH2_CONNECTORS.map((t) => {
                 const envVar = OAUTH2_ENV_PROVIDERS[t.provider];
                 return (
-                  <div key={t.provider} className="bg-card border border-border rounded-xl p-5 flex flex-col gap-3 hover:border-primary/40 transition-colors">
+                  <div key={t.provider} className="bg-card border border-border rounded-2xl p-6 flex flex-col gap-3 hover:border-primary/40 transition-all">
                     <div className="flex items-start gap-3">
                       <ConnectorIcon icon={t.icon} provider={t.provider} />
                       <div className="flex-1 min-w-0">
@@ -387,7 +387,7 @@ export default function ConnectorsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-[11px] text-muted-foreground border border-border">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-secondary text-[11px] text-muted-foreground border border-border">
                         <Shield className="w-3 h-3" />
                         OAuth2
                       </span>
@@ -412,9 +412,9 @@ export default function ConnectorsPage() {
         <TabsContent value="custom" className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Custom REST API */}
-            <div className="bg-card border border-border rounded-xl p-6 flex flex-col gap-3 hover:border-primary/40 transition-colors">
+            <div className="bg-card border border-border rounded-2xl p-6 flex flex-col gap-3 hover:border-primary/40 transition-all">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
                   <Globe className="w-5 h-5 text-cyan-400" />
                 </div>
                 <div>
@@ -430,9 +430,9 @@ export default function ConnectorsPage() {
             </div>
 
             {/* Custom Webhook */}
-            <div className="bg-card border border-border rounded-xl p-6 flex flex-col gap-3 hover:border-primary/40 transition-colors">
+            <div className="bg-card border border-border rounded-2xl p-6 flex flex-col gap-3 hover:border-primary/40 transition-all">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center">
                   <Webhook className="w-5 h-5 text-yellow-400" />
                 </div>
                 <div>
@@ -448,9 +448,9 @@ export default function ConnectorsPage() {
             </div>
 
             {/* Custom OAuth2 */}
-            <div className="bg-card border border-border rounded-xl p-6 flex flex-col gap-3 hover:border-primary/40 transition-colors">
+            <div className="bg-card border border-border rounded-2xl p-6 flex flex-col gap-3 hover:border-primary/40 transition-all">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-pink-500/20 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-pink-500/20 flex items-center justify-center">
                   <Shield className="w-5 h-5 text-pink-400" />
                 </div>
                 <div>
@@ -472,7 +472,7 @@ export default function ConnectorsPage() {
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Your Custom Connectors</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {connectors.filter((c) => c.provider.startsWith("custom_")).map((c) => (
-                  <div key={c.id} className="bg-card border border-border rounded-xl p-5 flex flex-col gap-3">
+                  <div key={c.id} className="bg-card border border-border rounded-2xl p-5 flex flex-col gap-3">
                     <div className="flex items-start gap-3">
                       <ConnectorIcon icon={c.provider === "custom_rest" ? "R" : c.provider === "custom_webhook" ? "W" : "O"} provider={c.provider} />
                       <div className="flex-1 min-w-0">
@@ -485,7 +485,7 @@ export default function ConnectorsPage() {
                       <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => testMutation.mutate(c.id)}>
                         <RefreshCw className="w-3 h-3 mr-1" /> Test
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => setDeleteTarget(c)}>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-red-500 hover:text-red-300 hover:bg-red-500/10" onClick={() => setDeleteTarget(c)}>
                         <Trash2 className="w-3 h-3 mr-1" /> Delete
                       </Button>
                     </div>
@@ -670,7 +670,7 @@ function ApiKeyModal({ open, template, onClose, onSuccess }: {
           </div>
           ))}
           {testResult && (
-            <div className={`flex items-center gap-2 text-sm px-3 py-2 rounded-md ${testResult.ok ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
+            <div className={`flex items-center gap-2 text-sm px-3 py-2 rounded-xl ${testResult.ok ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-500"}`}>
               {testResult.ok ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
               {testResult.ok ? "Connection successful!" : testResult.error || "Connection failed"}
             </div>
@@ -783,7 +783,7 @@ function CustomRestModal({ open, onClose, onSuccess }: { open: boolean; onClose:
               <div key={i} className="flex gap-2 mt-2">
                 <Input placeholder="Header name" value={h.key} onChange={(e) => updateHeader(i, "key", e.target.value)} className="flex-1" />
                 <Input placeholder="Value" value={h.value} onChange={(e) => updateHeader(i, "value", e.target.value)} className="flex-1" />
-                <Button variant="ghost" size="sm" className="h-9 px-2 text-red-400" onClick={() => removeHeader(i)}>
+                <Button variant="ghost" size="sm" className="h-9 px-2 text-red-500" onClick={() => removeHeader(i)}>
                   <Trash2 className="w-3 h-3" />
                 </Button>
               </div>
@@ -889,7 +889,7 @@ function CustomWebhookModal({ open, onClose, onSuccess }: { open: boolean; onClo
             </Select>
           </div>
           {direction === "inbound" && (
-            <div className="bg-secondary/50 rounded-md p-3 text-xs text-muted-foreground space-y-1">
+            <div className="bg-secondary/50 rounded-xl p-3 text-xs text-muted-foreground space-y-1">
               <p>A unique webhook URL and HMAC secret will be generated after creation.</p>
               <p>The last 100 events will be stored.</p>
             </div>
@@ -921,7 +921,7 @@ function CustomWebhookModal({ open, onClose, onSuccess }: { open: boolean; onClo
                   <div key={i} className="flex gap-2 mt-2">
                     <Input placeholder="Header name" value={h.key} onChange={(e) => updateHeader(i, "key", e.target.value)} className="flex-1" />
                     <Input placeholder="Value" value={h.value} onChange={(e) => updateHeader(i, "value", e.target.value)} className="flex-1" />
-                    <Button variant="ghost" size="sm" className="h-9 px-2 text-red-400" onClick={() => removeHeader(i)}>
+                    <Button variant="ghost" size="sm" className="h-9 px-2 text-red-500" onClick={() => removeHeader(i)}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>

@@ -196,7 +196,7 @@ function StyledSlider({
 function SectionHeader({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description?: string }) {
   return (
     <div className="flex items-start gap-3 mb-5">
-      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+      <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
         <Icon className="w-4 h-4 text-primary" />
       </div>
       <div>
@@ -254,7 +254,7 @@ function GeneralTab() {
   return (
     <div className="space-y-6">
       {/* Profile Info */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader icon={User} title="Profile" description="Your account information" />
         <div className="space-y-4">
           <div className="space-y-2">
@@ -280,7 +280,7 @@ function GeneralTab() {
       </section>
 
       {/* Change Password */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader icon={Lock} title="Change Password" description="Update your account password" />
         <div className="space-y-4">
           <div className="space-y-2">
@@ -333,7 +333,7 @@ function GeneralTab() {
       </section>
 
       {/* Clear Chat History */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader icon={Trash2} title="Chat History" description="Manage your Boss Chat conversations" />
         <div className="flex items-center justify-between">
           <div>
@@ -355,7 +355,7 @@ function GeneralTab() {
       </section>
 
       {/* Account Deletion */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader icon={Trash2} title="Danger Zone" description="Irreversible account actions" />
         <div className="flex items-center justify-between">
           <div>
@@ -410,7 +410,7 @@ function AppearanceTab() {
   return (
     <div className="space-y-6">
       {/* Theme + Accent Color */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader icon={Sun} title="Theme" description="Switch between dark and light mode" />
 
         {/* Dark / Light toggle */}
@@ -419,7 +419,7 @@ function AppearanceTab() {
             <button
               key={t}
               onClick={() => setTheme(t)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg border text-sm font-medium transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border text-sm font-medium transition-all ${
                 theme === t
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
@@ -496,7 +496,7 @@ function AppearanceTab() {
       </section>
 
       {/* Wallpaper */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader
           icon={Image}
           title="Wallpaper"
@@ -563,7 +563,7 @@ function AppearanceTab() {
             placeholder="Paste a custom image URL..."
             value={customUrlInput}
             onChange={(e) => setCustomUrlInput(e.target.value)}
-            className="flex-1 px-3 py-2 text-sm rounded-lg border border-border bg-secondary text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+            className="flex-1 px-3 py-2 text-sm rounded-xl border border-border bg-secondary text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
           />
           <button
             onClick={() => {
@@ -572,7 +572,7 @@ function AppearanceTab() {
                 setCustomUrlInput("");
               }
             }}
-            className="px-3 py-2 text-sm rounded-lg bg-primary text-white font-medium hover:bg-primary/90 transition-colors"
+            className="px-3 py-2 text-sm rounded-xl bg-primary text-white font-medium hover:bg-primary/90 transition-colors"
           >
             Apply
           </button>
@@ -591,14 +591,14 @@ function AppearanceTab() {
       </section>
 
       {/* Glass Effect */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader
           icon={Layers}
           title="Glass Effect"
           description="Glassmorphism applied to the sidebar and top bar when a wallpaper is active"
         />
 
-        <div className="grid grid-cols-2 gap-6 mb-5">
+        <div className="grid grid-cols-2 gap-6 mb-6">
           <StyledSlider
             label="Blur intensity"
             min={0}
@@ -620,7 +620,8 @@ function AppearanceTab() {
         </div>
 
         {/* Glass preview panel */}
-        <div className="relative rounded-xl overflow-hidden h-24 border border-border">
+        <div className="relative rounded-2xl overflow-hidden h-28 border border-border">
+          {/* Background image or gradient */}
           <div
             className="absolute inset-0 bg-cover bg-center"
             style={{
@@ -629,25 +630,27 @@ function AppearanceTab() {
                 : "linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%)",
             }}
           />
+          {/* Tint overlay */}
           <div
             className="absolute inset-0"
             style={{ background: `rgba(0,0,0,${wallpaperTint})` }}
           />
+          {/* Glass panel */}
           <div
-            className="absolute inset-4 rounded-lg border border-white/10 flex items-center justify-center"
+            className="absolute inset-4 rounded-xl border border-white/15 flex items-center justify-center shadow-lg"
             style={{
               backdropFilter: `blur(${glassBlur}px)`,
               WebkitBackdropFilter: `blur(${glassBlur}px)`,
-              background: `rgba(15,15,20,${glassOpacity})`,
+              background: `rgba(255,255,255,${glassOpacity})`,
             }}
           >
-            <span className="text-xs font-medium text-white/80">Glass panel preview</span>
+            <span className="text-sm font-medium text-white/90">Glass panel preview</span>
           </div>
         </div>
       </section>
 
       {/* Layout */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader icon={Layout} title="Layout" description="Configure sidebar position and density" />
 
         <div className="space-y-4">
@@ -659,7 +662,7 @@ function AppearanceTab() {
                 <button
                   key={pos}
                   onClick={() => setCustomization({ sidebarPosition: pos })}
-                  className={`flex-1 py-2 px-4 rounded-lg border text-sm font-medium capitalize transition-all ${
+                  className={`flex-1 py-2 px-4 rounded-xl border text-sm font-medium capitalize transition-all ${
                     sidebarPosition === pos
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
@@ -890,7 +893,7 @@ function AIPreferencesTab() {
   return (
     <div className="space-y-6">
       {/* Default Model */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader icon={Brain} title="Default Model" description="Choose the AI model used for new conversations" />
         <div className="space-y-2">
           <Label htmlFor="default-model" className="text-xs text-muted-foreground">Model</Label>
@@ -898,7 +901,7 @@ function AIPreferencesTab() {
             id="default-model"
             value={defaultModel}
             onChange={(e) => handleChange(setDefaultModel, e.target.value)}
-            className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+            className="w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
           >
             {AI_MODELS.map((m) => (
               <option key={m.id} value={m.id}>{m.label}</option>
@@ -911,7 +914,7 @@ function AIPreferencesTab() {
       </section>
 
       {/* Default Repository */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader icon={Plug} title="Default Repository" description="The Coder department will use this repo when none is specified" />
         <div className="space-y-2">
           <Label htmlFor="default-repo" className="text-xs text-muted-foreground">Repository (owner/repo)</Label>
@@ -953,7 +956,7 @@ function AIPreferencesTab() {
       </section>
 
       {/* System Prompt */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader icon={User} title="System Prompt" description="Custom instructions prepended to every conversation" />
         <div className="space-y-2">
           <Label htmlFor="system-prompt" className="text-xs text-muted-foreground">Instructions</Label>
@@ -963,7 +966,7 @@ function AIPreferencesTab() {
             placeholder="e.g. You are a helpful assistant that specializes in..."
             value={systemPrompt}
             onChange={(e) => handleChange(setSystemPrompt, e.target.value)}
-            className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-y min-h-[100px]"
+            className="w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-y min-h-[100px]"
           />
           <p className="text-[11px] text-muted-foreground">
             Leave blank to use the default system prompt. Max 2000 characters.
@@ -972,14 +975,14 @@ function AIPreferencesTab() {
       </section>
 
       {/* Response Style */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader icon={Layout} title="Response Style" description="Control how verbose AI responses are" />
         <div className="flex gap-3">
           {RESPONSE_STYLES.map((style) => (
             <button
               key={style.id}
               onClick={() => handleChange(setResponseStyle, style.id)}
-              className={`flex-1 py-3 px-4 rounded-lg border text-left transition-all ${
+              className={`flex-1 py-3 px-4 rounded-xl border text-left transition-all ${
                 responseStyle === style.id
                   ? "border-primary bg-primary/10"
                   : "border-border hover:border-primary/50"
@@ -1015,7 +1018,7 @@ function AIPreferencesTab() {
       </div>
 
       {/* ── Per-Agent Configuration ─────────────────────────────────────────── */}
-      <section className="bg-card border border-border rounded-xl p-5">
+      <section className="bg-card border border-border rounded-2xl p-6">
         <SectionHeader icon={Layers} title="Agent Configuration" description="Configure model and system prompt for each specialist agent" />
         <div className="space-y-4 mt-4">
           {AGENT_TYPES.map((agent) => {
@@ -1024,7 +1027,7 @@ function AIPreferencesTab() {
             const models = AGENT_MODELS[agent.id] || [];
 
             return (
-              <div key={agent.id} className="border border-border rounded-lg p-4 space-y-3">
+              <div key={agent.id} className="border border-border rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-medium text-foreground">{agent.label}</h4>
@@ -1055,7 +1058,7 @@ function AIPreferencesTab() {
                       setAgentModels(prev => ({ ...prev, [agent.id]: e.target.value }));
                       setHasAgentChanges(true);
                     }}
-                    className="w-full bg-secondary border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                    className="w-full bg-secondary border border-border rounded-xl px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                   >
                     {models.map((m) => (
                       <option key={m.id} value={m.id}>{m.label}</option>
@@ -1075,7 +1078,7 @@ function AIPreferencesTab() {
                         setAgentPrompts(prev => ({ ...prev, [agent.id]: e.target.value }));
                         setHasAgentChanges(true);
                       }}
-                      className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-y min-h-[60px]"
+                      className="w-full bg-secondary border border-border rounded-xl px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-y min-h-[60px]"
                     />
                   </div>
                 )}
@@ -1110,7 +1113,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string } = {
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
-        <TabsList className="w-full justify-start bg-muted/50 border border-border rounded-lg p-1 mb-6 flex-wrap h-auto gap-0.5">
+        <TabsList className="w-full justify-start bg-muted/50 border border-border rounded-xl p-1 mb-6 flex-wrap h-auto gap-0.5">
           <TabsTrigger value="general" className="text-xs gap-1.5 data-[state=active]:bg-background">
             <User className="w-3.5 h-3.5" />
             General

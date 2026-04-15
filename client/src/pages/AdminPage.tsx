@@ -130,7 +130,7 @@ function RoleBadge({ role }: { role: string }) {
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border ${
+      className={`inline-flex items-center px-2 py-0.5 rounded-xl text-[11px] font-medium border ${
         map[role] ?? map.user
       }`}
     >
@@ -148,7 +148,7 @@ function TierBadge({ tier }: { tier: string }) {
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border ${
+      className={`inline-flex items-center px-2 py-0.5 rounded-xl text-[11px] font-medium border ${
         map[tier] ?? map.free
       }`}
     >
@@ -165,7 +165,7 @@ function EventTypeBadge({ type }: { type: string }) {
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border ${
+      className={`inline-flex items-center px-2 py-0.5 rounded-xl text-[11px] font-medium border ${
         map[type] ?? "bg-zinc-700/60 text-zinc-300 border-zinc-600/40"
       }`}
     >
@@ -177,7 +177,7 @@ function EventTypeBadge({ type }: { type: string }) {
 function QualityBadge({ quality }: { quality?: string }) {
   if (!quality || quality === "unrated") {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border bg-zinc-700/40 text-zinc-400 border-zinc-600/30">
+      <span className="inline-flex items-center px-2 py-0.5 rounded-xl text-[11px] font-medium border bg-zinc-700/40 text-zinc-400 border-zinc-600/30">
         unrated
       </span>
     );
@@ -189,7 +189,7 @@ function QualityBadge({ quality }: { quality?: string }) {
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border ${
+      className={`inline-flex items-center px-2 py-0.5 rounded-xl text-[11px] font-medium border ${
         map[quality] ?? map.neutral
       }`}
     >
@@ -214,7 +214,7 @@ function StatCard({ icon: Icon, label, value, iconClass }: StatCardProps) {
     <Card className="bg-card border-border">
       <CardContent className="p-5">
         <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${iconClass}`}>
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${iconClass}`}>
             <Icon className="w-4 h-4" />
           </div>
           <div>
@@ -242,7 +242,7 @@ function OverviewTab() {
       <div className="space-y-4">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-20 rounded-lg bg-card animate-pulse border border-border" />
+            <div key={i} className="h-20 rounded-xl bg-card animate-pulse border border-border" />
           ))}
         </div>
       </div>
@@ -281,13 +281,13 @@ function OverviewTab() {
           icon={ThumbsUp}
           label="Rated Good"
           value={good.toLocaleString()}
-          iconClass="bg-emerald-500/10 text-emerald-400"
+          iconClass="bg-emerald-500/10 text-emerald-500"
         />
         <StatCard
           icon={ThumbsDown}
           label="Rated Bad"
           value={bad.toLocaleString()}
-          iconClass="bg-red-500/10 text-red-400"
+          iconClass="bg-red-500/10 text-red-500"
         />
       </div>
 
@@ -427,7 +427,7 @@ function UserDetailDialog({
             <div className="flex gap-2 flex-wrap">
               <RoleBadge role={u.role} />
               <TierBadge tier={u.tier} />
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border bg-zinc-700/40 text-zinc-400 border-zinc-600/30">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-xl text-[11px] font-medium border bg-zinc-700/40 text-zinc-400 border-zinc-600/30">
                 {u.authProvider}
               </span>
             </div>
@@ -435,13 +435,13 @@ function UserDetailDialog({
             {/* Stats */}
             {stats && (
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-md bg-muted/30 border border-border p-3">
+                <div className="rounded-xl bg-muted/30 border border-border p-3">
                   <p className="text-xs text-muted-foreground mb-0.5">Total Tokens Used</p>
                   <p className="text-lg font-semibold tabular-nums">
                     {stats.totalTokensUsed?.toLocaleString() ?? 0}
                   </p>
                 </div>
-                <div className="rounded-md bg-muted/30 border border-border p-3">
+                <div className="rounded-xl bg-muted/30 border border-border p-3">
                   <p className="text-xs text-muted-foreground mb-0.5">Sessions</p>
                   <p className="text-lg font-semibold tabular-nums">
                     {stats.sessionCount?.toLocaleString() ?? 0}
@@ -512,7 +512,7 @@ function UserDetailDialog({
 
             {/* Plan */}
             {data?.plan && (
-              <div className="rounded-md bg-muted/20 border border-border p-3">
+              <div className="rounded-xl bg-muted/20 border border-border p-3">
                 <p className="text-xs font-medium text-muted-foreground mb-2">Plan Details</p>
                 <pre className="text-[11px] text-zinc-300 overflow-x-auto">
                   {JSON.stringify(data.plan, null, 2)}
@@ -565,7 +565,7 @@ function UsersTab() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-border overflow-hidden">
+      <div className="rounded-xl border border-border overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
@@ -647,7 +647,7 @@ function UsersTab() {
                         <option value="agency">Agency</option>
                       </select>
                       {u.role !== "owner" && (
-                        <Button size="sm" variant="ghost" className={`h-6 px-1.5 text-[10px] ${u.role === "suspended" ? "text-emerald-400" : "text-amber-400"}`}
+                        <Button size="sm" variant="ghost" className={`h-6 px-1.5 text-[10px] ${u.role === "suspended" ? "text-emerald-500" : "text-amber-500"}`}
                           onClick={async () => {
                             await fetch(`/api/owner/users/${u.id}/suspend`, { method: "POST", credentials: "include" });
                             queryClient.invalidateQueries({ queryKey: ["/api/owner/users"] });
@@ -736,7 +736,7 @@ function IntelligenceExpandDialog({
             <span className="text-xs text-muted-foreground">Rate:</span>
             <button
               onClick={() => onQualityChange(row.id, "good")}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs border transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs border transition-colors ${
                 row.quality === "good"
                   ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
                   : "bg-muted/30 text-muted-foreground border-border hover:bg-muted/50"
@@ -746,7 +746,7 @@ function IntelligenceExpandDialog({
             </button>
             <button
               onClick={() => onQualityChange(row.id, "bad")}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs border transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs border transition-colors ${
                 row.quality === "bad"
                   ? "bg-red-500/20 text-red-300 border-red-500/30"
                   : "bg-muted/30 text-muted-foreground border-border hover:bg-muted/50"
@@ -756,7 +756,7 @@ function IntelligenceExpandDialog({
             </button>
             <button
               onClick={() => onQualityChange(row.id, "neutral")}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs border transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs border transition-colors ${
                 row.quality === "neutral"
                   ? "bg-zinc-600/50 text-zinc-300 border-zinc-500/40"
                   : "bg-muted/30 text-muted-foreground border-border hover:bg-muted/50"
@@ -769,7 +769,7 @@ function IntelligenceExpandDialog({
           {/* Input */}
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1.5">Input</p>
-            <pre className="text-[11px] font-mono bg-muted/20 border border-border rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-words text-zinc-300">
+            <pre className="text-[11px] font-mono bg-muted/20 border border-border rounded-xl p-3 overflow-x-auto whitespace-pre-wrap break-words text-zinc-300">
               {inputStr || "(empty)"}
             </pre>
           </div>
@@ -777,7 +777,7 @@ function IntelligenceExpandDialog({
           {/* Output */}
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1.5">Output</p>
-            <pre className="text-[11px] font-mono bg-muted/20 border border-border rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-words text-zinc-300">
+            <pre className="text-[11px] font-mono bg-muted/20 border border-border rounded-xl p-3 overflow-x-auto whitespace-pre-wrap break-words text-zinc-300">
               {outputStr || "(empty)"}
             </pre>
           </div>
@@ -912,7 +912,7 @@ function IntelligenceTab() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-border overflow-hidden">
+      <div className="rounded-xl border border-border overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
@@ -1003,8 +1003,8 @@ function IntelligenceTab() {
                           onClick={() => handleQualityChange(row.id, "good")}
                           className={`p-1 rounded transition-colors ${
                             row.quality === "good"
-                              ? "text-emerald-400 bg-emerald-500/15"
-                              : "text-zinc-600 hover:text-emerald-400"
+                              ? "text-emerald-500 bg-emerald-500/15"
+                              : "text-zinc-600 hover:text-emerald-500"
                           }`}
                         >
                           <ThumbsUp className="w-3 h-3" />
@@ -1014,8 +1014,8 @@ function IntelligenceTab() {
                           onClick={() => handleQualityChange(row.id, "bad")}
                           className={`p-1 rounded transition-colors ${
                             row.quality === "bad"
-                              ? "text-red-400 bg-red-500/15"
-                              : "text-zinc-600 hover:text-red-400"
+                              ? "text-red-500 bg-red-500/15"
+                              : "text-zinc-600 hover:text-red-500"
                           }`}
                         >
                           <ThumbsDown className="w-3 h-3" />
@@ -1104,7 +1104,7 @@ function AuditTab() {
       ) : (
         <div className="space-y-2">
           {logs.map((l) => (
-            <div key={l.id} className="flex items-start gap-3 bg-card border border-border rounded-lg px-4 py-3">
+            <div key={l.id} className="flex items-start gap-3 bg-card border border-border rounded-2xl px-4 py-3">
               <div className="flex-1">
                 <p className="text-sm text-foreground">{l.title}</p>
                 {l.description && <p className="text-xs text-muted-foreground mt-0.5">{l.description}</p>}
@@ -1174,14 +1174,14 @@ function ObsidianTab() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-card border border-border rounded-xl p-5">
+      <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center text-purple-400 font-bold text-sm">◆</div>
+          <div className="w-8 h-8 rounded-xl bg-purple-500/15 flex items-center justify-center text-purple-400 font-bold text-sm">◆</div>
           <div>
             <h3 className="text-sm font-semibold">Obsidian Vault</h3>
             <p className="text-xs text-muted-foreground">All user inputs and outputs are saved to your vault</p>
           </div>
-          {status === "connected" && <span className="ml-auto text-xs text-emerald-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Connected</span>}
+          {status === "connected" && <span className="ml-auto text-xs text-emerald-500 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Connected</span>}
         </div>
 
         {status === "connected" ? (
@@ -1197,14 +1197,14 @@ function ObsidianTab() {
             <div>
               <label className="text-xs text-muted-foreground">API Key (from Obsidian Local REST API plugin)</label>
               <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Your API key..."
-                className="w-full mt-1 bg-secondary border border-border rounded-md px-3 py-2 text-sm" />
+                className="w-full mt-1 bg-secondary border border-border rounded-xl px-3 py-2 text-sm" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">API URL</label>
               <input value={apiUrl} onChange={(e) => setApiUrl(e.target.value)}
-                className="w-full mt-1 bg-secondary border border-border rounded-md px-3 py-2 text-sm" />
+                className="w-full mt-1 bg-secondary border border-border rounded-xl px-3 py-2 text-sm" />
             </div>
-            {error && <p className="text-xs text-red-400">{error}</p>}
+            {error && <p className="text-xs text-red-500">{error}</p>}
             <Button size="sm" onClick={handleConnect} disabled={!apiKey.trim() || status === "testing"}>
               {status === "testing" ? "Testing..." : "Connect Vault"}
             </Button>
@@ -1238,8 +1238,8 @@ export default function AdminPage() {
     <div className="p-6 space-y-6 max-w-[1200px]">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center">
-          <Shield className="w-5 h-5 text-amber-400" />
+        <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
+          <Shield className="w-5 h-5 text-amber-500" />
         </div>
         <div>
           <h1 className="text-xl font-semibold">Owner Control Panel</h1>
