@@ -554,6 +554,7 @@ Present each department's output clearly. For code, keep it in code blocks. For 
 
     // ── Post-synthesis: auto-save to owner's Obsidian vault by department ──
     console.log("[Boss] Starting vault save for department synthesis...");
+    console.log(`[Boss] userEmail=${userEmail}, departments=${departments.map(d => d.id).join(",")}`);
     try {
       const obsConnector = await getOwnerObsidianConnector();
       console.log(`[Boss] Obsidian connector: ${obsConnector ? `id=${obsConnector.id}, status=${obsConnector.status}` : "NOT FOUND"}`);
