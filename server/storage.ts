@@ -3736,6 +3736,10 @@ export class DatabaseStorage implements IStorage {
   async getPipelineRuns(pipelineId: string, limit = 20): Promise<any[]> {
     return await dbAll('SELECT * FROM pipeline_runs WHERE pipeline_id = ? ORDER BY started_at DESC LIMIT ?', pipelineId, limit) as any[];
   }
+
+  async getPipelineRunById(runId: string): Promise<any | null> {
+    return await dbGet('SELECT * FROM pipeline_runs WHERE id = ?', runId) as any || null;
+  }
 }
 
 export const storage = new DatabaseStorage();

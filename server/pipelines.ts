@@ -1,5 +1,6 @@
 /**
  * Pipeline Engine — executes multi-step workflows with live SSE progress.
+ * Supports pause, cancel, per-step output storage, and token tracking.
  */
 import { v4 as uuidv4 } from "uuid";
 import { Router, type Request, type Response } from "express";
@@ -18,6 +19,18 @@ interface PipelineStep {
   connectorAction?: string;
   prompt: string;
   params?: Record<string, any>;
+  retryCount?: number;
+  skipOnFail?: boolean;
+}
+
+// Track active pipeline runs for pause/cancel
+const activeRuns = new Map<string, { status: "running" | "paused" | "cancelled"; resolve?: () => void }>();
+
+function waitForResume(runId: string): Promise<void> {
+  return new Promise((resolve) => {
+    const run = activeRuns.get(runId);
+    if (run) run.resolve = resolve;
+  });
 }
 
 /**
@@ -35,9 +48,12 @@ async function executePipeline(
   const steps: PipelineStep[] = pipeline.steps;
   if (!steps.length) { eventBus.emit(runId, "error", { error: "No steps" }); return; }
 
+  activeRuns.set(runId, { status: "running" });
+
   let previousOutput = "";
   let totalTokens = 0;
   const outputs: string[] = [];
+  const stepResults: Array<{ label: string; status: string; output: string; tokens: number; durationMs: number; error?: string }> = [];
 
   try {
     eventBus.emit(runId, "pipeline_start", {
@@ -45,12 +61,37 @@ async function executePipeline(
     });
 
     for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
+      const runState = activeRuns.get(runId);
 
+      // Check for cancel
+      if (!runState || runState.status === "cancelled") {
+        await storage.updatePipelineRun(runId, { status: "cancelled", completedAt: Date.now() });
+        eventBus.emit(runId, "pipeline_complete", { status: "cancelled", totalTokens, stepsCompleted: i });
+        activeRuns.delete(runId);
+        return;
+      }
+
+      // Check for pause — wait until resumed or cancelled
+      if (runState.status === "paused") {
+        eventBus.emit(runId, "pipeline_paused", { stepsCompleted: i, totalSteps: steps.length });
+        await waitForResume(runId);
+        const afterPause = activeRuns.get(runId);
+        if (!afterPause || afterPause.status === "cancelled") {
+          await storage.updatePipelineRun(runId, { status: "cancelled", completedAt: Date.now() });
+          eventBus.emit(runId, "pipeline_complete", { status: "cancelled", totalTokens, stepsCompleted: i });
+          activeRuns.delete(runId);
+          return;
+        }
+        eventBus.emit(runId, "pipeline_resumed", { stepIndex: i });
+      }
+
+      const step = steps[i];
       let prompt = step.prompt.replace(/\{\{prev\}\}/g, previousOutput);
       prompt = prompt.replace(/\{\{step\.(\d+)\}\}/g, (_, n) => outputs[parseInt(n) - 1] || "");
 
-      const stepLabel = step.type === "department" ? step.department : step.type;
+      const stepLabel = step.type === "department" ? (step.department || step.type) : step.type;
+      const retryCount = step.retryCount || 0;
+      const skipOnFail = step.skipOnFail || false;
 
       eventBus.emit(runId, "step_start", {
         stepIndex: i, stepTotal: steps.length, type: step.type,
@@ -60,71 +101,123 @@ async function executePipeline(
 
       let stepOutput = "";
       let stepTokens = 0;
+      let stepError: string | undefined;
       const stepStart = Date.now();
+      let attempts = 0;
+      let success = false;
 
-      if (step.type === "department" && step.department) {
-        let github: { token: string; repo: string } | undefined;
-        if (step.department === "coder") {
-          try {
-            const ghToken = await storage.getGitHubToken(userId);
-            if (ghToken) {
-              const prefs = await storage.getUserPreferences(userId);
-              if (prefs.defaultRepo) github = { token: ghToken, repo: prefs.defaultRepo };
+      while (attempts <= retryCount && !success) {
+        attempts++;
+        try {
+          if (step.type === "department" && step.department) {
+            let github: { token: string; repo: string } | undefined;
+            if (step.department === "coder") {
+              try {
+                const ghToken = await storage.getGitHubToken(userId);
+                if (ghToken) {
+                  const prefs = await storage.getUserPreferences(userId);
+                  if (prefs.defaultRepo) github = { token: ghToken, repo: prefs.defaultRepo };
+                }
+              } catch {}
             }
-          } catch {}
+
+            const result: DepartmentResult = await executeDepartment(
+              runId, { department: step.department as any, task: prompt },
+              level, estimateComplexity(prompt), undefined,
+              step.department === "coder" ? github : undefined,
+            );
+            stepOutput = result.finalOutput;
+            stepTokens = result.totalTokens;
+          } else if (step.type === "connector" && step.connectorId && step.connectorAction) {
+            const result = await connectorRegistry.execute(step.connectorId, step.connectorAction, {
+              ...step.params, content: previousOutput, query: prompt,
+            });
+            stepOutput = result.ok ? (typeof result.data === "string" ? result.data : JSON.stringify(result.data)) : `Error: ${result.error}`;
+            if (!result.ok) throw new Error(result.error || "Connector failed");
+          } else if (step.type === "transform") {
+            const transformResult = await modelRouter.chat({
+              model: "gpt-5.4-mini",
+              messages: [{ role: "user", content: prompt + "\n\nInput:\n" + previousOutput }],
+              systemPrompt: "You are a data transformation assistant. Process the input according to the instructions.",
+            });
+            stepOutput = transformResult.content;
+            stepTokens = transformResult.usage.totalTokens;
+          }
+          success = true;
+        } catch (err: any) {
+          stepError = err.message;
+          if (attempts <= retryCount) {
+            eventBus.emit(runId, "step_retry", { stepIndex: i, attempt: attempts, maxRetries: retryCount, error: stepError });
+          }
+        }
+      }
+
+      const stepDuration = Date.now() - stepStart;
+
+      if (!success) {
+        stepResults.push({ label: stepLabel, status: "failed", output: "", tokens: 0, durationMs: stepDuration, error: stepError });
+
+        eventBus.emit(runId, "step_complete", {
+          stepIndex: i, stepTotal: steps.length, label: stepLabel,
+          status: "failed", error: stepError, tokens: 0, durationMs: stepDuration,
+        });
+
+        if (skipOnFail) {
+          outputs.push("");
+          await storage.updatePipelineRun(runId, { stepsCompleted: i + 1, totalTokens });
+          continue;
         }
 
-        const result: DepartmentResult = await executeDepartment(
-          runId, { department: step.department as any, task: prompt },
-          level, estimateComplexity(prompt), undefined,
-          step.department === "coder" ? github : undefined,
-        );
-        stepOutput = result.finalOutput;
-        stepTokens = result.totalTokens;
-      } else if (step.type === "connector" && step.connectorId && step.connectorAction) {
-        const result = await connectorRegistry.execute(step.connectorId, step.connectorAction, {
-          ...step.params, content: previousOutput, query: prompt,
-        });
-        stepOutput = result.ok ? (typeof result.data === "string" ? result.data : JSON.stringify(result.data)) : `Error: ${result.error}`;
-      } else if (step.type === "transform") {
-        const transformResult = await modelRouter.chat({
-          model: "gpt-5.4-mini",
-          messages: [{ role: "user", content: prompt + "\n\nInput:\n" + previousOutput }],
-          systemPrompt: "You are a data transformation assistant. Process the input according to the instructions.",
-        });
-        stepOutput = transformResult.content;
-        stepTokens = transformResult.usage.totalTokens;
+        // Step failed and not skippable — abort pipeline
+        await storage.updatePipelineRun(runId, { status: "failed", error: `Step ${i + 1} (${stepLabel}) failed: ${stepError}`, completedAt: Date.now() });
+        eventBus.emit(runId, "pipeline_complete", { status: "failed", error: stepError, stepsCompleted: i });
+        activeRuns.delete(runId);
+        return;
       }
 
       totalTokens += stepTokens;
       outputs.push(stepOutput);
       previousOutput = stepOutput;
 
+      stepResults.push({ label: stepLabel, status: "complete", output: stepOutput.slice(0, 2000), tokens: stepTokens, durationMs: stepDuration });
+
       await storage.updatePipelineRun(runId, { stepsCompleted: i + 1, totalTokens });
 
       eventBus.emit(runId, "step_complete", {
         stepIndex: i, stepTotal: steps.length, label: stepLabel,
+        status: "complete",
         output: stepOutput.slice(0, 500),
         tokens: stepTokens,
-        durationMs: Date.now() - stepStart,
+        durationMs: stepDuration,
       });
     }
 
-    // Auto-save to Obsidian
+    // Auto-save to Obsidian (env var fallback)
     try {
+      let obsId: any = null;
       const connectors = await storage.getConnectorsByUser(userId);
       const obsConnector = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
       if (obsConnector) {
+        obsId = obsConnector.id;
+      } else if (process.env.OBSIDIAN_API_URL && process.env.OBSIDIAN_API_KEY) {
+        obsId = "env";
+      }
+      if (obsId) {
         const timestamp = new Date().toISOString().slice(0, 10);
         const slug = pipeline.name.replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
-        const header = `# ${pipeline.name}\n*Pipeline run: ${new Date().toLocaleString()} | ${steps.length} steps*\n\n---\n\n`;
-        await connectorRegistry.execute(obsConnector.id, "write_note", {
-          path: `Workflows/${timestamp}-${slug}.md`, content: header + previousOutput,
-        });
+        const header = `# ${pipeline.name}\n*Pipeline run: ${new Date().toLocaleString()} | ${steps.length} steps | ${totalTokens} tokens*\n\n---\n\n`;
+        const exec = obsId === "env" ? connectorRegistry.executeObsidianDirect.bind(connectorRegistry) : (a: string, p: any) => connectorRegistry.execute(obsId, a, p);
+        await exec("write_note", { path: `Workflows/${timestamp}-${slug}.md`, content: header + previousOutput });
       }
     } catch {}
 
-    await storage.updatePipelineRun(runId, { status: "complete", output: previousOutput, totalTokens, completedAt: Date.now() });
+    // Store step results in the run output for history
+    await storage.updatePipelineRun(runId, {
+      status: "complete",
+      output: JSON.stringify({ finalOutput: previousOutput, stepResults }),
+      totalTokens,
+      completedAt: Date.now(),
+    });
     await storage.updatePipeline(pipelineId, { lastRunAt: Date.now(), runCount: (pipeline.run_count || 0) + 1 });
 
     try {
@@ -137,13 +230,17 @@ async function executePipeline(
     } catch {}
 
     eventBus.emit(runId, "pipeline_complete", {
-      status: "complete", totalTokens, output: previousOutput.slice(0, 1000),
+      status: "complete", totalTokens,
+      output: previousOutput.slice(0, 1000),
+      stepResults: stepResults.map(s => ({ label: s.label, status: s.status, tokens: s.tokens, durationMs: s.durationMs })),
     });
 
   } catch (err: any) {
     await storage.updatePipelineRun(runId, { status: "failed", error: err.message, completedAt: Date.now() });
     console.error(`[Pipeline] Failed:`, err.message);
     eventBus.emit(runId, "pipeline_complete", { status: "failed", error: err.message });
+  } finally {
+    activeRuns.delete(runId);
   }
 }
 
@@ -189,7 +286,7 @@ export function createPipelineRouter() {
     res.json({ ok: true });
   });
 
-  // Run pipeline — async, returns runId immediately
+  // Run pipeline
   router.post("/:id/run", async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const userId = req.user?.id || 1;
@@ -205,6 +302,35 @@ export function createPipelineRouter() {
     });
 
     res.json({ runId, status: "running" });
+  });
+
+  // Pause a running pipeline
+  router.post("/runs/:runId/pause", (_req: Request, res: Response) => {
+    const runId = _req.params.runId as string;
+    const run = activeRuns.get(runId);
+    if (!run) return res.status(404).json({ error: "Run not found or already finished" });
+    run.status = "paused";
+    res.json({ ok: true, status: "paused" });
+  });
+
+  // Resume a paused pipeline
+  router.post("/runs/:runId/resume", (_req: Request, res: Response) => {
+    const runId = _req.params.runId as string;
+    const run = activeRuns.get(runId);
+    if (!run) return res.status(404).json({ error: "Run not found or already finished" });
+    run.status = "running";
+    if (run.resolve) { run.resolve(); run.resolve = undefined; }
+    res.json({ ok: true, status: "running" });
+  });
+
+  // Cancel a running/paused pipeline
+  router.post("/runs/:runId/cancel", async (_req: Request, res: Response) => {
+    const runId = _req.params.runId as string;
+    const run = activeRuns.get(runId);
+    if (!run) return res.status(404).json({ error: "Run not found or already finished" });
+    run.status = "cancelled";
+    if (run.resolve) { run.resolve(); run.resolve = undefined; }
+    res.json({ ok: true, status: "cancelled" });
   });
 
   // SSE stream for pipeline progress
@@ -227,77 +353,68 @@ export function createPipelineRouter() {
     req.on("close", unsub);
   });
 
+  // Run history for a pipeline
   router.get("/:id/runs", async (req: Request, res: Response) => {
     const id = req.params.id as string;
     res.json(await storage.getPipelineRuns(id));
   });
 
-  // Workflow AI Assistant — helps build workflows by asking questions
+  // Get a single run (for viewing past run details)
+  router.get("/runs/:runId", async (req: Request, res: Response) => {
+    const runId = req.params.runId as string;
+    const run = await storage.getPipelineRunById(runId);
+    if (!run) return res.status(404).json({ error: "Run not found" });
+    res.json(run);
+  });
+
+  // Workflow AI Assistant
   router.post("/assist", async (req: Request, res: Response) => {
-    const { description, messages = [] } = req.body;
-    if (!description && messages.length === 0) return res.status(400).json({ error: "Description or messages required" });
+    const { description, messages } = req.body;
+    const userId = req.user?.id || 1;
 
-    try {
-      // Get user's connected services for context
-      const userId = req.user?.id || 1;
-      const connectors = await storage.getConnectorsByUser(userId);
-      const connected = connectors.filter((c: any) => c.status === "connected").map((c: any) => c.provider);
+    const connectors = await storage.getConnectorsByUser(userId);
+    const connectedList = connectors
+      .filter((c: any) => c.status === "connected")
+      .map((c: any) => `${c.provider} (${c.name})`)
+      .join(", ");
 
-      const systemPrompt = `You are the Workflow Architect for Bunz. You help users design multi-step automation workflows.
+    const systemPrompt = `You are a workflow architect for Bunz — an AI orchestration platform.
 
-AVAILABLE DEPARTMENTS: research, coder, writer, artist
-AVAILABLE STEP TYPES: department (uses AI departments), connector (calls external services), transform (AI data processing)
-CONNECTED SERVICES: ${connected.length > 0 ? connected.join(", ") : "none"}
+Available departments (AI workers): research, coder, writer, artist
+Available connectors: ${connectedList || "none connected"}
+Step types: department (AI work), connector (external service), transform (data processing)
 
-YOUR JOB:
-1. Understand what the user wants to automate
-2. Ask clarifying questions if anything is unclear (e.g., "Does this require logging into a specific site?", "What format should the output be?", "Do you need to purchase anything for this?")
-3. When you have enough info, generate the workflow as a JSON object
-
-WHEN READY TO GENERATE, output the workflow JSON wrapped in <workflow> tags:
-<workflow>
+When the user describes what they want, design a multi-step workflow.
+If you have enough info, return the workflow as JSON inside <workflow>...</workflow> tags:
 {
-  "name": "Workflow Name",
-  "description": "What it does",
-  "triggerType": "manual",
+  "name": "...",
+  "description": "...",
   "steps": [
-    {"id": "step-1", "type": "department", "department": "research", "prompt": "Detailed task..."},
-    {"id": "step-2", "type": "department", "department": "writer", "prompt": "Using {{prev}}, write..."},
-    {"id": "step-3", "type": "transform", "prompt": "Format the output as..."}
+    { "id": "step-1", "type": "department", "department": "research", "prompt": "..." },
+    { "id": "step-2", "type": "transform", "prompt": "Summarize: {{prev}}" }
   ]
 }
-</workflow>
 
-IMPORTANT:
-- Use {{prev}} to reference previous step output
-- Use {{step.N}} to reference a specific step (1-indexed)
-- Make prompts detailed and specific — not vague
-- Ask about requirements, logins, purchases, API keys, file formats, frequency
-- If the user wants something you can't automate (like physical purchases), explain what can be automated and what they'd need to do manually
-- Always confirm the plan before generating the final JSON`;
+Ask clarifying questions if the request is ambiguous. Be concise.`;
 
-      const chatMessages = messages.length > 0
-        ? messages.map((m: any) => ({ role: m.role, content: m.content }))
-        : [{ role: "user" as const, content: description }];
+    const chatMessages = messages?.length
+      ? messages.map((m: any) => ({ role: m.role, content: m.content }))
+      : [{ role: "user" as const, content: description || "Help me create a workflow" }];
 
+    try {
       const result = await modelRouter.chat({
         model: "gpt-5.4",
-        messages: chatMessages,
         systemPrompt,
+        messages: chatMessages,
       });
 
-      // Check if response contains a workflow JSON
-      const workflowMatch = result.content.match(/<workflow>([\s\S]*?)<\/workflow>/);
       let workflow = null;
-      if (workflowMatch) {
-        try { workflow = JSON.parse(workflowMatch[1]); } catch {}
+      const wfMatch = result.content.match(/<workflow>([\s\S]*?)<\/workflow>/);
+      if (wfMatch) {
+        try { workflow = JSON.parse(wfMatch[1]); } catch {}
       }
 
-      res.json({
-        reply: result.content.replace(/<workflow>[\s\S]*?<\/workflow>/, "").trim(),
-        workflow,
-        tokens: result.usage.totalTokens,
-      });
+      res.json({ reply: result.content, workflow, tokens: result.usage.totalTokens });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
