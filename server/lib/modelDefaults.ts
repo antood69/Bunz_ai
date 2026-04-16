@@ -10,7 +10,7 @@ export const MODEL_DEFAULTS: Record<WorkerType, string> = {
   boss: "gpt-5.4-mini",       // Fast, good at routing/function calling
   researcher: "sonar-pro",
   coder: "claude-sonnet-4-6", // Best at code generation
-  writer: "claude-haiku-4-5",
+  writer: "gpt-5.4-mini",       // Fast, reliable for writing tasks
   analyst: "gemini-3-flash",
   reviewer: "claude-sonnet-4-6",
   artgen: "gpt-image-1",      // Image generation via OpenAI Responses API
