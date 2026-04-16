@@ -1,13 +1,14 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
   GitBranch, Plus, Play, Trash2, Loader2, CheckCircle2, XCircle,
   Clock, ChevronDown, ChevronRight, Pencil, X, Save, Zap,
   Globe, Code, PenTool, Palette, Bot, Send, Pause, SkipForward,
-  RotateCcw, History, Coins, AlertTriangle, Square, Share2,
+  RotateCcw, History, Coins, AlertTriangle, Square, Share2, LayoutGrid,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+const WorkflowCanvas = lazy(() => import("@/components/WorkflowCanvas"));
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -424,6 +425,7 @@ export default function WorkflowsPage() {
   const [assistMode, setAssistMode] = useState(false);
   const [historyPipeline, setHistoryPipeline] = useState<Pipeline | null>(null);
   const [publishPipeline, setPublishPipeline] = useState<Pipeline | null>(null);
+  const [canvasPipeline, setCanvasPipeline] = useState<Pipeline | null>(null);
 
   const { data: pipelines = [], isLoading } = useQuery<Pipeline[]>({
     queryKey: ["/api/pipelines"],
@@ -711,6 +713,9 @@ export default function WorkflowsPage() {
                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-primary/70 hover:text-primary" onClick={() => setPublishPipeline(p)} title="Publish">
                       <Share2 className="w-3.5 h-3.5" />
                     </Button>
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setCanvasPipeline(p)} title="Visual Editor">
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                    </Button>
                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setEditPipeline(p); setBuilderOpen(true); }} title="Edit">
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
@@ -802,6 +807,22 @@ export default function WorkflowsPage() {
             );
           })}
         </div>
+      )}
+
+      {/* Visual Canvas Editor */}
+      {canvasPipeline && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 bg-background flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>}>
+          <WorkflowCanvas
+            steps={canvasPipeline.steps || []}
+            pipelineName={canvasPipeline.name}
+            onClose={() => setCanvasPipeline(null)}
+            onRun={() => { runPipeline(canvasPipeline); setCanvasPipeline(null); }}
+            onSave={(newSteps) => {
+              updateMutation.mutate({ id: canvasPipeline.id, data: { steps: newSteps } });
+              setCanvasPipeline(null);
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Dialogs */}
