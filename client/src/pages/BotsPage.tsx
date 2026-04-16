@@ -243,7 +243,7 @@ export default function BotsPage() {
   }
 
   return (
-    <div className="p-3 sm:p-4 space-y-4 max-w-[1400px] mx-auto page-enter">
+    <div className="p-3 sm:p-4 space-y-4 page-enter">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-foreground flex items-center gap-2"><Bot className="w-5 h-5 text-primary" /> Bots</h1>

@@ -86,7 +86,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="p-3 sm:p-4 max-w-[1400px] mx-auto page-enter">
+    <div className="p-3 sm:p-4 page-enter">
       {/* KPIs — tight row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
         {kpis.map((kpi) => (

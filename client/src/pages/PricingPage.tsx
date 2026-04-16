@@ -193,7 +193,7 @@ export default function PricingPage() {
   const tokensLimit = plan?.monthlyTokens || 3000;
 
   return (
-    <div className="min-h-full px-6 py-10 pb-20 max-w-6xl mx-auto">
+    <div className="min-h-full p-3 sm:p-4 pb-20 page-enter">
 
       {checkoutSuccess && (
         <div className="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-500 text-center">

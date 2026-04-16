@@ -610,7 +610,7 @@ export default function ToolsPage() {
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-3 sm:p-4 space-y-4 page-enter">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>

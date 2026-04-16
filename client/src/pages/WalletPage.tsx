@@ -52,7 +52,7 @@ export default function WalletPage() {
   const totalReceived = transactions.filter((t: any) => t.status === "succeeded" && !t.refunded).reduce((s: number, t: any) => s + t.amount, 0);
 
   return (
-    <div className="page-enter p-3 sm:p-4 space-y-6 max-w-[1400px] mx-auto">
+    <div className="page-enter p-3 sm:p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

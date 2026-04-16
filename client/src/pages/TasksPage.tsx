@@ -255,7 +255,7 @@ export default function TasksPage() {
   const jobTypes = Array.from(new Set(jobs.map((j) => j.type))).sort();
 
   return (
-    <div className="p-3 sm:p-4 space-y-4 max-w-[1400px] mx-auto page-enter">
+    <div className="p-3 sm:p-4 space-y-4 page-enter">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
