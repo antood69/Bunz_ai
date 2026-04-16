@@ -255,16 +255,19 @@ function renderMarkdown(text: string): JSX.Element {
   const parts: JSX.Element[] = [];
   let key = 0;
 
-  // Extract artifacts first
-  const artifactRegex = /<artifact\s+type="([^"]+)"(?:\s+title="([^"]*)")?>([\s\S]*?)<\/artifact>/g;
+  // Extract artifacts first — replace with placeholders before any other processing
   let processedText = text;
-  const artifacts: Array<{ type: string; title?: string; content: string; placeholder: string }> = [];
-  let match;
-  while ((match = artifactRegex.exec(text)) !== null) {
-    const placeholder = `__ARTIFACT_${artifacts.length}__`;
-    artifacts.push({ type: match[1], title: match[2], content: match[3].trim(), placeholder });
-    processedText = processedText.replace(match[0], placeholder);
-  }
+  const artifacts: Array<{ type: string; title?: string; content: string }> = [];
+
+  // Handle both <artifact ...>...</artifact> patterns
+  processedText = processedText.replace(
+    /<artifact\s+type="([^"]+)"(?:\s+title="([^"]*)")?\s*>([\s\S]*?)<\/artifact>/g,
+    (_, type, title, content) => {
+      const idx = artifacts.length;
+      artifacts.push({ type, title, content: content.trim() });
+      return `\n__ARTIFACT_${idx}__\n`;
+    }
+  );
 
   const segments = processedText.split(/(```[\s\S]*?```)/g);
 
