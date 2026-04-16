@@ -205,54 +205,71 @@ async function runArtistDept(
     }
   }
 
-  // Lead Artist generates the image
+  // Detect how many images requested (default 1, max 3)
+  const countMatch = task.task.match(/(\d+)\s*(?:images?|variations?|versions?|options?)/i);
+  const imageCount = Math.min(Math.max(countMatch ? parseInt(countMatch[1]) : 1, 1), 3);
+
   const artModel = getModel("artist", level);
-  eventBus.emit(parentJobId, "progress", {
-    workerType: "artist", subAgent: "Lead Artist", workerIndex: results.length,
-    status: "running", message: "Generating image...", model: artModel,
-  });
+  const allImageUrls: string[] = [];
+  let firstImageUrl: string | undefined;
+  let firstType: string | undefined;
+  let allContent = "";
 
-  const artStart = Date.now();
-  const artResult = await runArtAgent({ task: imagePrompt, context: task.context, model: artModel, signal });
-
-  const artAgentResult: SubAgentResult = {
-    agentId: "lead_artist", label: "Lead Artist",
-    content: artResult.content, tokens: artResult.usage.totalTokens,
-    durationMs: Date.now() - artStart, imageUrl: artResult.imageUrl, type: artResult.type,
-  };
-  results.push(artAgentResult);
-  totalTokens += artResult.usage.totalTokens;
-
-  if (artResult.imageUrl) {
-    let servedUrl = artResult.imageUrl;
-    // If base64, save to file and serve as static URL
-    if (artResult.imageUrl.startsWith("data:image/")) {
-      try {
-        const b64 = artResult.imageUrl.replace(/^data:image\/\w+;base64,/, "");
-        const imgDir = path.join(process.cwd(), "dist", "public", "generated");
-        if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
-        const imgName = `img_${parentJobId.slice(0, 8)}_${Date.now()}.png`;
-        fs.writeFileSync(path.join(imgDir, imgName), Buffer.from(b64, "base64"));
-        servedUrl = `/generated/${imgName}`;
-      } catch (e: any) { console.error("[Artist] Failed to save image:", e.message); }
-    }
-    eventBus.emit(parentJobId, "agent_image", {
-      workerType: "artist", imageUrl: servedUrl, prompt: imagePrompt,
+  for (let imgIdx = 0; imgIdx < imageCount; imgIdx++) {
+    const label = imageCount > 1 ? `Image ${imgIdx + 1}/${imageCount}` : "Lead Artist";
+    eventBus.emit(parentJobId, "progress", {
+      workerType: "artist", subAgent: label, workerIndex: results.length,
+      status: "running", message: `Generating ${label.toLowerCase()}...`, model: artModel,
     });
-    // Also update the result so synthesis gets the small URL
-    artAgentResult.imageUrl = servedUrl;
+
+    const artStart = Date.now();
+    // Vary the prompt slightly for multiple images
+    const variedPrompt = imageCount > 1 && imgIdx > 0
+      ? `${imagePrompt}\n\n(Create a different variation — variation ${imgIdx + 1} of ${imageCount})`
+      : imagePrompt;
+
+    const artResult = await runArtAgent({ task: variedPrompt, context: task.context, model: artModel, signal });
+
+    const artAgentResult: SubAgentResult = {
+      agentId: `artist_${imgIdx}`, label,
+      content: artResult.content, tokens: artResult.usage.totalTokens,
+      durationMs: Date.now() - artStart, imageUrl: artResult.imageUrl, type: artResult.type,
+    };
+    results.push(artAgentResult);
+    totalTokens += artResult.usage.totalTokens;
+    allContent += (allContent ? "\n\n" : "") + artResult.content;
+
+    if (artResult.imageUrl) {
+      let servedUrl = artResult.imageUrl;
+      if (artResult.imageUrl.startsWith("data:image/")) {
+        try {
+          const b64 = artResult.imageUrl.replace(/^data:image\/\w+;base64,/, "");
+          const imgDir = path.join(process.cwd(), "dist", "public", "generated");
+          if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
+          const imgName = `img_${parentJobId.slice(0, 8)}_${Date.now()}_${imgIdx}.png`;
+          fs.writeFileSync(path.join(imgDir, imgName), Buffer.from(b64, "base64"));
+          servedUrl = `/generated/${imgName}`;
+        } catch (e: any) { console.error("[Artist] Failed to save image:", e.message); }
+      }
+      eventBus.emit(parentJobId, "agent_image", {
+        workerType: "artist", imageUrl: servedUrl, prompt: variedPrompt,
+      });
+      artAgentResult.imageUrl = servedUrl;
+      allImageUrls.push(servedUrl);
+      if (!firstImageUrl) { firstImageUrl = servedUrl; firstType = artResult.type; }
+    }
+
+    eventBus.emit(parentJobId, "step_complete", {
+      workerType: "artist", subAgent: label, workerIndex: results.length - 1,
+      output: artResult.content.slice(0, 300), tokens: artResult.usage.totalTokens,
+      imageUrl: artResult.imageUrl, type: artResult.type,
+    });
   }
 
-  eventBus.emit(parentJobId, "step_complete", {
-    workerType: "artist", subAgent: "Lead Artist", workerIndex: results.length - 1,
-    output: artResult.content.slice(0, 300), tokens: artResult.usage.totalTokens,
-    imageUrl: artResult.imageUrl, type: artResult.type,
-  });
-
   return {
-    department: "artist", finalOutput: artResult.content, subAgentResults: results,
+    department: "artist", finalOutput: allContent, subAgentResults: results,
     totalTokens, totalDurationMs: Date.now() - startTime,
-    imageUrl: artResult.imageUrl, type: artResult.type,
+    imageUrl: firstImageUrl, type: (firstType as "text" | "image" | undefined),
   };
 }
 
