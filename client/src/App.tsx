@@ -62,6 +62,7 @@ function AppRouter() {
 
 
             {/* Redirects */}
+            <Route path="/connectors">{() => <Redirect to="/plugins" />}</Route>
             <Route path="/customize">{() => <Redirect to="/settings?tab=appearance" />}</Route>
             <Route path="/pricing">{() => <Redirect to="/settings?tab=pricing" />}</Route>
             <Route path="/usage">{() => <Redirect to="/settings?tab=usage" />}</Route>
