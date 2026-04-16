@@ -16,6 +16,40 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
+// ── Collapsible Step Output ──────────────────────────────────────────
+function StepOutput({ step, index }: { step: any; index: number }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] overflow-hidden">
+      <button className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/[0.02] transition-colors" onClick={() => setExpanded(!expanded)}>
+        {step.status === "complete" ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" /> :
+         step.status === "failed" ? <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" /> :
+         <Zap className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+        <span className="text-[10px] font-semibold text-foreground capitalize flex-1 text-left">Step {index + 1}: {step.label}</span>
+        <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
+          {step.tokens && <span>{step.tokens >= 1000 ? `${(step.tokens / 1000).toFixed(1)}K` : step.tokens} tok</span>}
+          {step.durationMs && <span>{(step.durationMs / 1000).toFixed(1)}s</span>}
+        </div>
+        <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 border-t border-white/[0.03]">
+          {step.output && (
+            <div className="mt-2">
+              <div className="flex justify-end mb-1">
+                <button className="text-[8px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-white/[0.06] hover:bg-white/[0.04]"
+                  onClick={() => navigator.clipboard.writeText(step.output)}>Copy</button>
+              </div>
+              <pre className="text-[10px] text-foreground/80 whitespace-pre-wrap break-words max-h-60 overflow-y-auto leading-relaxed bg-white/[0.01] rounded-lg p-2">{step.output}</pre>
+            </div>
+          )}
+          {step.error && <p className="text-[10px] text-red-500 mt-2 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{step.error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const DEPT_ICONS: Record<string, React.ElementType> = {
   research: Globe, coder: Code, writer: PenTool, artist: Palette, boss: Bot,
 };
@@ -765,22 +799,34 @@ export default function WorkflowsPage() {
                       })}
                     </div>
 
-                    {/* Inline run output */}
-                    {thisRun && thisRun.steps.some(s => s.output) && (
-                      <div className="mt-3 space-y-1.5">
-                        {thisRun.steps.filter(s => s.output || s.error).map((step, i) => (
-                          <div key={i} className="rounded-lg bg-white/[0.02] border border-white/[0.04] px-3 py-2">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[10px] font-semibold text-foreground capitalize">Step {i + 1}: {step.label}</span>
-                              <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
-                                {step.tokens && <span className="flex items-center gap-0.5"><Coins className="w-2.5 h-2.5" />{step.tokens}</span>}
-                                {step.durationMs && <span>{(step.durationMs / 1000).toFixed(1)}s</span>}
-                              </div>
-                            </div>
-                            {step.output && <pre className="text-[9px] text-muted-foreground whitespace-pre-wrap break-words line-clamp-4">{step.output}</pre>}
-                            {step.error && <p className="text-[9px] text-red-500 flex items-center gap-1"><AlertTriangle className="w-2.5 h-2.5" />{step.error}</p>}
-                          </div>
+                    {/* Step outputs */}
+                    {thisRun && thisRun.steps.some(s => s.output || s.error) && (
+                      <div className="mt-3 space-y-2">
+                        {thisRun.steps.filter(s => s.output || s.error).map((step, idx) => (
+                          <StepOutput key={idx} step={step} index={idx} />
                         ))}
+
+                        {/* Final output — last step's full result */}
+                        {thisRun.status === "complete" && thisRun.steps.filter(s => s.output).length > 0 && (
+                          <div className="mt-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20 p-4">
+                            <div className="flex items-center gap-2 mb-2">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                              <span className="text-xs font-bold text-emerald-400">Final Output</span>
+                              <button
+                                className="ml-auto text-[9px] text-muted-foreground hover:text-foreground px-2 py-0.5 rounded border border-white/[0.06] hover:bg-white/[0.04]"
+                                onClick={() => {
+                                  const lastOutput = thisRun.steps.filter(s => s.output).pop()?.output || "";
+                                  navigator.clipboard.writeText(lastOutput);
+                                }}
+                              >
+                                Copy
+                              </button>
+                            </div>
+                            <pre className="text-xs text-foreground whitespace-pre-wrap break-words max-h-96 overflow-y-auto leading-relaxed">
+                              {thisRun.steps.filter(s => s.output).pop()?.output}
+                            </pre>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
