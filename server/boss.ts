@@ -539,12 +539,19 @@ ${originalMessage}
 DEPARTMENT RESULTS:
 ${outputSummaries}
 
-Present each department's output clearly. For code, keep it in code blocks. For images, mention they were generated. Be thorough but concise. Use markdown.`;
+PRESENTATION RULES:
+- For complete HTML pages, landing pages, or web components: wrap in <artifact type="html" title="descriptive title">...full html...</artifact>
+- For SVG graphics or diagrams: wrap in <artifact type="svg" title="descriptive title">...svg...</artifact>
+- For long-form documents (reports, articles): wrap in <artifact type="document" title="descriptive title">...content...</artifact>
+- For standalone code files: wrap in <artifact type="code" title="filename.ext">...code...</artifact>
+- For images that were generated: mention they were created
+- Write a brief summary before each artifact explaining what it is
+- Be concise in your explanatory text — let the artifacts speak for themselves`;
 
     const synthesis = await modelRouter.chat({
       model: bossModel,
       messages: [{ role: "user", content: synthesisPrompt }],
-      systemPrompt: "You are The Boss — synthesize department outputs into a polished final response.",
+      systemPrompt: "You are The Boss — synthesize department outputs into polished responses. Use <artifact> tags for renderable content like HTML, SVG, documents, and code files.",
       signal,
     });
     totalTokens += synthesis.usage.totalTokens;
