@@ -3,12 +3,18 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
   MessageSquare,
-  ListChecks,
+  GitBranch,
+  Bot,
   Menu,
   X,
   Settings,
   ShieldAlert,
   LogOut,
+  Store,
+  Wallet,
+  Puzzle,
+  Code,
+  ListChecks,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -16,10 +22,16 @@ import { useTheme } from "@/contexts/ThemeContext";
 const primaryTabs = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/boss", label: "Chat", icon: MessageSquare },
-  { href: "/tasks", label: "Tasks", icon: ListChecks },
+  { href: "/workflows", label: "Flows", icon: GitBranch },
+  { href: "/bots", label: "Bots", icon: Bot },
 ];
 
 const moreItems = [
+  { href: "/tasks", label: "Tasks", icon: ListChecks },
+  { href: "/editor", label: "Editor", icon: Code },
+  { href: "/workshop", label: "Workshop", icon: Store },
+  { href: "/wallet", label: "Wallet", icon: Wallet },
+  { href: "/plugins", label: "Plugins", icon: Puzzle },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

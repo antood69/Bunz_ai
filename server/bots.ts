@@ -179,7 +179,7 @@ If nothing needs to be done right now, use action "none".`;
 
   } catch (e: any) {
     await storage.addBotLog(botId, "error", `Cycle failed: ${e.message}`);
-    console.error(`[Bot ${botId}] Cycle error:`, e.message);
+    try { await storage.createNotification({ userId: bot.user_id, type: "bot_error", title: `Bot "${bot.name}" error`, message: e.message.slice(0, 100), link: "/bots" }); } catch {}
   }
 }
 

@@ -170,6 +170,7 @@ async function executePipeline(
 
         // Step failed and not skippable — abort pipeline
         await storage.updatePipelineRun(runId, { status: "failed", error: `Step ${i + 1} (${stepLabel}) failed: ${stepError}`, completedAt: Date.now() });
+        try { await storage.createNotification({ userId, type: "pipeline_failed", title: `Workflow "${pipeline.name}" failed`, message: `Step ${i + 1} (${stepLabel}): ${stepError?.slice(0, 100)}`, link: "/workflows" }); } catch {}
         eventBus.emit(runId, "pipeline_complete", { status: "failed", error: stepError, stepsCompleted: i });
         activeRuns.delete(runId);
         return;
@@ -237,6 +238,7 @@ async function executePipeline(
 
   } catch (err: any) {
     await storage.updatePipelineRun(runId, { status: "failed", error: err.message, completedAt: Date.now() });
+    try { await storage.createNotification({ userId, type: "pipeline_failed", title: `Workflow "${pipeline.name}" failed`, message: err.message.slice(0, 100), link: "/workflows" }); } catch {}
     console.error(`[Pipeline] Failed:`, err.message);
     eventBus.emit(runId, "pipeline_complete", { status: "failed", error: err.message });
   } finally {
@@ -302,6 +304,24 @@ export function createPipelineRouter() {
     });
 
     res.json({ runId, status: "running" });
+  });
+
+  // Webhook trigger — external API access (no auth required, uses pipeline's owner)
+  router.post("/:id/webhook", async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const pipeline = await storage.getPipeline(id);
+    if (!pipeline) return res.status(404).json({ error: "Not found" });
+    if (pipeline.trigger_type !== "webhook") return res.status(400).json({ error: "This workflow is not configured for webhook triggers" });
+
+    const runId = uuidv4();
+    const userId = pipeline.user_id;
+
+    await storage.createPipelineRun({ id: runId, pipelineId: id, userId, totalSteps: pipeline.steps.length });
+
+    // Pass webhook body as input to first step via environment
+    executePipeline(id, userId, "medium" as IntelligenceLevel, runId).catch(() => {});
+
+    res.json({ ok: true, runId, status: "running" });
   });
 
   // Pause a running pipeline
