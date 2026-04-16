@@ -4,11 +4,15 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   Bot, Plus, Play, Square, Trash2, Loader2,
   Pencil, X, Save, Clock, Activity, Zap, Send, ArrowLeft,
+  MessageSquare, Shield, Brain, Sparkles, TrendingUp,
+  Mail, Code, PenTool, BarChart3, Users, Eye,
+  ChevronDown, ChevronRight, Coins, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
@@ -39,6 +43,35 @@ const LOG_COLORS: Record<string, string> = {
   memory: "text-cyan-500", lifecycle: "text-primary",
 };
 
+// ── Bot Templates ───────────────────────────────────────────────────
+const BOT_TEMPLATES = [
+  { name: "Content Writer", desc: "Generates blog posts, social media content, and marketing copy on schedule", icon: PenTool, color: "#8b5cf6", category: "content",
+    brain: "You are a professional content writer. When triggered, research trending topics in the user's niche and write engaging, SEO-optimized content. Focus on value, clarity, and audience engagement.",
+    rules: ["Keep content between 800-2000 words", "Include 3-5 relevant keywords naturally", "End with a call-to-action"] },
+  { name: "Research Assistant", desc: "Monitors topics and compiles research reports with key findings", icon: BarChart3, color: "#3b82f6", category: "research",
+    brain: "You are a research analyst. Monitor the specified topics, gather data from available sources, and compile concise research briefs with key findings, trends, and actionable insights.",
+    rules: ["Cite sources when possible", "Focus on actionable insights", "Flag urgent findings immediately"] },
+  { name: "Code Reviewer", desc: "Reviews code changes, suggests improvements, and catches bugs", icon: Code, color: "#10b981", category: "development",
+    brain: "You are a senior code reviewer. Analyze code for bugs, security issues, performance problems, and style inconsistencies. Provide specific, actionable feedback with code examples.",
+    rules: ["Check for security vulnerabilities first", "Suggest performance optimizations", "Follow project coding standards"] },
+  { name: "Email Responder", desc: "Drafts professional email responses based on incoming messages", icon: Mail, color: "#ef4444", category: "communication",
+    brain: "You are a professional email assistant. Draft clear, concise, and professional email responses. Match the tone of the original message and ensure all questions are addressed.",
+    rules: ["Keep responses under 200 words", "Always be professional and courteous", "Include a clear next step or question"] },
+  { name: "Social Media Manager", desc: "Creates and schedules posts across platforms with trending content", icon: Users, color: "#f59e0b", category: "marketing",
+    brain: "You are a social media manager. Create engaging posts optimized for each platform (Twitter/X, LinkedIn, Instagram). Research trends, write compelling copy, and suggest optimal posting times.",
+    rules: ["Adapt tone for each platform", "Include relevant hashtags", "Focus on engagement-driving content"] },
+  { name: "Market Monitor", desc: "Tracks market trends, competitors, and industry news", icon: TrendingUp, color: "#06b6d4", category: "monitoring",
+    brain: "You are a market intelligence analyst. Monitor industry trends, competitor activities, and market shifts. Provide timely alerts on significant changes and weekly summary reports.",
+    rules: ["Prioritize time-sensitive information", "Compare against historical trends", "Flag competitive threats"] },
+];
+
+const PERSONALITY_PRESETS = [
+  { name: "Professional", desc: "Formal, precise, business-appropriate", prompt: "Maintain a professional, formal tone. Be precise and data-driven. Use industry terminology appropriately." },
+  { name: "Casual", desc: "Friendly, approachable, conversational", prompt: "Be friendly and conversational. Use simple language. Add personality while staying helpful." },
+  { name: "Aggressive", desc: "Bold, decisive, action-oriented", prompt: "Be bold and decisive. Push for action. Challenge assumptions. Don't sugarcoat findings." },
+  { name: "Analytical", desc: "Data-focused, methodical, thorough", prompt: "Focus on data and evidence. Be methodical and thorough. Present findings with supporting analysis." },
+];
+
 // ── Bot Builder Dialog ───────────────────────────────────────────────
 function BotBuilderDialog({ open, bot, onClose, onSave }: {
   open: boolean; bot: BotDef | null; onClose: () => void; onSave: (data: any) => void;
@@ -49,39 +82,115 @@ function BotBuilderDialog({ open, bot, onClose, onSave }: {
   const [model, setModel] = useState(bot?.brain_model || "gpt-5.4");
   const [category, setCategory] = useState(bot?.category || "general");
   const [rulesText, setRulesText] = useState((bot?.rules || []).join("\n"));
+  const [personality, setPersonality] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setName(bot?.name || ""); setDesc(bot?.description || "");
+      setBrain(bot?.brain_prompt || ""); setModel(bot?.brain_model || "gpt-5.4");
+      setCategory(bot?.category || "general");
+      setRulesText((bot?.rules || []).join("\n")); setPersonality("");
+    }
+  }, [bot, open]);
+
+  const applyPersonality = (preset: typeof PERSONALITY_PRESETS[0]) => {
+    setPersonality(preset.name);
+    setBrain(prev => prev ? `${prev}\n\n${preset.prompt}` : preset.prompt);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Bot className="w-5 h-5 text-primary" /> {bot ? "Edit Bot" : "New Bot"}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <Bot className="w-6 h-6 text-primary" />
+            {bot ? "Edit Bot" : "Create New Bot"}
+          </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="grid grid-cols-2 gap-3">
-            <div><Label className="text-xs">Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Trading Bot" className="mt-1" /></div>
-            <div><Label className="text-xs">Category</Label><Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="trading, content, monitor" className="mt-1" /></div>
+        <div className="space-y-5 py-3">
+          {/* Basic info */}
+          <div>
+            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Identity</h3>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <Label className="text-xs">Name</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Content Writer" className="mt-1 h-10" />
+              </div>
+              <div>
+                <Label className="text-xs">Category</Label>
+                <select value={category} onChange={(e) => setCategory(e.target.value)}
+                  className="w-full mt-1 bg-background border border-border rounded-xl px-2 py-2 text-sm h-10">
+                  <option value="general">General</option>
+                  <option value="content">Content</option>
+                  <option value="research">Research</option>
+                  <option value="development">Development</option>
+                  <option value="communication">Communication</option>
+                  <option value="marketing">Marketing</option>
+                  <option value="monitoring">Monitoring</option>
+                  <option value="trading">Trading</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-3">
+              <Label className="text-xs">Description</Label>
+              <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="What does this bot do?" className="mt-1" />
+            </div>
           </div>
-          <div><Label className="text-xs">Description</Label><Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="What does this bot do?" className="mt-1" /></div>
-          <div><Label className="text-xs">Brain (System Prompt)</Label>
-            <textarea value={brain} onChange={(e) => setBrain(e.target.value)} rows={6}
-              className="w-full mt-1 bg-background border border-border rounded-xl px-3 py-2 text-sm resize-y min-h-[100px]"
-              placeholder="You are a trading bot specializing in..." /></div>
-          <div><Label className="text-xs">Model</Label>
-            <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full mt-1 bg-background border border-border rounded-xl px-2 py-1.5 text-sm">
-              <option value="gpt-5.4-mini">GPT-5.4 Mini (fast)</option><option value="gpt-5.4">GPT-5.4 (balanced)</option>
-              <option value="claude-sonnet-4-6">Claude Sonnet</option><option value="claude-opus-4-6">Claude Opus</option>
-            </select></div>
-          <div><Label className="text-xs">Rules (one per line)</Label>
-            <textarea value={rulesText} onChange={(e) => setRulesText(e.target.value)} rows={3}
-              className="w-full mt-1 bg-background border border-border rounded-xl px-3 py-2 text-sm resize-y"
-              placeholder="Max 2% drawdown per day&#10;Confirm trades over $1000" /></div>
+
+          {/* Personality presets */}
+          <div>
+            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Personality</h3>
+            <div className="grid grid-cols-4 gap-2">
+              {PERSONALITY_PRESETS.map(p => (
+                <button key={p.name} onClick={() => applyPersonality(p)}
+                  className={`rounded-xl border p-2.5 text-left transition-all ${
+                    personality === p.name ? "border-primary bg-primary/5" : "border-white/[0.06] hover:border-white/[0.12] hover:bg-white/[0.02]"
+                  }`}>
+                  <p className="text-[11px] font-semibold text-foreground">{p.name}</p>
+                  <p className="text-[9px] text-muted-foreground mt-0.5">{p.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Brain */}
+          <div>
+            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
+              <Brain className="w-3.5 h-3.5" /> Brain (System Prompt)
+            </h3>
+            <Textarea value={brain} onChange={(e) => setBrain(e.target.value)} rows={6}
+              className="resize-y min-h-[120px]"
+              placeholder="You are a... Define the bot's expertise, behavior, goals, and constraints." />
+          </div>
+
+          {/* Model + Rules */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Model</h3>
+              <select value={model} onChange={(e) => setModel(e.target.value)}
+                className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm">
+                <option value="gpt-5.4-mini">GPT-5.4 Mini (fast, cheap)</option>
+                <option value="gpt-5.4">GPT-5.4 (balanced)</option>
+                <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+                <option value="claude-opus-4-6">Claude Opus 4.6 (powerful)</option>
+              </select>
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5" /> Rules & Guardrails
+              </h3>
+              <Textarea value={rulesText} onChange={(e) => setRulesText(e.target.value)} rows={4}
+                className="resize-y"
+                placeholder="One rule per line:&#10;Max 2% drawdown per day&#10;Always cite sources&#10;Never use profanity" />
+            </div>
+          </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button disabled={!name.trim() || !brain.trim()} onClick={() => onSave({
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} size="lg">Cancel</Button>
+          <Button disabled={!name.trim() || !brain.trim()} size="lg" className="px-8" onClick={() => onSave({
             name, description: desc, brainPrompt: brain, brainModel: model, category,
             rules: rulesText.split("\n").filter((r: string) => r.trim()),
-          })}><Save className="w-4 h-4 mr-1" /> {bot ? "Update" : "Create"}</Button>
+          })}><Save className="w-4 h-4 mr-1.5" /> {bot ? "Save Changes" : "Create Bot"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -105,7 +214,6 @@ function BotAssistant({ onClose, onCreate }: { onClose: () => void; onCreate: (d
     const newMsgs = [...messages, msg];
     setMessages(newMsgs); setInput(""); setLoading(true);
     setTimeout(() => scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight), 50);
-
     try {
       const res = await fetch("/api/bots/assist", {
         method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
@@ -120,26 +228,23 @@ function BotAssistant({ onClose, onCreate }: { onClose: () => void; onCreate: (d
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.06]">
         <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0"><ArrowLeft className="w-4 h-4" /></Button>
         <Bot className="w-5 h-5 text-primary" />
         <div>
           <h2 className="text-sm font-semibold text-foreground">Bot Architect</h2>
-          <p className="text-[11px] text-muted-foreground">Describe what you want your bot to do — I'll ask clarifying questions and build it</p>
+          <p className="text-[11px] text-muted-foreground">Describe what you want — I'll design the bot</p>
         </div>
       </div>
-
-      {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.length === 0 && (
           <div className="text-center py-12 text-muted-foreground">
             <Bot className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p className="text-sm font-medium">What kind of bot do you want to build?</p>
-            <p className="text-xs mt-2 max-w-md mx-auto">Describe your idea and I'll ask about data sources, triggers, decision logic, constraints, and anything else I need to design it properly.</p>
+            <p className="text-sm font-medium">What kind of bot do you want?</p>
+            <p className="text-xs mt-2 max-w-md mx-auto">Describe your idea and I'll design the brain, rules, and behavior.</p>
             <div className="flex flex-wrap gap-2 justify-center mt-4">
-              {["Trading bot for futures", "Content pipeline for Fiverr", "GitHub issue monitor", "Daily research digest"].map(s => (
-                <button key={s} onClick={() => { setInput(s); }} className="text-xs px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all">{s}</button>
+              {["Content pipeline for Fiverr", "GitHub issue monitor", "Daily research digest", "Email auto-responder"].map(s => (
+                <button key={s} onClick={() => setInput(s)} className="text-xs px-3 py-1.5 rounded-full border border-white/[0.06] text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all">{s}</button>
               ))}
             </div>
           </div>
@@ -147,44 +252,29 @@ function BotAssistant({ onClose, onCreate }: { onClose: () => void; onCreate: (d
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${
-              m.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border border-border text-foreground"
+              m.role === "user" ? "bg-primary text-primary-foreground" : "glass-card text-foreground"
             }`}>{m.content}</div>
           </div>
         ))}
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-card border border-border rounded-2xl px-4 py-3 flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" /> Thinking...
-            </div>
-          </div>
-        )}
+        {loading && <div className="flex justify-start"><div className="glass-card rounded-2xl px-4 py-3 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Thinking...</div></div>}
       </div>
-
-      {/* Bot ready banner */}
       {botConfig && (
         <div className="mx-4 mb-2 border border-emerald-500/30 bg-emerald-500/10 rounded-xl px-4 py-3 flex items-center justify-between">
           <div>
             <span className="text-sm font-medium text-emerald-500">Bot ready: {botConfig.name}</span>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{botConfig.category} · {botConfig.rules?.length || 0} rules · {botConfig.tools?.length || 0} tools</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{botConfig.category} · {botConfig.rules?.length || 0} rules</p>
           </div>
-          <Button size="sm" className="gap-1" onClick={() => { onCreate(botConfig); }}>
-            <Save className="w-3.5 h-3.5" /> Create Bot
-          </Button>
+          <Button size="sm" className="gap-1" onClick={() => onCreate(botConfig)}><Save className="w-3.5 h-3.5" /> Create Bot</Button>
         </div>
       )}
-
-      {/* Input */}
-      <div className="px-4 py-3 border-t border-border">
+      <div className="px-4 py-3 border-t border-white/[0.06]">
         <div className="flex items-end gap-2">
           <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-            disabled={loading} rows={1} placeholder="Describe your bot idea..."
-            className="flex-1 bg-secondary border border-border rounded-xl px-4 py-3 text-sm resize-none min-h-[44px] max-h-[120px] focus:outline-none focus:ring-1 focus:ring-primary"
-            style={{ height: "auto", overflow: "hidden" }}
+            disabled={loading} rows={1} placeholder="Describe your bot..."
+            className="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-xl px-4 py-3 text-sm resize-none min-h-[44px] max-h-[120px] focus:outline-none focus:ring-1 focus:ring-primary/50"
             onInput={(e) => { const t = e.currentTarget; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 120) + "px"; }} />
-          <Button className="h-11 w-11 rounded-xl p-0" onClick={send} disabled={loading || !input.trim()}>
-            <Send className="w-4 h-4" />
-          </Button>
+          <Button className="h-11 w-11 rounded-xl p-0" onClick={send} disabled={loading || !input.trim()}><Send className="w-4 h-4" /></Button>
         </div>
       </div>
     </div>
@@ -233,7 +323,6 @@ export default function BotsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/bots"] }); toast({ title: "Cycle completed" }); },
   });
 
-  // Full-page AI assistant mode
   if (assistMode) {
     return (
       <div className="h-[calc(100vh-48px)]">
@@ -242,85 +331,183 @@ export default function BotsPage() {
     );
   }
 
+  const totalRuns = bots.reduce((s, b) => s + (b.total_runs || 0), 0);
+  const totalTokens = bots.reduce((s, b) => s + (b.total_tokens || 0), 0);
+  const runningCount = bots.filter(b => b.status === "running").length;
+
   return (
-    <div className="p-3 sm:p-4 space-y-4 page-enter">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-4 page-enter">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
         <div>
-          <h1 className="text-xl font-semibold text-foreground flex items-center gap-2"><Bot className="w-5 h-5 text-primary" /> Bots</h1>
-          <p className="text-sm text-muted-foreground mt-1">Persistent autonomous agents that run continuously</p>
+          <h1 className="text-lg font-semibold text-foreground flex items-center gap-2"><Bot className="w-5 h-5 text-primary" /> Bots</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Autonomous AI agents that run continuously</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setAssistMode(true)} className="gap-1.5"><Bot className="w-4 h-4" /> AI Assist</Button>
-          <Button onClick={() => { setEditBot(null); setBuilderOpen(true); }} className="gap-1.5"><Plus className="w-4 h-4" /> New Bot</Button>
+          <Button variant="outline" size="sm" onClick={() => setAssistMode(true)} className="gap-1.5 text-xs"><Bot className="w-3.5 h-3.5" /> AI Assist</Button>
+          <Button size="sm" onClick={() => { setEditBot(null); setBuilderOpen(true); }} className="gap-1.5 text-xs"><Plus className="w-3.5 h-3.5" /> New Bot</Button>
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-      ) : bots.length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-border rounded-xl text-muted-foreground">
-          <Bot className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm font-medium">No bots yet</p>
-          <p className="text-xs mt-1 mb-4">Create an autonomous agent or use AI Assist to design one</p>
-          <div className="flex gap-2 justify-center">
-            <Button variant="outline" onClick={() => setAssistMode(true)}><Bot className="w-4 h-4 mr-1" /> AI Assist</Button>
-            <Button onClick={() => setBuilderOpen(true)}><Plus className="w-4 h-4 mr-1" /> Manual</Button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {bots.map((b) => (
-            <div key={b.id} className="glass-card rounded-2xl p-5 space-y-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${b.status === "running" ? "bg-emerald-500/15" : "bg-secondary"}`}>
-                    <Bot className={`w-4 h-4 ${b.status === "running" ? "text-emerald-500" : "text-muted-foreground"}`} />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-foreground">{b.name}</h3>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <Badge variant={b.status === "running" ? "default" : "secondary"} className="text-[10px]">{b.status === "running" ? "Running" : "Stopped"}</Badge>
-                      <span className="text-[10px] text-muted-foreground">{b.category}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => { setEditBot(b); setBuilderOpen(true); }} className="p-1 text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => deleteMut.mutate(b.id)} className="p-1 text-muted-foreground hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                </div>
-              </div>
-              {b.description && <p className="text-xs text-muted-foreground">{b.description}</p>}
-              <div className="grid grid-cols-3 gap-3 text-[10px] text-muted-foreground">
-                <div><Clock className="w-3 h-3 inline mr-0.5" /> {timeAgo(b.last_active_at)}</div>
-                <div><Zap className="w-3 h-3 inline mr-0.5" /> {b.total_runs} runs</div>
-                <div><Activity className="w-3 h-3 inline mr-0.5" /> {b.total_tokens >= 1000 ? `${(b.total_tokens / 1000).toFixed(1)}K` : b.total_tokens} tok</div>
-              </div>
-              <div className="flex items-center gap-3 pt-1 border-t border-border">
-                {b.status === "running" ? (
-                  <Button size="sm" variant="outline" className="flex-1 h-7 text-xs text-red-500" onClick={() => stopMut.mutate(b.id)}><Square className="w-3 h-3 mr-1" /> Stop</Button>
-                ) : (
-                  <Button size="sm" variant="outline" className="flex-1 h-7 text-xs text-emerald-500" onClick={() => startMut.mutate(b.id)}><Play className="w-3 h-3 mr-1" /> Start</Button>
-                )}
-                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => runOnceMut.mutate(b.id)} disabled={runOnceMut.isPending}>
-                  {runOnceMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setLogsOpen(logsOpen === b.id ? null : b.id)}>
-                  <Activity className="w-3 h-3" />
-                </Button>
-              </div>
-              {logsOpen === b.id && logs.length > 0 && (
-                <div className="border border-border rounded-xl bg-secondary/30 p-3 max-h-48 overflow-y-auto space-y-1">
-                  {logs.map((l) => (
-                    <div key={l.id} className="text-[10px] flex items-start gap-1.5">
-                      <span className="text-muted-foreground/50 flex-shrink-0">{new Date(l.created_at).toLocaleTimeString()}</span>
-                      <span className={`font-medium flex-shrink-0 ${LOG_COLORS[l.type] || "text-foreground"}`}>{l.type}</span>
-                      <span className="text-muted-foreground truncate">{l.message}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+      {/* Stats */}
+      {bots.length > 0 && (
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          {[
+            { label: "Total Bots", value: bots.length, color: "text-blue-400" },
+            { label: "Running", value: runningCount, color: "text-emerald-400" },
+            { label: "Total Runs", value: totalRuns, color: "text-violet-400" },
+            { label: "Tokens Used", value: totalTokens >= 1000 ? `${(totalTokens / 1000).toFixed(1)}K` : totalTokens, color: "text-amber-400" },
+          ].map(s => (
+            <div key={s.label} className="glass-card rounded-xl px-3 py-2.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{s.label}</span>
+              <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Templates — show when empty */}
+      {bots.length === 0 && !isLoading && (
+        <div className="mb-4">
+          <div className="glass-card rounded-2xl p-5 mb-3">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Get Started with Templates</h2>
+                <p className="text-[10px] text-muted-foreground">Pick a pre-built bot or create your own from scratch</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mb-4">
+            {BOT_TEMPLATES.map((tpl) => {
+              const Icon = tpl.icon;
+              return (
+                <button key={tpl.name} onClick={() => createMut.mutate({
+                  name: tpl.name, description: tpl.desc, brainPrompt: tpl.brain, brainModel: "gpt-5.4",
+                  category: tpl.category, rules: tpl.rules,
+                })}
+                  className="glass-card rounded-xl p-4 text-left group">
+                  <div className="flex items-center gap-2.5 mb-2">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${tpl.color}15` }}>
+                      <Icon className="w-4 h-4" style={{ color: tpl.color }} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">{tpl.name}</p>
+                      <Badge variant="outline" className="text-[8px] h-3.5 mt-0.5">{tpl.category}</Badge>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground line-clamp-2">{tpl.desc}</p>
+                  <p className="text-[9px] text-muted-foreground/50 mt-1.5">{tpl.rules.length} rules</p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="text-center glass-card rounded-2xl py-8">
+            <Bot className="w-8 h-8 mx-auto mb-2 opacity-20 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">Pick a template above or create from scratch</p>
+          </div>
+        </div>
+      )}
+
+      {isLoading && <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>}
+
+      {/* Bot Cards */}
+      {bots.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+          {bots.map((b) => {
+            const isRunning = b.status === "running";
+            const showLogs = logsOpen === b.id;
+            return (
+              <div key={b.id} className="glass-card rounded-2xl overflow-hidden">
+                {/* Color accent bar */}
+                <div className={`h-1 ${isRunning ? "bg-gradient-to-r from-emerald-500 to-emerald-400" : "bg-gradient-to-r from-white/[0.05] to-white/[0.02]"}`} />
+
+                <div className="p-4">
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isRunning ? "bg-emerald-500/15" : "bg-white/[0.04]"}`}>
+                        <Bot className={`w-5 h-5 ${isRunning ? "text-emerald-400" : "text-muted-foreground"}`} />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground">{b.name}</h3>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <div className={`w-2 h-2 rounded-full ${isRunning ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/30"}`} />
+                          <span className={`text-[10px] font-medium ${isRunning ? "text-emerald-400" : "text-muted-foreground"}`}>{isRunning ? "Running" : "Stopped"}</span>
+                          <Badge variant="outline" className="text-[8px] h-3.5">{b.category}</Badge>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => { setEditBot(b); setBuilderOpen(true); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.04]"><Pencil className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => deleteMut.mutate(b.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/5"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </div>
+
+                  {b.description && <p className="text-xs text-muted-foreground mb-3">{b.description}</p>}
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="bg-white/[0.02] rounded-lg px-2.5 py-1.5 text-center">
+                      <p className="text-[9px] text-muted-foreground">Last Active</p>
+                      <p className="text-[11px] font-semibold text-foreground">{timeAgo(b.last_active_at)}</p>
+                    </div>
+                    <div className="bg-white/[0.02] rounded-lg px-2.5 py-1.5 text-center">
+                      <p className="text-[9px] text-muted-foreground">Runs</p>
+                      <p className="text-[11px] font-semibold text-foreground">{b.total_runs}</p>
+                    </div>
+                    <div className="bg-white/[0.02] rounded-lg px-2.5 py-1.5 text-center">
+                      <p className="text-[9px] text-muted-foreground">Tokens</p>
+                      <p className="text-[11px] font-semibold text-foreground">{b.total_tokens >= 1000 ? `${(b.total_tokens / 1000).toFixed(1)}K` : b.total_tokens}</p>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2">
+                    {isRunning ? (
+                      <Button size="sm" variant="outline" className="flex-1 h-8 text-xs text-red-400 border-red-500/20 hover:bg-red-500/5" onClick={() => stopMut.mutate(b.id)}>
+                        <Square className="w-3 h-3 mr-1.5" /> Stop
+                      </Button>
+                    ) : (
+                      <Button size="sm" className="flex-1 h-8 text-xs bg-emerald-600 hover:bg-emerald-700 border-0" onClick={() => startMut.mutate(b.id)}>
+                        <Play className="w-3 h-3 mr-1.5" /> Start
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => runOnceMut.mutate(b.id)} disabled={runOnceMut.isPending} title="Run once">
+                      {runOnceMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setLogsOpen(showLogs ? null : b.id)} title="Activity log">
+                      <Activity className={`w-3 h-3 ${showLogs ? "text-primary" : ""}`} />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Activity Log */}
+                {showLogs && (
+                  <div className="border-t border-white/[0.04] bg-white/[0.01] p-3 max-h-52 overflow-y-auto">
+                    <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Activity Log</p>
+                    {logs.length === 0 ? (
+                      <p className="text-[10px] text-muted-foreground/50 text-center py-4">No activity yet — start or run the bot</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {logs.map((l) => (
+                          <div key={l.id} className="text-[10px] flex items-start gap-2 py-0.5">
+                            <span className="text-muted-foreground/40 flex-shrink-0 w-14">{new Date(l.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                            <span className={`font-semibold flex-shrink-0 w-14 ${LOG_COLORS[l.type] || "text-foreground"}`}>{l.type}</span>
+                            <span className="text-muted-foreground">{l.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -246,34 +246,43 @@ function PipelineBuilderDialog({ open, pipeline, onClose, onSave }: {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <GitBranch className="w-5 h-5 text-primary" />
-            {pipeline ? "Edit Workflow" : "New Workflow"}
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <GitBranch className="w-6 h-6 text-primary" />
+            {pipeline ? "Edit Workflow" : "Create Workflow"}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-xs">Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Fiverr Order Pipeline" className="mt-1" />
+        <div className="space-y-5 py-3">
+          {/* Identity */}
+          <div>
+            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Workflow Details</h3>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <Label className="text-xs">Name</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Fiverr SEO Article Pipeline" className="mt-1 h-10" />
+              </div>
+              <div>
+                <Label className="text-xs">Trigger</Label>
+                <select value={triggerType} onChange={(e) => setTriggerType(e.target.value)}
+                  className="w-full mt-1 bg-background border border-border rounded-xl px-2 py-2 text-sm h-10">
+                  <option value="manual">Manual</option>
+                  <option value="cron">Scheduled (Cron)</option>
+                  <option value="webhook">Webhook</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <Label className="text-xs">Trigger</Label>
-              <select value={triggerType} onChange={(e) => setTriggerType(e.target.value)}
-                className="w-full mt-1 bg-background border border-border rounded-xl px-2 py-1.5 text-sm h-9">
-                <option value="manual">Manual</option>
-                <option value="cron">Scheduled (Cron)</option>
-                <option value="webhook">Webhook</option>
-              </select>
+            <div className="mt-3">
+              <Label className="text-xs">Description</Label>
+              <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this workflow do? Who is it for?" className="mt-1" />
             </div>
           </div>
 
-          <div>
-            <Label className="text-xs">Description</Label>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this workflow do?" className="mt-1" />
+          {/* Input hint */}
+          <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-3">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">How Input Works</p>
+            <p className="text-[10px] text-muted-foreground">When you run this workflow, you'll enter a topic or data. The first step receives it as <code className="text-primary bg-primary/10 px-1 rounded">{"{{prev}}"}</code>. Each step passes its output to the next.</p>
           </div>
 
           <div>
@@ -460,6 +469,8 @@ export default function WorkflowsPage() {
   const [historyPipeline, setHistoryPipeline] = useState<Pipeline | null>(null);
   const [publishPipeline, setPublishPipeline] = useState<Pipeline | null>(null);
   const [canvasPipeline, setCanvasPipeline] = useState<Pipeline | null>(null);
+  const [runInputPipeline, setRunInputPipeline] = useState<Pipeline | null>(null);
+  const [runInputText, setRunInputText] = useState("");
 
   const { data: pipelines = [], isLoading } = useQuery<Pipeline[]>({
     queryKey: ["/api/pipelines"],
@@ -737,7 +748,7 @@ export default function WorkflowsPage() {
                   {/* Actions */}
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                     <Button size="sm" className="h-8 gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 border-0 rounded-lg"
-                      onClick={() => runPipeline(p)} disabled={!!thisRunning}>
+                      onClick={() => { setRunInputPipeline(p); setRunInputText(""); }} disabled={!!thisRunning}>
                       {thisRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
                       {thisRunning ? "Running" : "Run"}
                     </Button>
@@ -853,6 +864,40 @@ export default function WorkflowsPage() {
             );
           })}
         </div>
+      )}
+
+      {/* Run Input Dialog */}
+      {runInputPipeline && (
+        <Dialog open onOpenChange={(o) => !o && setRunInputPipeline(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Play className="w-5 h-5 text-emerald-500" /> Run: {runInputPipeline.name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-3">
+              <Label className="text-xs">Input — what should this workflow process?</Label>
+              <Textarea
+                value={runInputText}
+                onChange={(e) => setRunInputText(e.target.value)}
+                rows={4}
+                className="mt-1.5 resize-y"
+                placeholder="e.g. Write an article about AI automation for small businesses..."
+                autoFocus
+              />
+              <p className="text-[9px] text-muted-foreground mt-1.5">This becomes <code className="text-primary bg-primary/10 px-1 rounded">{"{{prev}}"}</code> for the first step. Leave empty to run without input.</p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRunInputPipeline(null)}>Cancel</Button>
+              <Button className="bg-emerald-600 hover:bg-emerald-700 border-0 gap-1.5" onClick={() => {
+                runPipeline(runInputPipeline);
+                setRunInputPipeline(null);
+              }}>
+                <Play className="w-4 h-4" /> Run Workflow
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Visual Canvas Editor */}
