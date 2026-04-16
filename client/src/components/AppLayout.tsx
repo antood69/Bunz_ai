@@ -108,8 +108,8 @@ export default function AppLayout({ children, allowPublic = false }: { children:
           sidebarCollapsed ? "w-[68px]" : "w-60"
         } ${
           hasWallpaper
-            ? "bg-sidebar/80 backdrop-blur-xl border-r border-border/50"
-            : "bg-sidebar border-r border-border"
+            ? "glass-sidebar"
+            : "bg-sidebar/90 backdrop-blur-xl border-r border-white/[0.06]"
         }`}
       >
         {/* Logo area */}
@@ -181,8 +181,8 @@ export default function AppLayout({ children, allowPublic = false }: { children:
                     sidebarCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 text-sm"
                   } ${
                     isActive
-                      ? "bg-primary/12 text-primary font-medium"
-                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      ? "bg-primary/12 text-primary font-medium shadow-[0_0_12px_hsl(var(--primary)/0.15)]"
+                      : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
                   }`}
                 >
                   <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "" : ""}`} />
