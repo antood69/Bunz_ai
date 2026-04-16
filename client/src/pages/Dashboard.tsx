@@ -253,6 +253,34 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Usage Insights */}
+      {stats && (
+        <div className="glass-card-glow rounded-2xl p-4 mt-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <Zap className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-foreground">Your AI Activity</p>
+              <p className="text-[10px] text-muted-foreground">
+                {stats.workflowsRun30d > 0
+                  ? `You've run ${stats.workflowsRun30d} tasks this month using ${formatTokens(stats.tokensUsed7d)} tokens. ${
+                      stats.workflowsRun30d >= 10 ? "You're on a roll!" : "Keep building automations to save more time."
+                    }`
+                  : "Start running workflows and chatting with Boss to see your AI productivity stats here."
+                }
+              </p>
+            </div>
+            {stats.workflowsRun30d >= 5 && (
+              <div className="flex-shrink-0 text-right">
+                <p className="text-lg font-bold text-emerald-400">~{Math.round(stats.workflowsRun30d * 0.3)}h</p>
+                <p className="text-[9px] text-muted-foreground">estimated saved</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

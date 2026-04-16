@@ -226,17 +226,19 @@ function StepEditor({ step, index, onChange, onRemove }: {
 // ── Pipeline Builder Dialog ──────────────────────────────────────────
 function PipelineBuilderDialog({ open, pipeline, onClose, onSave }: {
   open: boolean; pipeline: Pipeline | null; onClose: () => void;
-  onSave: (data: { name: string; description: string; triggerType: string; steps: PipelineStep[] }) => void;
+  onSave: (data: { name: string; description: string; triggerType: string; triggerConfig?: any; steps: PipelineStep[] }) => void;
 }) {
   const [name, setName] = useState(pipeline?.name || "");
   const [description, setDescription] = useState(pipeline?.description || "");
   const [triggerType, setTriggerType] = useState(pipeline?.trigger_type || "manual");
+  const [schedule, setSchedule] = useState(pipeline?.trigger_config?.schedule || "0 9 * * *");
   const [steps, setSteps] = useState<PipelineStep[]>(pipeline?.steps || []);
 
   useEffect(() => {
     setName(pipeline?.name || "");
     setDescription(pipeline?.description || "");
     setTriggerType(pipeline?.trigger_type || "manual");
+    setSchedule(pipeline?.trigger_config?.schedule || "0 9 * * *");
     setSteps(pipeline?.steps || []);
   }, [pipeline, open]);
 
@@ -273,7 +275,40 @@ function PipelineBuilderDialog({ open, pipeline, onClose, onSave }: {
                 </select>
               </div>
             </div>
-            <div className="mt-3">
+            {triggerType === "cron" && (
+              <div className="col-span-3 mt-2">
+                <Label className="text-xs">Schedule</Label>
+                <div className="grid grid-cols-5 gap-2 mt-1">
+                  {[
+                    { label: "Every hour", value: "0 * * * *" },
+                    { label: "Daily 9am", value: "0 9 * * *" },
+                    { label: "Daily 6pm", value: "0 18 * * *" },
+                    { label: "Mon-Fri 9am", value: "0 9 * * 1-5" },
+                    { label: "Weekly Mon", value: "0 9 * * 1" },
+                  ].map(s => (
+                    <button key={s.value} type="button" onClick={() => setSchedule(s.value)}
+                      className={`text-[10px] px-2 py-1.5 rounded-lg border transition-all ${
+                        schedule === s.value ? "border-primary bg-primary/10 text-primary" : "border-white/[0.06] text-muted-foreground hover:border-white/[0.12]"
+                      }`}>{s.label}</button>
+                  ))}
+                </div>
+                <Input value={schedule} onChange={(e) => setSchedule(e.target.value)} className="mt-2 font-mono text-xs" placeholder="0 9 * * *" />
+                <p className="text-[9px] text-muted-foreground mt-1">Cron expression: minute hour day month weekday</p>
+              </div>
+            )}
+            {triggerType === "webhook" && pipeline?.id && (
+              <div className="col-span-3 mt-2">
+                <Label className="text-xs">Webhook URL</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input readOnly value={`${window.location.origin}/api/pipelines/${pipeline.id}/webhook`} className="font-mono text-[10px]" />
+                  <Button variant="outline" size="sm" className="flex-shrink-0 text-xs" onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/api/pipelines/${pipeline.id}/webhook`);
+                  }}>Copy</Button>
+                </div>
+                <p className="text-[9px] text-muted-foreground mt-1">POST to this URL to trigger the workflow. Body becomes the input.</p>
+              </div>
+            )}
+            <div className="mt-3 col-span-3">
               <Label className="text-xs">Description</Label>
               <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this workflow do? Who is it for?" className="mt-1" />
             </div>
@@ -310,7 +345,7 @@ function PipelineBuilderDialog({ open, pipeline, onClose, onSave }: {
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button disabled={!name.trim() || steps.length === 0 || steps.some(s => !s.prompt.trim())}
-            onClick={() => onSave({ name, description, triggerType, steps })}>
+            onClick={() => onSave({ name, description, triggerType, triggerConfig: triggerType === "cron" ? { schedule } : undefined, steps })}>
             <Save className="w-4 h-4 mr-1" /> {pipeline ? "Update" : "Create"}
           </Button>
         </DialogFooter>

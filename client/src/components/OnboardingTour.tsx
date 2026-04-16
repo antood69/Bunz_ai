@@ -12,31 +12,37 @@ interface TourStep {
 const TOUR_STEPS: TourStep[] = [
   {
     title: "Welcome to Bunz!",
-    description: "Your AI agent orchestration platform. Let's take a quick tour of the key features.",
+    description: "Your AI-powered automation platform. Build workflows, deploy bots, connect services, and make money with AI. Let's show you around.",
     targetSelector: "[data-testid='nav-dashboard']",
     icon: Sparkles,
   },
   {
-    title: "Chat with Boss",
-    description: "Your AI command center. Ask Boss to create workflows, manage agents, or get help with anything.",
+    title: "Chat with Boss AI",
+    description: "Your command center. Ask Boss anything — it routes to specialized AI departments (Research, Writer, Coder, Artist) and synthesizes the results.",
     targetSelector: "[data-testid='nav-chat']",
     icon: MessageSquare,
   },
   {
     title: "Build Workflows",
-    description: "Chain AI agents together into powerful workflows. Use the visual editor or card view to design your pipelines.",
+    description: "Chain AI steps into automated pipelines. Use templates to start fast, or build custom flows with the visual canvas editor. Add pause, retry, and connect any service.",
     targetSelector: "[data-testid='nav-workflows']",
     icon: GitBranch,
   },
   {
-    title: "Browse the Workshop",
-    description: "Discover and install add-ons, templates, and mods to extend your workspace.",
+    title: "Deploy Bots",
+    description: "Create autonomous agents that run continuously. Pick a template (Content Writer, Research Assistant, Code Reviewer) or build from scratch with personality presets.",
+    targetSelector: "[data-testid='nav-bots']",
+    icon: Package,
+  },
+  {
+    title: "Workshop & Plugins",
+    description: "Browse community workflows in the Workshop. Install Skills & Plugins to extend your AI's capabilities — from SEO optimization to Figma integration.",
     targetSelector: "[data-testid='nav-workshop']",
     icon: Package,
   },
   {
-    title: "Customize in Settings",
-    description: "Personalize your experience — themes, wallpapers, AI preferences, connectors, and more.",
+    title: "Connect Everything",
+    description: "Link Gmail, Slack, GitHub, LinkedIn, Shopify, Stripe, and more. Your bots and workflows can use any connected service automatically.",
     targetSelector: "[data-testid='nav-settings']",
     icon: Settings,
   },
@@ -182,7 +188,7 @@ export default function OnboardingTour() {
 
       {/* Tooltip card */}
       <div
-        className="w-[300px] rounded-xl border border-border bg-card shadow-2xl overflow-hidden animate-in fade-in-0 slide-in-from-left-2"
+        className="w-[320px] rounded-2xl glass-card shadow-2xl overflow-hidden"
         style={tooltipStyle}
         onClick={(e) => e.stopPropagation()}
       >
