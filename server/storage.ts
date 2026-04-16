@@ -384,6 +384,25 @@ export async function initDatabase() {
     updated_at TEXT DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS plugins (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    description TEXT,
+    category TEXT DEFAULT 'skill',
+    version TEXT DEFAULT '1.0.0',
+    author TEXT,
+    icon TEXT,
+    tools TEXT DEFAULT '[]',
+    config TEXT DEFAULT '{}',
+    is_active INTEGER DEFAULT 1,
+    source TEXT DEFAULT 'builtin',
+    install_count INTEGER DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS user_preferences (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL UNIQUE,
@@ -3739,6 +3758,45 @@ export class DatabaseStorage implements IStorage {
 
   async getPipelineRunById(runId: string): Promise<any | null> {
     return await dbGet('SELECT * FROM pipeline_runs WHERE id = ?', runId) as any || null;
+  }
+
+  // ── Plugins ─────────────────────────────────────────────────────────
+  async getPluginsByUser(userId: number): Promise<any[]> {
+    return await dbAll('SELECT * FROM plugins WHERE user_id = ? ORDER BY created_at DESC', userId) as any[];
+  }
+
+  async getPlugin(id: string): Promise<any | null> {
+    return await dbGet('SELECT * FROM plugins WHERE id = ?', id) as any || null;
+  }
+
+  async getPluginBySlug(userId: number, slug: string): Promise<any | null> {
+    return await dbGet('SELECT * FROM plugins WHERE user_id = ? AND slug = ?', userId, slug) as any || null;
+  }
+
+  async createPlugin(data: { id: string; userId: number; name: string; slug: string; description?: string; category?: string; author?: string; icon?: string; tools: string; source?: string }): Promise<any> {
+    const now = Date.now();
+    await dbRun(
+      'INSERT INTO plugins (id, user_id, name, slug, description, category, author, icon, tools, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      data.id, data.userId, data.name, data.slug, data.description || '', data.category || 'skill', data.author || '', data.icon || '', data.tools, data.source || 'builtin', now, now
+    );
+    return this.getPlugin(data.id);
+  }
+
+  async updatePlugin(id: string, data: Record<string, any>): Promise<void> {
+    const fields: string[] = [];
+    const values: any[] = [];
+    for (const [k, v] of Object.entries(data)) {
+      const col = k.replace(/([A-Z])/g, '_$1').toLowerCase();
+      fields.push(`${col} = ?`);
+      values.push(v);
+    }
+    fields.push('updated_at = ?'); values.push(Date.now());
+    values.push(id);
+    if (fields.length > 0) await dbRun(`UPDATE plugins SET ${fields.join(', ')} WHERE id = ?`, ...values);
+  }
+
+  async deletePlugin(id: string): Promise<void> {
+    await dbRun('DELETE FROM plugins WHERE id = ?', id);
   }
 }
 

@@ -10,6 +10,7 @@ import { createConnectorsRouter, createWebhookInboundRouter } from "./connectors
 import { createPipelineRouter } from "./pipelines";
 import { createBotRouter } from "./bots";
 import { createWorkshopRouter } from "./workshop";
+import { createPluginsRouter } from "./plugins";
 import githubRouter from "./routes/github";
 import cookieParser from "cookie-parser";
 import { handleBossChat, cancelConversation } from "./boss";
@@ -41,6 +42,7 @@ export async function registerRoutes(
   app.use("/api/connectors", createConnectorsRouter());
   app.use("/api/pipelines", createPipelineRouter());
   app.use("/api/workshop", createWorkshopRouter());
+  app.use("/api/plugins", createPluginsRouter());
   app.use("/api/bots", createBotRouter());
   app.use("/api/webhooks/inbound", createWebhookInboundRouter());
   app.use("/api/github", githubRouter);

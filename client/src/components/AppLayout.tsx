@@ -14,6 +14,7 @@ import {
   Code,
   Store,
   Wallet,
+  Puzzle,
 } from "lucide-react";
 import TokenCounter from "./TokenCounter";
 import NotificationBell from "./NotificationBell";
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/bots", label: "Bots", icon: Bot },
   { href: "/wallet", label: "Wallet", icon: Wallet },
   { href: "/workshop", label: "Workshop", icon: Store },
+  { href: "/plugins", label: "Plugins", icon: Puzzle },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
