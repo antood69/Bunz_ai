@@ -37,7 +37,7 @@ export default function Artifact({ type, title, content, language }: ArtifactPro
     const win = window.open("", "_blank");
     if (win) {
       if (type === "html" || type === "svg") {
-        win.document.write(content);
+        win.document.write(iframeHtml || content);
         win.document.close();
       } else {
         win.document.write(`<pre style="font-family:monospace;white-space:pre-wrap;padding:20px;background:#0a0a12;color:#e5e7eb;margin:0;min-height:100vh">${content.replace(/</g, "&lt;")}</pre>`);
@@ -46,10 +46,14 @@ export default function Artifact({ type, title, content, language }: ArtifactPro
     }
   };
 
-  // Build sandboxed HTML for iframe
-  const iframeSrc = type === "html" || type === "svg"
-    ? `data:text/html;charset=utf-8,${encodeURIComponent(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0a0a12;color:#e5e7eb;padding:16px;min-height:100vh}</style></head><body>${content}</body></html>`)}`
+  // Build HTML for iframe — detect if content is already a full page
+  const isFullPage = content.trim().toLowerCase().startsWith("<!doctype") || content.trim().toLowerCase().startsWith("<html");
+  const iframeHtml = type === "html" || type === "svg"
+    ? isFullPage
+      ? content // Already a complete HTML page
+      : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0a0a12;color:#e5e7eb;padding:16px;min-height:100vh}a{color:#6382ff}button{cursor:pointer}</style></head><body>${content}</body></html>`
     : undefined;
+  const iframeSrc = iframeHtml ? `data:text/html;charset=utf-8,${encodeURIComponent(iframeHtml)}` : undefined;
 
   const containerClass = fullscreen
     ? "fixed inset-0 z-[100] bg-background flex flex-col"
@@ -101,8 +105,8 @@ export default function Artifact({ type, title, content, language }: ArtifactPro
             ref={iframeRef}
             src={iframeSrc}
             className="w-full border-0 bg-[#0a0a12]"
-            style={{ minHeight: fullscreen ? "100%" : "300px", height: fullscreen ? "100%" : "auto" }}
-            sandbox="allow-scripts"
+            style={{ minHeight: fullscreen ? "100%" : "500px", height: fullscreen ? "100%" : "500px" }}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
             title={title || "Artifact preview"}
           />
         ) : (
