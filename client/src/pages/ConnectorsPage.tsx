@@ -81,7 +81,9 @@ const API_KEY_CONNECTORS: ConnectorTemplate[] = [
   { provider: "github", name: "GitHub", description: "Repos, issues, pull requests, and code", type: "api_key", category: "Developer Tools", icon: "G", fields: [{ key: "apiKey", label: "Personal Access Token", placeholder: "ghp_..." }] },
   { provider: "slack", name: "Slack", description: "Send messages and manage channels", type: "api_key", category: "Communication", icon: "S", fields: [{ key: "apiKey", label: "Bot Token", placeholder: "xoxb-..." }] },
   { provider: "stripe", name: "Stripe", description: "Payments, customers, and invoices", type: "api_key", category: "Payments", icon: "$", fields: [{ key: "apiKey", label: "Secret Key", placeholder: "sk_..." }] },
-  // Obsidian is configured in Admin panel (owner-only)
+  { provider: "linkedin", name: "LinkedIn", description: "Publish posts and content to LinkedIn", type: "api_key", category: "Social Media", icon: "in", fields: [{ key: "apiKey", label: "Access Token", placeholder: "Your LinkedIn access token" }] },
+  { provider: "shopify", name: "Shopify", description: "Products, orders, and fulfillment", type: "api_key", category: "E-Commerce", icon: "Sh", fields: [{ key: "shop", label: "Shop Domain", placeholder: "mystore.myshopify.com" }, { key: "apiKey", label: "Admin API Token", placeholder: "shpat_..." }] },
+  { provider: "gumroad", name: "Gumroad", description: "Digital products and sales", type: "api_key", category: "E-Commerce", icon: "Gm", fields: [{ key: "apiKey", label: "Access Token", placeholder: "Your Gumroad access token" }] },
 ];
 
 const OAUTH2_CONNECTORS: ConnectorTemplate[] = [

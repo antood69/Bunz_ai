@@ -25,13 +25,19 @@ const PROVIDER_ACTIONS: Record<string, ConnectorAction[]> = {
   slack: [
     { name: "send_message", description: "Send a message to a Slack channel", params: { channel: { type: "string", required: true }, text: { type: "string", required: true } } },
     { name: "list_channels", description: "List Slack channels", params: { limit: { type: "number" } } },
+    { name: "list_messages", description: "Read recent messages from a channel", params: { channel: { type: "string", required: true }, limit: { type: "number" } } },
+    { name: "add_reaction", description: "Add an emoji reaction to a message", params: { channel: { type: "string", required: true }, timestamp: { type: "string", required: true }, name: { type: "string", required: true } } },
+    { name: "upload_file", description: "Upload a file to a channel", params: { channel: { type: "string", required: true }, content: { type: "string", required: true }, filename: { type: "string", required: true }, title: { type: "string" } } },
   ],
   stripe: [
     { name: "list_customers", description: "List Stripe customers", params: { limit: { type: "number" } } },
     { name: "create_invoice", description: "Create a Stripe invoice", params: { customer: { type: "string", required: true }, description: { type: "string" } } },
   ],
   google: [
-    { name: "list_emails", description: "List recent Gmail messages", params: { maxResults: { type: "number" } } },
+    { name: "list_emails", description: "List recent Gmail messages", params: { maxResults: { type: "number" }, query: { type: "string", description: "Gmail search query (e.g. 'from:fiverr.com is:unread')" } } },
+    { name: "read_email", description: "Read a specific email's full content", params: { messageId: { type: "string", required: true } } },
+    { name: "send_email", description: "Send an email", params: { to: { type: "string", required: true }, subject: { type: "string", required: true }, body: { type: "string", required: true } } },
+    { name: "search_emails", description: "Search Gmail and return parsed content", params: { query: { type: "string", required: true }, maxResults: { type: "number" } } },
     { name: "list_files", description: "List Google Drive files", params: { pageSize: { type: "number" }, query: { type: "string", description: "Search query (e.g. name contains 'report')" } } },
     { name: "read_file", description: "Read a Google Drive file's content", params: { fileId: { type: "string", required: true } } },
     { name: "search_files", description: "Search Google Drive by name or content", params: { query: { type: "string", required: true }, pageSize: { type: "number" } } },
@@ -54,6 +60,22 @@ const PROVIDER_ACTIONS: Record<string, ConnectorAction[]> = {
     { name: "post", description: "HTTP POST request", params: { path: { type: "string", required: true }, body: { type: "object" } } },
     { name: "put", description: "HTTP PUT request", params: { path: { type: "string", required: true }, body: { type: "object" } } },
     { name: "delete", description: "HTTP DELETE request", params: { path: { type: "string", required: true } } },
+  ],
+  // ── New connectors ──────────────────────────────────────────────
+  linkedin: [
+    { name: "create_post", description: "Publish a text post to LinkedIn", params: { text: { type: "string", required: true } } },
+    { name: "create_image_post", description: "Publish a post with an image", params: { text: { type: "string", required: true }, imageUrl: { type: "string", required: true } } },
+  ],
+  shopify: [
+    { name: "list_products", description: "List products", params: { limit: { type: "number" } } },
+    { name: "create_product", description: "Create a new product", params: { title: { type: "string", required: true }, body_html: { type: "string" }, product_type: { type: "string" }, price: { type: "string" } } },
+    { name: "list_orders", description: "List recent orders", params: { limit: { type: "number" }, status: { type: "string" } } },
+    { name: "fulfill_order", description: "Mark an order as fulfilled", params: { orderId: { type: "string", required: true } } },
+  ],
+  gumroad: [
+    { name: "list_products", description: "List Gumroad products", params: {} },
+    { name: "create_product", description: "Create a digital product", params: { name: { type: "string", required: true }, price: { type: "number", required: true }, description: { type: "string" } } },
+    { name: "list_sales", description: "List recent sales", params: { after: { type: "string" } } },
   ],
 };
 
@@ -121,6 +143,30 @@ async function testApiKey(provider: string, config: Record<string, any>): Promis
         } catch (e: any) {
           return { ok: false, error: `Cannot reach Obsidian: ${e.message}. Make sure the Local REST API plugin is running.` };
         }
+      }
+      case "linkedin": {
+        const res = await fetch("https://api.linkedin.com/v2/userinfo", {
+          headers: { Authorization: `Bearer ${config.accessToken || config.apiKey}` },
+        });
+        if (!res.ok) return { ok: false, error: `LinkedIn API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "shopify": {
+        const shop = config.shop || config.shopDomain;
+        const token = config.accessToken || config.apiKey;
+        if (!shop || !token) return { ok: false, error: "Shop domain and token required" };
+        const res = await fetch(`https://${shop}/admin/api/2024-01/shop.json`, {
+          headers: { "X-Shopify-Access-Token": token },
+        });
+        if (!res.ok) return { ok: false, error: `Shopify API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "gumroad": {
+        const res = await fetch("https://api.gumroad.com/v2/user", {
+          headers: { Authorization: `Bearer ${config.accessToken || config.apiKey}` },
+        });
+        if (!res.ok) return { ok: false, error: `Gumroad API returned ${res.status}` };
+        return { ok: true };
       }
       case "custom_rest": {
         if (!config.testEndpoint) return { ok: true };
@@ -214,6 +260,12 @@ async function executeAction(connector: Connector, action: string, params: Recor
         return executeNotion(config, action, params);
       case "obsidian":
         return executeObsidian(config, action, params);
+      case "linkedin":
+        return executeLinkedIn(config, action, params);
+      case "shopify":
+        return executeShopify(config, action, params);
+      case "gumroad":
+        return executeGumroad(config, action, params);
       case "custom_rest":
         return executeCustomRest(config, action, params);
       default:
@@ -269,6 +321,26 @@ async function executeSlack(config: Record<string, any>, action: string, params:
       const data = await res.json() as any;
       return { ok: data.ok, data: data.channels, error: data.error };
     }
+    case "list_messages": {
+      const res = await fetch(`https://slack.com/api/conversations.history?channel=${params.channel}&limit=${params.limit || 20}`, { headers });
+      const data = await res.json() as any;
+      return { ok: data.ok, data: data.messages, error: data.error };
+    }
+    case "add_reaction": {
+      const res = await fetch("https://slack.com/api/reactions.add", {
+        method: "POST", headers, body: JSON.stringify({ channel: params.channel, timestamp: params.timestamp, name: params.name }),
+      });
+      const data = await res.json() as any;
+      return { ok: data.ok, error: data.error };
+    }
+    case "upload_file": {
+      const res = await fetch("https://slack.com/api/files.upload", {
+        method: "POST", headers,
+        body: JSON.stringify({ channels: params.channel, content: params.content, filename: params.filename, title: params.title || params.filename }),
+      });
+      const data = await res.json() as any;
+      return { ok: data.ok, data: data.file, error: data.error };
+    }
     default:
       return { ok: false, error: `Unknown Slack action: ${action}` };
   }
@@ -299,8 +371,73 @@ async function executeGoogle(config: Record<string, any>, action: string, params
   const headers = { Authorization: `Bearer ${config.accessToken}` };
   switch (action) {
     case "list_emails": {
-      const res = await fetch(`https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=${params.maxResults || 10}`, { headers });
-      return { ok: res.ok, data: await res.json() };
+      let url = `https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=${params.maxResults || 10}`;
+      if (params.query) url += `&q=${encodeURIComponent(params.query)}`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) return { ok: false, error: `Gmail API ${res.status}` };
+      const data = await res.json() as any;
+      // Fetch snippet for each message
+      const messages = [];
+      for (const msg of (data.messages || []).slice(0, params.maxResults || 10)) {
+        const detail = await fetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`, { headers });
+        if (detail.ok) {
+          const d = await detail.json() as any;
+          const getHeader = (name: string) => d.payload?.headers?.find((h: any) => h.name === name)?.value || "";
+          messages.push({ id: d.id, threadId: d.threadId, snippet: d.snippet, from: getHeader("From"), subject: getHeader("Subject"), date: getHeader("Date") });
+        }
+      }
+      return { ok: true, data: messages };
+    }
+    case "read_email": {
+      const res = await fetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${params.messageId}?format=full`, { headers });
+      if (!res.ok) return { ok: false, error: `Gmail read failed: ${res.status}` };
+      const msg = await res.json() as any;
+      const getHeader = (name: string) => msg.payload?.headers?.find((h: any) => h.name === name)?.value || "";
+      // Extract plain text body
+      let body = "";
+      const extractText = (part: any): string => {
+        if (part.mimeType === "text/plain" && part.body?.data) {
+          return Buffer.from(part.body.data, "base64url").toString("utf-8");
+        }
+        if (part.parts) return part.parts.map(extractText).join("\n");
+        return "";
+      };
+      body = extractText(msg.payload);
+      return { ok: true, data: { id: msg.id, from: getHeader("From"), to: getHeader("To"), subject: getHeader("Subject"), date: getHeader("Date"), body, snippet: msg.snippet } };
+    }
+    case "send_email": {
+      const raw = Buffer.from(
+        `To: ${params.to}\r\nSubject: ${params.subject}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${params.body}`
+      ).toString("base64url");
+      const res = await fetch("https://www.googleapis.com/gmail/v1/users/me/messages/send", {
+        method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ raw }),
+      });
+      if (!res.ok) return { ok: false, error: `Send email failed: ${res.status}` };
+      return { ok: true, data: await res.json() };
+    }
+    case "search_emails": {
+      // Search and return parsed content
+      const listRes = await fetch(`https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=${params.maxResults || 5}&q=${encodeURIComponent(params.query)}`, { headers });
+      if (!listRes.ok) return { ok: false, error: `Gmail search failed: ${listRes.status}` };
+      const listData = await listRes.json() as any;
+      const results = [];
+      for (const msg of (listData.messages || []).slice(0, 5)) {
+        const detail = await fetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`, { headers });
+        if (detail.ok) {
+          const d = await detail.json() as any;
+          const getHeader = (name: string) => d.payload?.headers?.find((h: any) => h.name === name)?.value || "";
+          let body = "";
+          const extractText = (part: any): string => {
+            if (part.mimeType === "text/plain" && part.body?.data) return Buffer.from(part.body.data, "base64url").toString("utf-8");
+            if (part.parts) return part.parts.map(extractText).join("\n");
+            return "";
+          };
+          body = extractText(d.payload);
+          results.push({ id: d.id, from: getHeader("From"), subject: getHeader("Subject"), date: getHeader("Date"), body: body.slice(0, 2000), snippet: d.snippet });
+        }
+      }
+      return { ok: true, data: results };
     }
     case "list_files": {
       let url = `https://www.googleapis.com/drive/v3/files?pageSize=${params.pageSize || 20}&fields=files(id,name,mimeType,modifiedTime,size,webViewLink)`;
@@ -459,6 +596,134 @@ async function executeCustomRest(config: Record<string, any>, action: string, pa
   let data: any;
   try { data = JSON.parse(text); } catch { data = text; }
   return { ok: res.ok, data };
+}
+
+// ── LinkedIn Executor ────────────────────────────────────────────────
+async function executeLinkedIn(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const accessToken = config.accessToken || config.apiKey;
+  if (!accessToken) return { ok: false, error: "No LinkedIn access token" };
+
+  // Get LinkedIn user ID (sub)
+  const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!profileRes.ok) return { ok: false, error: `LinkedIn profile fetch failed: ${profileRes.status}` };
+  const profile = await profileRes.json() as any;
+  const personUrn = `urn:li:person:${profile.sub}`;
+
+  switch (action) {
+    case "create_post": {
+      const res = await fetch("https://api.linkedin.com/rest/posts", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "LinkedIn-Version": "202401",
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+        body: JSON.stringify({
+          author: personUrn,
+          commentary: params.text,
+          visibility: "PUBLIC",
+          distribution: { feedDistribution: "MAIN_FEED", targetEntities: [], thirdPartyDistributionChannels: [] },
+          lifecycleState: "PUBLISHED",
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.text().catch(() => "");
+        return { ok: false, error: `LinkedIn post failed: ${res.status} ${err}` };
+      }
+      return { ok: true, data: { posted: true } };
+    }
+    case "create_image_post": {
+      // For now, post as text with image link
+      const text = `${params.text}\n\n${params.imageUrl}`;
+      return executeLinkedIn(config, "create_post", { text });
+    }
+    default:
+      return { ok: false, error: `Unknown LinkedIn action: ${action}` };
+  }
+}
+
+// ── Shopify Executor ────────────────────────────────────────────────
+async function executeShopify(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const shop = config.shop || config.shopDomain; // e.g. "mystore.myshopify.com"
+  const token = config.accessToken || config.apiKey;
+  if (!shop || !token) return { ok: false, error: "Shop domain and access token required" };
+
+  const baseUrl = `https://${shop}/admin/api/2024-01`;
+  const headers = { "X-Shopify-Access-Token": token, "Content-Type": "application/json" };
+
+  switch (action) {
+    case "list_products": {
+      const res = await fetch(`${baseUrl}/products.json?limit=${params.limit || 20}`, { headers });
+      if (!res.ok) return { ok: false, error: `Shopify API ${res.status}` };
+      return { ok: true, data: await res.json() };
+    }
+    case "create_product": {
+      const product: any = { title: params.title, body_html: params.body_html || "", product_type: params.product_type || "" };
+      if (params.price) product.variants = [{ price: params.price }];
+      const res = await fetch(`${baseUrl}/products.json`, {
+        method: "POST", headers, body: JSON.stringify({ product }),
+      });
+      if (!res.ok) return { ok: false, error: `Create product failed: ${res.status}` };
+      return { ok: true, data: await res.json() };
+    }
+    case "list_orders": {
+      const status = params.status || "any";
+      const res = await fetch(`${baseUrl}/orders.json?limit=${params.limit || 20}&status=${status}`, { headers });
+      if (!res.ok) return { ok: false, error: `Shopify API ${res.status}` };
+      return { ok: true, data: await res.json() };
+    }
+    case "fulfill_order": {
+      const res = await fetch(`${baseUrl}/orders/${params.orderId}/fulfillments.json`, {
+        method: "POST", headers, body: JSON.stringify({ fulfillment: { location_id: null, notify_customer: true } }),
+      });
+      if (!res.ok) return { ok: false, error: `Fulfill failed: ${res.status}` };
+      return { ok: true, data: await res.json() };
+    }
+    default:
+      return { ok: false, error: `Unknown Shopify action: ${action}` };
+  }
+}
+
+// ── Gumroad Executor ────────────────────────────────────────────────
+async function executeGumroad(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const token = config.accessToken || config.apiKey;
+  if (!token) return { ok: false, error: "No Gumroad access token" };
+
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  switch (action) {
+    case "list_products": {
+      const res = await fetch("https://api.gumroad.com/v2/products", { headers });
+      if (!res.ok) return { ok: false, error: `Gumroad API ${res.status}` };
+      return { ok: true, data: await res.json() };
+    }
+    case "create_product": {
+      const body = new URLSearchParams({
+        name: params.name,
+        price: String(Math.round((params.price || 0) * 100)),
+        description: params.description || "",
+      });
+      const res = await fetch("https://api.gumroad.com/v2/products", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+      if (!res.ok) return { ok: false, error: `Create product failed: ${res.status}` };
+      return { ok: true, data: await res.json() };
+    }
+    case "list_sales": {
+      let url = "https://api.gumroad.com/v2/sales";
+      if (params.after) url += `?after=${params.after}`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) return { ok: false, error: `Gumroad API ${res.status}` };
+      return { ok: true, data: await res.json() };
+    }
+    default:
+      return { ok: false, error: `Unknown Gumroad action: ${action}` };
+  }
 }
 
 // Public API

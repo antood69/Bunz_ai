@@ -86,9 +86,9 @@ function StepEditor({ step, index, onChange, onRemove }: {
           <Label className="text-xs">Type</Label>
           <select value={step.type} onChange={(e) => onChange({ ...step, type: e.target.value as any })}
             className="w-full mt-1 bg-background border border-border rounded-xl px-2 py-1.5 text-sm">
-            <option value="department">Department</option>
-            <option value="connector">Connector</option>
-            <option value="transform">Transform</option>
+            <option value="department">AI Department</option>
+            <option value="connector">Connector Action</option>
+            <option value="transform">Data Transform</option>
           </select>
         </div>
         {step.type === "department" && (
@@ -100,6 +100,54 @@ function StepEditor({ step, index, onChange, onRemove }: {
               <option value="coder">Coder</option>
               <option value="writer">Writer</option>
               <option value="artist">Artist</option>
+            </select>
+          </div>
+        )}
+        {step.type === "connector" && (
+          <div>
+            <Label className="text-xs">Quick Action</Label>
+            <select value={step.connectorAction || ""} onChange={(e) => {
+              const val = e.target.value;
+              const presets: Record<string, Partial<PipelineStep>> = {
+                "send_email": { connectorAction: "send_email", prompt: "Send email to {{prev}}" },
+                "create_post": { connectorAction: "create_post", prompt: "Post to LinkedIn: {{prev}}" },
+                "search_emails": { connectorAction: "search_emails", prompt: "Search Gmail: from:fiverr.com is:unread" },
+                "list_orders": { connectorAction: "list_orders", prompt: "Fetch Shopify orders" },
+                "fulfill_order": { connectorAction: "fulfill_order", prompt: "Fulfill Shopify order {{prev}}" },
+                "create_product": { connectorAction: "create_product", prompt: "Create product: {{prev}}" },
+                "send_message": { connectorAction: "send_message", prompt: "Send Slack message: {{prev}}" },
+                "write_note": { connectorAction: "write_note", prompt: "Save to Obsidian: {{prev}}" },
+              };
+              const preset = presets[val];
+              if (preset) onChange({ ...step, ...preset, connectorAction: val });
+            }}
+              className="w-full mt-1 bg-background border border-border rounded-xl px-2 py-1.5 text-sm">
+              <option value="">Select action...</option>
+              <optgroup label="Email (Gmail)">
+                <option value="send_email">Send Email</option>
+                <option value="search_emails">Search Emails</option>
+                <option value="read_email">Read Email</option>
+              </optgroup>
+              <optgroup label="LinkedIn">
+                <option value="create_post">Publish Post</option>
+              </optgroup>
+              <optgroup label="Shopify">
+                <option value="list_orders">List Orders</option>
+                <option value="fulfill_order">Fulfill Order</option>
+                <option value="create_product">Create Product</option>
+              </optgroup>
+              <optgroup label="Gumroad">
+                <option value="list_sales">List Sales</option>
+                <option value="create_product">Create Product</option>
+              </optgroup>
+              <optgroup label="Slack">
+                <option value="send_message">Send Message</option>
+                <option value="list_channels">List Channels</option>
+              </optgroup>
+              <optgroup label="Obsidian">
+                <option value="write_note">Save Note</option>
+                <option value="search_notes">Search Notes</option>
+              </optgroup>
             </select>
           </div>
         )}
@@ -527,6 +575,44 @@ export default function WorkflowsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Quick Templates */}
+      {pipelines.length === 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-foreground mb-3">Quick Start Templates</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { name: "Fiverr SEO Article", desc: "Email detects Fiverr order → Research keywords → Write article → Email delivery", icon: "📝", steps: [
+                { id: "1", type: "department", department: "research", prompt: "Research SEO keywords and competitor articles for: {{prev}}" },
+                { id: "2", type: "department", department: "writer", prompt: "Write a 1500-word SEO-optimized blog article based on this research:\n\n{{prev}}" },
+                { id: "3", type: "transform", prompt: "Format this article with proper headings, meta description, and keyword density analysis:\n\n{{prev}}" },
+              ]},
+              { name: "LinkedIn Content Machine", desc: "Research trends → Write engaging post → Publish to LinkedIn", icon: "💼", steps: [
+                { id: "1", type: "department", department: "research", prompt: "Research the latest trending topics and insights in AI, tech, and entrepreneurship. Find 3 interesting angles for a LinkedIn post." },
+                { id: "2", type: "department", department: "writer", prompt: "Write a compelling LinkedIn post (200-300 words) based on this research. Make it engaging, personal, and end with a question to drive comments:\n\n{{prev}}" },
+              ]},
+              { name: "Client Report Generator", desc: "Research topic → Analyze data → Write professional report", icon: "📊", steps: [
+                { id: "1", type: "department", department: "research", prompt: "Research and gather comprehensive data on: {{prev}}" },
+                { id: "2", type: "department", department: "writer", prompt: "Write a professional client-ready report with executive summary, key findings, analysis, and recommendations based on:\n\n{{prev}}" },
+              ]},
+              { name: "Social Media Batch", desc: "Research → Write posts for Twitter, LinkedIn, Instagram", icon: "📱", steps: [
+                { id: "1", type: "department", department: "research", prompt: "Research trending topics and content ideas for social media in the niche: {{prev}}" },
+                { id: "2", type: "department", department: "writer", prompt: "Create a batch of 5 social media posts optimized for different platforms (Twitter/X, LinkedIn, Instagram) based on:\n\n{{prev}}" },
+                { id: "3", type: "department", department: "artist", prompt: "Create a social media graphic for this content:\n\n{{step.2}}" },
+              ]},
+            ].map((tpl) => (
+              <button key={tpl.name} onClick={() => {
+                createMutation.mutate({ name: tpl.name, description: tpl.desc, triggerType: "manual", steps: tpl.steps });
+              }}
+                className="border border-border rounded-xl p-4 text-left hover:border-primary/50 hover:bg-primary/5 transition-all group">
+                <span className="text-2xl mb-2 block">{tpl.icon}</span>
+                <p className="text-sm font-medium text-foreground group-hover:text-primary">{tpl.name}</p>
+                <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">{tpl.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Pipeline list */}
       {isLoading ? (
