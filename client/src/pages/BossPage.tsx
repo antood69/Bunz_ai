@@ -259,15 +259,22 @@ function renderMarkdown(text: string): JSX.Element {
   let processedText = text;
   const artifacts: Array<{ type: string; title?: string; content: string }> = [];
 
-  // Handle both <artifact ...>...</artifact> patterns
-  processedText = processedText.replace(
-    /<artifact\s+type="([^"]+)"(?:\s+title="([^"]*)")?\s*>([\s\S]*?)<\/artifact>/g,
-    (_, type, title, content) => {
-      const idx = artifacts.length;
-      artifacts.push({ type, title, content: content.trim() });
-      return `\n__ARTIFACT_${idx}__\n`;
-    }
-  );
+  // Handle <artifact ...>...</artifact> patterns (greedy fallback if no closing tag)
+  // Also unescape HTML entities first in case content was escaped
+  let unescaped = processedText
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+
+  const hasArtifacts = unescaped.includes("<artifact ");
+  if (hasArtifacts) {
+    processedText = unescaped.replace(
+      /<artifact\s+type=["']([^"']+)["'](?:\s+title=["']([^"']*)["'])?\s*>([\s\S]*?)(?:<\/artifact>|$)/g,
+      (_, type, title, content) => {
+        const idx = artifacts.length;
+        artifacts.push({ type, title, content: content.trim() });
+        return `\n__ARTIFACT_${idx}__\n`;
+      }
+    );
+  }
 
   const segments = processedText.split(/(```[\s\S]*?```)/g);
 
