@@ -132,7 +132,7 @@ function WorkflowProgress({
   const pipelineLabel = isDeptDispatch ? "Department Pipeline" : "Agent Pipeline";
 
   return (
-    <div className="space-y-2 p-4 bg-card/50 border border-border rounded-2xl">
+    <div className="space-y-2 p-4 glass-card rounded-2xl">
       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
         <Zap className="w-3 h-3" />
         <span className="font-medium">{pipelineLabel}</span>
@@ -536,7 +536,7 @@ function MessageBubble({
 
           {/* Show synthesis output when complete — render images from hidden markers */}
           {streamState.synthesisText && (
-            <div className="bg-card border border-border rounded-2xl px-5 py-4">
+            <div className="glass-card rounded-2xl px-5 py-4">
               <div className="flex items-center gap-2 mb-3 text-xs text-primary">
                 <Bot className="w-3.5 h-3.5" />
                 <span className="font-medium">Boss — Final Response</span>

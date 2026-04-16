@@ -243,7 +243,7 @@ export default function BotsPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
+    <div className="p-3 sm:p-4 space-y-4 max-w-[1400px] mx-auto page-enter">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-foreground flex items-center gap-2"><Bot className="w-5 h-5 text-primary" /> Bots</h1>
@@ -270,7 +270,7 @@ export default function BotsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {bots.map((b) => (
-            <div key={b.id} className="border border-border rounded-2xl bg-card p-5 space-y-3 gemini-card transition-all">
+            <div key={b.id} className="glass-card rounded-2xl p-5 space-y-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${b.status === "running" ? "bg-emerald-500/15" : "bg-secondary"}`}>

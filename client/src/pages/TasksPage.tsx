@@ -88,7 +88,7 @@ function JobRow({ job, onStop, onDelete }: { job: AgentJob; onStop: (id: string)
   }
 
   return (
-    <div className="border border-border rounded-2xl bg-card hover:bg-card/80 transition-all gemini-card">
+    <div className="glass-card rounded-2xl">
       <div
         className="flex items-center gap-3 px-4 py-3 cursor-pointer"
         onClick={() => setExpanded(!expanded)}
@@ -255,7 +255,7 @@ export default function TasksPage() {
   const jobTypes = Array.from(new Set(jobs.map((j) => j.type))).sort();
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
+    <div className="p-3 sm:p-4 space-y-4 max-w-[1400px] mx-auto page-enter">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -276,7 +276,7 @@ export default function TasksPage() {
           { label: "Failed", value: failedJobs, color: "text-red-500" },
           { label: "Success Rate", value: `${successRate}%`, color: "text-primary" },
         ].map((stat) => (
-          <div key={stat.label} className="bg-card border border-border rounded-2xl px-5 py-4">
+          <div key={stat.label} className="glass-card rounded-2xl px-5 py-4">
             <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
             <p className={`text-lg font-semibold ${stat.color}`}>{stat.value}</p>
           </div>

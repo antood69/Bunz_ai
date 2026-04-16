@@ -52,7 +52,7 @@ export default function WalletPage() {
   const totalReceived = transactions.filter((t: any) => t.status === "succeeded" && !t.refunded).reduce((s: number, t: any) => s + t.amount, 0);
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-6xl mx-auto">
+    <div className="page-enter p-3 sm:p-4 space-y-6 max-w-[1400px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -72,22 +72,22 @@ export default function WalletPage() {
       </div>
 
       {/* Balance Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="border border-emerald-500/30 rounded-2xl bg-emerald-500/5 p-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="glass-card-glow rounded-2xl p-6">
           <div className="flex items-center gap-2 text-sm text-emerald-500 mb-2">
             <DollarSign className="w-4 h-4" /> Available
           </div>
           <p className="text-3xl font-bold text-emerald-500">${(balance.available || 0).toFixed(2)}</p>
           <p className="text-xs text-muted-foreground mt-1 uppercase">{balance.currency}</p>
         </div>
-        <div className="border border-border rounded-2xl bg-card p-6">
+        <div className="glass-card rounded-2xl p-6">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
             <Clock className="w-4 h-4" /> Pending
           </div>
           <p className="text-3xl font-bold text-orange-500">${(balance.pending || 0).toFixed(2)}</p>
           <p className="text-xs text-muted-foreground mt-1">Processing by Stripe</p>
         </div>
-        <div className="border border-border rounded-2xl bg-card p-6">
+        <div className="glass-card rounded-2xl p-6">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
             <TrendingUp className="w-4 h-4" /> Total Received
           </div>
@@ -97,9 +97,9 @@ export default function WalletPage() {
       </div>
 
       {/* Two columns: Transactions + Payouts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Transactions */}
-        <div className="lg:col-span-2 border border-border rounded-2xl bg-card">
+        <div className="lg:col-span-2 glass-card rounded-2xl">
           <div className="px-5 py-4 border-b border-border flex items-center gap-2">
             <ArrowDownLeft className="w-4 h-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground">Recent Payments</h2>
@@ -144,7 +144,7 @@ export default function WalletPage() {
         </div>
 
         {/* Payouts */}
-        <div className="lg:col-span-1 border border-border rounded-2xl bg-card">
+        <div className="lg:col-span-1 glass-card rounded-2xl">
           <div className="px-5 py-4 border-b border-border flex items-center gap-2">
             <ArrowUpRight className="w-4 h-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground">Payouts</h2>

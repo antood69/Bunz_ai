@@ -121,7 +121,7 @@ export default function WorkshopPage() {
   const isLoadingAny = tab === "browse" ? isLoading : myLoading;
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
+    <div className="p-3 sm:p-4 space-y-6 page-enter">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -195,7 +195,7 @@ export default function WorkshopPage() {
           <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading...
         </div>
       ) : displayListings.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground border border-dashed border-border rounded-xl">
+        <div className="text-center py-16 text-muted-foreground glass-card rounded-2xl">
           <Store className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm font-medium">{tab === "my" ? "You haven't published anything yet" : "No listings yet"}</p>
           <p className="text-xs mt-1">
@@ -205,7 +205,7 @@ export default function WorkshopPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
           {displayListings.map((listing: any) => {
             const catId = listing.category || "workflow";
             const Icon = CATEGORY_ICONS[catId] || Wrench;
@@ -218,7 +218,7 @@ export default function WorkshopPage() {
             const isMine = tab === "my";
 
             return (
-              <div key={listing.id} className="border border-border rounded-2xl bg-card p-5 flex flex-col hover:shadow-lg hover:shadow-primary/5 transition-all">
+              <div key={listing.id} className="glass-card rounded-2xl p-5 flex flex-col hover:shadow-lg hover:shadow-primary/5 transition-all">
                 <div className="flex items-start gap-3 mb-3">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${colorClass}`}>
                     <Icon className="w-5 h-5" />
