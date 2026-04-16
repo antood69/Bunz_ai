@@ -57,6 +57,7 @@ import {
 import { executeDepartment, type DepartmentResult } from "./departments/executor";
 import { runAutonomous } from "./departments/autonomous";
 import { connectorRegistry } from "./lib/connectorRegistry";
+import { chunkText } from "./lib/utils";
 import { autoLinkNote, contextSearch } from "./lib/vaultBrain";
 
 // ── Boss System Prompt ──────────────────────────────────────────────────────
@@ -719,8 +720,3 @@ Present each department's output clearly. For code, keep it in code blocks. For 
   }
 }
 
-function chunkText(text: string, size: number): string[] {
-  const chunks: string[] = [];
-  for (let i = 0; i < text.length; i += size) chunks.push(text.slice(i, i + size));
-  return chunks;
-}

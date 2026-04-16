@@ -7,6 +7,7 @@ import { modelRouter } from "../lib/modelRouter";
 import { runCoderAgent } from "../agents/coder";
 import { runArtAgent } from "../agents/art";
 import { eventBus } from "../lib/eventBus";
+import { chunkText } from "../lib/utils";
 import fs from "fs";
 import path from "path";
 import {
@@ -377,10 +378,3 @@ async function runCoderDept(
   };
 }
 
-// ── Utility ─────────────────────────────────────────────────────────────────
-
-function chunkText(text: string, size: number): string[] {
-  const chunks: string[] = [];
-  for (let i = 0; i < text.length; i += size) chunks.push(text.slice(i, i + size));
-  return chunks;
-}

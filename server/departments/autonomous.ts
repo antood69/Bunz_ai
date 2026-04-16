@@ -6,6 +6,7 @@
 import { modelRouter } from "../ai";
 import { eventBus } from "../lib/eventBus";
 import { executeDepartment, type DepartmentResult } from "./executor";
+import { chunkText } from "../lib/utils";
 import {
   type DepartmentId, type IntelligenceLevel,
   INTELLIGENCE_TIERS, estimateComplexity,
@@ -234,8 +235,3 @@ function extractJson(text: string): any | null {
   return null;
 }
 
-function chunkText(text: string, size: number): string[] {
-  const chunks: string[] = [];
-  for (let i = 0; i < text.length; i += size) chunks.push(text.slice(i, i + size));
-  return chunks;
-}
