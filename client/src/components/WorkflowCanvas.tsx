@@ -32,6 +32,9 @@ const PALETTE_ITEMS = [
   { type: "connector", connectorAction: "send_message", label: "Slack Message", icon: MessageSquare, color: "#4a154b", description: "Post to Slack" },
   { type: "connector", connectorAction: "search_emails", label: "Search Email", icon: Search, color: "#f97316", description: "Search Gmail inbox" },
   { type: "connector", connectorAction: "list_orders", label: "Shopify Orders", icon: ShoppingBag, color: "#96bf48", description: "Fetch Shopify orders" },
+  { type: "connector", connectorAction: "send_message", label: "Discord Message", icon: MessageSquare, color: "#5865f2", description: "Send to Discord" },
+  { type: "connector", connectorAction: "list_contacts", label: "HubSpot Contacts", icon: Globe, color: "#ff7a59", description: "CRM contacts" },
+  { type: "connector", connectorAction: "insert_row", label: "Supabase Insert", icon: Code, color: "#3ecf8e", description: "Insert database row" },
 ];
 
 // ── Custom Node Component ───────────────────────────────────────────

@@ -77,6 +77,36 @@ const PROVIDER_ACTIONS: Record<string, ConnectorAction[]> = {
     { name: "create_product", description: "Create a digital product", params: { name: { type: "string", required: true }, price: { type: "number", required: true }, description: { type: "string" } } },
     { name: "list_sales", description: "List recent sales", params: { after: { type: "string" } } },
   ],
+  discord: [
+    { name: "send_message", description: "Send a message to a Discord channel", params: { channelId: { type: "string", required: true }, content: { type: "string", required: true } } },
+    { name: "list_guilds", description: "List the bot's servers", params: {} },
+    { name: "list_channels", description: "List channels in a server", params: { guildId: { type: "string", required: true } } },
+  ],
+  hubspot: [
+    { name: "list_contacts", description: "List CRM contacts", params: { limit: { type: "number" } } },
+    { name: "create_contact", description: "Create a CRM contact", params: { email: { type: "string", required: true }, firstname: { type: "string" }, lastname: { type: "string" } } },
+    { name: "list_deals", description: "List CRM deals", params: { limit: { type: "number" } } },
+  ],
+  dropbox: [
+    { name: "list_files", description: "List files in a folder", params: { path: { type: "string" } } },
+    { name: "download_file", description: "Download file content", params: { path: { type: "string", required: true } } },
+    { name: "upload_file", description: "Upload file content", params: { path: { type: "string", required: true }, content: { type: "string", required: true } } },
+  ],
+  supabase: [
+    { name: "query", description: "Run a SQL query", params: { sql: { type: "string", required: true } } },
+    { name: "list_tables", description: "List database tables", params: {} },
+    { name: "insert_row", description: "Insert a row into a table", params: { table: { type: "string", required: true }, data: { type: "object", required: true } } },
+  ],
+  vercel: [
+    { name: "list_projects", description: "List Vercel projects", params: {} },
+    { name: "list_deployments", description: "List recent deployments", params: { projectId: { type: "string" }, limit: { type: "number" } } },
+    { name: "get_deployment", description: "Get deployment details", params: { deploymentId: { type: "string", required: true } } },
+  ],
+  figma: [
+    { name: "get_file", description: "Get Figma file data", params: { fileKey: { type: "string", required: true } } },
+    { name: "get_comments", description: "Get comments on a file", params: { fileKey: { type: "string", required: true } } },
+    { name: "list_projects", description: "List team projects", params: { teamId: { type: "string", required: true } } },
+  ],
 };
 
 // Test connection per provider
@@ -166,6 +196,27 @@ async function testApiKey(provider: string, config: Record<string, any>): Promis
           headers: { Authorization: `Bearer ${config.accessToken || config.apiKey}` },
         });
         if (!res.ok) return { ok: false, error: `Gumroad API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "supabase": {
+        const url = config.url || config.supabaseUrl;
+        const key = config.apiKey || config.serviceKey;
+        if (!url || !key) return { ok: false, error: "URL and key required" };
+        const res = await fetch(`${url}/rest/v1/`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+        return { ok: res.ok || res.status === 200, error: res.ok ? undefined : `Supabase returned ${res.status}` };
+      }
+      case "vercel": {
+        const res = await fetch("https://api.vercel.com/v2/user", {
+          headers: { Authorization: `Bearer ${config.apiKey || config.accessToken}` },
+        });
+        if (!res.ok) return { ok: false, error: `Vercel API returned ${res.status}` };
+        return { ok: true };
+      }
+      case "figma": {
+        const res = await fetch("https://api.figma.com/v1/me", {
+          headers: { "X-Figma-Token": config.apiKey || config.accessToken },
+        });
+        if (!res.ok) return { ok: false, error: `Figma API returned ${res.status}` };
         return { ok: true };
       }
       case "custom_rest": {
@@ -266,6 +317,18 @@ async function executeAction(connector: Connector, action: string, params: Recor
         return executeShopify(config, action, params);
       case "gumroad":
         return executeGumroad(config, action, params);
+      case "discord":
+        return executeDiscord(config, action, params);
+      case "hubspot":
+        return executeHubSpot(config, action, params);
+      case "dropbox":
+        return executeDropbox(config, action, params);
+      case "supabase":
+        return executeSupabase(config, action, params);
+      case "vercel":
+        return executeVercel(config, action, params);
+      case "figma":
+        return executeFigma(config, action, params);
       case "custom_rest":
         return executeCustomRest(config, action, params);
       default:
@@ -723,6 +786,172 @@ async function executeGumroad(config: Record<string, any>, action: string, param
     }
     default:
       return { ok: false, error: `Unknown Gumroad action: ${action}` };
+  }
+}
+
+// ── Discord Executor ─────────────────────────────────────────────────
+async function executeDiscord(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const token = config.accessToken || config.apiKey;
+  if (!token) return { ok: false, error: "No Discord token" };
+  const headers = { Authorization: `Bot ${token}`, "Content-Type": "application/json" };
+
+  switch (action) {
+    case "send_message": {
+      const res = await fetch(`https://discord.com/api/v10/channels/${params.channelId}/messages`, {
+        method: "POST", headers, body: JSON.stringify({ content: params.content }),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "list_guilds": {
+      const res = await fetch("https://discord.com/api/v10/users/@me/guilds", { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "list_channels": {
+      const res = await fetch(`https://discord.com/api/v10/guilds/${params.guildId}/channels`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    default: return { ok: false, error: `Unknown Discord action: ${action}` };
+  }
+}
+
+// ── HubSpot Executor ────────────────────────────────────────────────
+async function executeHubSpot(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const token = config.accessToken || config.apiKey;
+  if (!token) return { ok: false, error: "No HubSpot token" };
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  switch (action) {
+    case "list_contacts": {
+      const res = await fetch(`https://api.hubapi.com/crm/v3/objects/contacts?limit=${params.limit || 20}`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "create_contact": {
+      const res = await fetch("https://api.hubapi.com/crm/v3/objects/contacts", {
+        method: "POST", headers,
+        body: JSON.stringify({ properties: { email: params.email, firstname: params.firstname || "", lastname: params.lastname || "" } }),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "list_deals": {
+      const res = await fetch(`https://api.hubapi.com/crm/v3/objects/deals?limit=${params.limit || 20}`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    default: return { ok: false, error: `Unknown HubSpot action: ${action}` };
+  }
+}
+
+// ── Dropbox Executor ────────────────────────────────────────────────
+async function executeDropbox(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const token = config.accessToken || config.apiKey;
+  if (!token) return { ok: false, error: "No Dropbox token" };
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  switch (action) {
+    case "list_files": {
+      const res = await fetch("https://api.dropboxapi.com/2/files/list_folder", {
+        method: "POST", headers, body: JSON.stringify({ path: params.path || "" }),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "download_file": {
+      const res = await fetch("https://content.dropboxapi.com/2/files/download", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Dropbox-API-Arg": JSON.stringify({ path: params.path }) },
+      });
+      return { ok: res.ok, data: { content: await res.text() } };
+    }
+    case "upload_file": {
+      const res = await fetch("https://content.dropboxapi.com/2/files/upload", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Dropbox-API-Arg": JSON.stringify({ path: params.path, mode: "overwrite" }),
+          "Content-Type": "application/octet-stream",
+        },
+        body: params.content,
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    default: return { ok: false, error: `Unknown Dropbox action: ${action}` };
+  }
+}
+
+// ── Supabase Executor ───────────────────────────────────────────────
+async function executeSupabase(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const url = config.url || config.supabaseUrl;
+  const key = config.apiKey || config.serviceKey;
+  if (!url || !key) return { ok: false, error: "Supabase URL and key required" };
+  const headers = { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+
+  switch (action) {
+    case "query": {
+      const res = await fetch(`${url}/rest/v1/rpc/`, { method: "POST", headers, body: JSON.stringify({ query: params.sql }) });
+      if (!res.ok) {
+        // Fallback: try direct REST
+        return { ok: false, error: `SQL RPC not supported. Use REST endpoints instead.` };
+      }
+      return { ok: true, data: await res.json() };
+    }
+    case "list_tables": {
+      const res = await fetch(`${url}/rest/v1/`, { headers });
+      return { ok: res.ok, data: await res.json().catch(() => "See Supabase dashboard for tables") };
+    }
+    case "insert_row": {
+      const res = await fetch(`${url}/rest/v1/${params.table}`, {
+        method: "POST", headers: { ...headers, Prefer: "return=representation" },
+        body: JSON.stringify(params.data),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    default: return { ok: false, error: `Unknown Supabase action: ${action}` };
+  }
+}
+
+// ── Vercel Executor ─────────────────────────────────────────────────
+async function executeVercel(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const token = config.apiKey || config.accessToken;
+  if (!token) return { ok: false, error: "No Vercel token" };
+  const headers = { Authorization: `Bearer ${token}` };
+
+  switch (action) {
+    case "list_projects": {
+      const res = await fetch("https://api.vercel.com/v9/projects", { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "list_deployments": {
+      let url = "https://api.vercel.com/v6/deployments?limit=" + (params.limit || 10);
+      if (params.projectId) url += `&projectId=${params.projectId}`;
+      const res = await fetch(url, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "get_deployment": {
+      const res = await fetch(`https://api.vercel.com/v13/deployments/${params.deploymentId}`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    default: return { ok: false, error: `Unknown Vercel action: ${action}` };
+  }
+}
+
+// ── Figma Executor ──────────────────────────────────────────────────
+async function executeFigma(config: Record<string, any>, action: string, params: Record<string, any>): Promise<ExecuteResult> {
+  const token = config.apiKey || config.accessToken;
+  if (!token) return { ok: false, error: "No Figma token" };
+  const headers = { "X-Figma-Token": token };
+
+  switch (action) {
+    case "get_file": {
+      const res = await fetch(`https://api.figma.com/v1/files/${params.fileKey}`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "get_comments": {
+      const res = await fetch(`https://api.figma.com/v1/files/${params.fileKey}/comments`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    case "list_projects": {
+      const res = await fetch(`https://api.figma.com/v1/teams/${params.teamId}/projects`, { headers });
+      return { ok: res.ok, data: await res.json() };
+    }
+    default: return { ok: false, error: `Unknown Figma action: ${action}` };
   }
 }
 

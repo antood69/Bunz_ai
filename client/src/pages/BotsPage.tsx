@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  Bot, Plus, Play, Square, Trash2, Loader2,
+  Bot, Plus, Play, Square, Trash2, Loader2, CheckCircle2,
   Pencil, X, Save, Clock, Activity, Zap, Send, ArrowLeft,
   MessageSquare, Shield, Brain, Sparkles, TrendingUp,
   Mail, Code, PenTool, BarChart3, Users, Eye,
@@ -289,6 +289,10 @@ export default function BotsPage() {
   const [editBot, setEditBot] = useState<BotDef | null>(null);
   const [logsOpen, setLogsOpen] = useState<string | null>(null);
   const [assistMode, setAssistMode] = useState(false);
+  const [runInputBot, setRunInputBot] = useState<BotDef | null>(null);
+  const [runInput, setRunInput] = useState("");
+  const [runOutput, setRunOutput] = useState("");
+  const [runLoading, setRunLoading] = useState(false);
 
   const { data: bots = [], isLoading } = useQuery<BotDef[]>({ queryKey: ["/api/bots"], refetchInterval: 5000 });
 
@@ -477,7 +481,10 @@ export default function BotsPage() {
                         <Play className="w-3 h-3 mr-1.5" /> Start
                       </Button>
                     )}
-                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => runOnceMut.mutate(b.id)} disabled={runOnceMut.isPending} title="Run once">
+                    <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={() => { setRunInputBot(b); setRunInput(""); setRunOutput(""); }} title="Run with input">
+                      <MessageSquare className="w-3 h-3" />
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => runOnceMut.mutate(b.id)} disabled={runOnceMut.isPending} title="Auto cycle">
                       {runOnceMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
                     </Button>
                     <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setLogsOpen(showLogs ? null : b.id)} title="Activity log">
@@ -509,6 +516,64 @@ export default function BotsPage() {
             );
           })}
         </div>
+      )}
+
+      {/* Run with Input Dialog */}
+      {runInputBot && (
+        <Dialog open onOpenChange={(o) => !o && setRunInputBot(null)}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Bot className="w-5 h-5 text-primary" /> Run: {runInputBot.name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-3 space-y-3">
+              <div>
+                <Label className="text-xs">Give the bot a task or input</Label>
+                <Textarea value={runInput} onChange={(e) => setRunInput(e.target.value)}
+                  rows={3} className="mt-1.5 resize-y"
+                  placeholder="e.g. Write a blog post about AI automation trends..."
+                  autoFocus disabled={runLoading} />
+              </div>
+              {runOutput && (
+                <div className="rounded-xl bg-emerald-500/5 border border-emerald-500/20 p-4 max-h-80 overflow-y-auto">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-emerald-400">Output</span>
+                    <button className="ml-auto text-[9px] text-muted-foreground hover:text-foreground px-2 py-0.5 rounded border border-white/[0.06]"
+                      onClick={() => navigator.clipboard.writeText(runOutput)}>Copy</button>
+                  </div>
+                  <pre className="text-xs text-foreground whitespace-pre-wrap break-words leading-relaxed">{runOutput}</pre>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRunInputBot(null)}>Close</Button>
+              <Button disabled={!runInput.trim() || runLoading} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 border-0"
+                onClick={async () => {
+                  setRunLoading(true); setRunOutput("");
+                  try {
+                    const res = await fetch(`/api/bots/${runInputBot.id}/run-with-input`, {
+                      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+                      body: JSON.stringify({ input: runInput }),
+                    });
+                    const data = await res.json();
+                    if (data.ok) {
+                      setRunOutput(data.output);
+                      qc.invalidateQueries({ queryKey: ["/api/bots"] });
+                    } else {
+                      toast({ title: "Error", description: data.error, variant: "destructive" });
+                    }
+                  } catch (e: any) {
+                    toast({ title: "Error", description: e.message, variant: "destructive" });
+                  } finally { setRunLoading(false); }
+                }}>
+                {runLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                {runLoading ? "Running..." : "Run"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       <BotBuilderDialog open={builderOpen} bot={editBot} onClose={() => { setBuilderOpen(false); setEditBot(null); }}

@@ -84,6 +84,10 @@ const API_KEY_CONNECTORS: ConnectorTemplate[] = [
   { provider: "linkedin", name: "LinkedIn", description: "Publish posts and content to LinkedIn", type: "api_key", category: "Social Media", icon: "in", fields: [{ key: "apiKey", label: "Access Token", placeholder: "Your LinkedIn access token" }] },
   { provider: "shopify", name: "Shopify", description: "Products, orders, and fulfillment", type: "api_key", category: "E-Commerce", icon: "Sh", fields: [{ key: "shop", label: "Shop Domain", placeholder: "mystore.myshopify.com" }, { key: "apiKey", label: "Admin API Token", placeholder: "shpat_..." }] },
   { provider: "gumroad", name: "Gumroad", description: "Digital products and sales", type: "api_key", category: "E-Commerce", icon: "Gm", fields: [{ key: "apiKey", label: "Access Token", placeholder: "Your Gumroad access token" }] },
+  { provider: "supabase", name: "Supabase", description: "Database, auth, and storage", type: "api_key", category: "Developer Tools", icon: "Sb", fields: [{ key: "url", label: "Project URL", placeholder: "https://xxx.supabase.co" }, { key: "apiKey", label: "Service Role Key", placeholder: "eyJ..." }] },
+  { provider: "vercel", name: "Vercel", description: "Deployments, projects, and domains", type: "api_key", category: "Developer Tools", icon: "V", fields: [{ key: "apiKey", label: "API Token", placeholder: "Your Vercel token" }] },
+  { provider: "figma", name: "Figma", description: "Design files, components, and comments", type: "api_key", category: "Design", icon: "F", fields: [{ key: "apiKey", label: "Personal Access Token", placeholder: "figd_..." }] },
+  { provider: "discord", name: "Discord Bot", description: "Send messages via bot token", type: "api_key", category: "Communication", icon: "D", fields: [{ key: "apiKey", label: "Bot Token", placeholder: "Your Discord bot token" }] },
 ];
 
 const OAUTH2_CONNECTORS: ConnectorTemplate[] = [

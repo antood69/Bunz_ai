@@ -56,6 +56,15 @@ async function runBotCycle(botId: string): Promise<void> {
       `[${new Date(l.created_at).toLocaleTimeString()}] ${l.type}: ${l.message}`
     ).join("\n");
 
+    // Fetch user's connected services so bot knows what's available
+    const userConnectors = await storage.getConnectorsByUser(bot.user_id);
+    const connectedServices = userConnectors
+      .filter((c: any) => c.status === "connected")
+      .map((c: any) => {
+        const actions = connectorRegistry.listActions(c.provider);
+        return `- ${c.provider} (id: ${c.id}): ${actions.map((a: any) => a.name).join(", ")}`;
+      });
+
     const decisionPrompt = `You are an autonomous bot. Based on your current state and recent activity, decide what to do next.
 
 CURRENT STATE (memory):
@@ -66,6 +75,9 @@ ${logContext || "No recent activity"}
 
 AVAILABLE TOOLS:
 ${bot.tools.map((t: any) => `- ${t.type}: ${t.name} — ${t.description || ""}`).join("\n") || "No tools configured"}
+
+CONNECTED SERVICES (use connectorId and connectorAction to call these):
+${connectedServices.length > 0 ? connectedServices.join("\n") : "No services connected — user can connect Gmail, Slack, GitHub, LinkedIn, Shopify, etc. in Connectors page"}
 
 RULES/CONSTRAINTS:
 ${bot.rules.map((r: any) => `- ${r}`).join("\n") || "No rules set"}
@@ -252,6 +264,46 @@ export function createBotRouter() {
     if (!bot) return res.status(404).json({ error: "Not found" });
     await runBotCycle(id);
     res.json({ ok: true });
+  });
+
+  // Run bot with a specific input/task
+  router.post("/:id/run-with-input", async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const { input } = req.body;
+    const bot = await storage.getBot(id);
+    if (!bot) return res.status(404).json({ error: "Not found" });
+
+    try {
+      await storage.addBotLog(id, "cycle", `Manual run with input: ${(input || "").slice(0, 100)}`);
+
+      // Fetch user's connected services
+      const userConnectors = await storage.getConnectorsByUser(bot.user_id);
+      const connectedServices = userConnectors
+        .filter((c: any) => c.status === "connected")
+        .map((c: any) => {
+          const actions = connectorRegistry.listActions(c.provider);
+          return `- ${c.provider} (id: ${c.id}): ${actions.map((a: any) => a.name).join(", ")}`;
+        });
+
+      const result = await modelRouter.chat({
+        model: bot.brain_model || "gpt-5.4-mini",
+        messages: [{ role: "user", content: input || "Execute your primary function." }],
+        systemPrompt: `${bot.brain_prompt}\n\nRULES:\n${(bot.rules || []).join("\n")}\n\nCONNECTED SERVICES:\n${connectedServices.join("\n") || "None"}`,
+      });
+
+      const tokens = result.usage.totalTokens;
+      await storage.updateBot(id, {
+        totalTokens: (bot.total_tokens || 0) + tokens,
+        totalRuns: (bot.total_runs || 0) + 1,
+        lastActiveAt: Date.now(),
+      });
+      await storage.addBotLog(id, "result", result.content.slice(0, 500));
+
+      res.json({ ok: true, output: result.content, tokens });
+    } catch (e: any) {
+      await storage.addBotLog(id, "error", e.message);
+      res.status(500).json({ error: e.message });
+    }
   });
 
   router.get("/:id/logs", async (req: Request, res: Response) => {
