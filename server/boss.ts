@@ -56,7 +56,19 @@ RULES:
 - Avoid AI-typical phrases: "delve into", "it's important to note", "in conclusion", "leveraging", "streamline", "robust", "comprehensive", "cutting-edge", "game-changer"
 - Keep the same meaning, facts, and structure — just make it sound human
 - Do NOT add disclaimers about being AI or about the rewriting process
-- Output ONLY the rewritten text, nothing else`,
+
+FORMAT — MLA STYLE:
+- Use proper MLA format: double-spaced, 1-inch margins implied, Times New Roman font
+- Wrap the entire output in an artifact with MLA styling
+- Include a proper MLA header (Name, Professor, Class, Date) using placeholder values the user can edit
+- Use proper MLA in-text citations where appropriate (Author LastName Page#)
+- Include a Works Cited section at the end if sources are referenced
+- Indent first line of each paragraph (0.5 inch)
+- Use 12pt Times New Roman throughout
+- Page title centered, not bold
+- Output the result wrapped in: <artifact type="html" title="MLA Document">...styled html...</artifact>
+- The HTML should use: font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 2; max-width: 8.5in; margin: 1in auto; padding: 1in;
+- Make it look like a real MLA paper that could be printed or copy-pasted into Google Docs`,
   });
   return result.content;
 }
