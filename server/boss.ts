@@ -36,6 +36,31 @@ async function getOwnerObsidianConnector(): Promise<any | null> {
   } catch { return null; }
 }
 
+/** Humanize AI text to pass AI detection tools like ZeroGPT */
+async function humanizeText(text: string): Promise<string> {
+  const result = await modelRouter.chat({
+    model: "gpt-5.4",
+    messages: [{ role: "user", content: text }],
+    systemPrompt: `You are a humanizer. Rewrite the following text so it reads as naturally human-written and passes AI detection tools like ZeroGPT, GPTZero, and Originality.ai.
+
+RULES:
+- Vary sentence length — mix short punchy sentences with longer complex ones
+- Use contractions naturally (don't, it's, we're, that's)
+- Add occasional colloquial phrases and informal transitions (honestly, look, here's the thing, anyway)
+- Introduce minor imperfections — start some sentences with "And" or "But"
+- Use first person where appropriate (I think, in my experience, I've found)
+- Avoid overly structured patterns — don't start every paragraph the same way
+- Break up lists into flowing prose when possible
+- Use concrete examples and specific details instead of generic statements
+- Vary paragraph lengths — some short, some long
+- Avoid AI-typical phrases: "delve into", "it's important to note", "in conclusion", "leveraging", "streamline", "robust", "comprehensive", "cutting-edge", "game-changer"
+- Keep the same meaning, facts, and structure — just make it sound human
+- Do NOT add disclaimers about being AI or about the rewriting process
+- Output ONLY the rewritten text, nothing else`,
+  });
+  return result.content;
+}
+
 /** Execute an Obsidian action — uses DB connector or env var fallback */
 async function obsidianExec(connectorId: any, action: string, params: Record<string, any>) {
   if (connectorId === "env") {
@@ -195,8 +220,14 @@ export interface BossChatResult {
 }
 
 export async function handleBossChat(input: BossChatInput): Promise<BossChatResult> {
-  const { message, userId, userEmail, history = [] } = input;
+  let { message, userId, userEmail, history = [] } = input;
   const level: IntelligenceLevel = input.level || "medium";
+
+  // Detect /human command — humanize the output to pass AI detectors
+  const humanizeMode = message.trim().toLowerCase().startsWith("/human");
+  if (humanizeMode) {
+    message = message.replace(/^\/human\s*/i, "").trim();
+  }
   const tier = INTELLIGENCE_TIERS[level];
   const bossModel = tier.bossModel;
   const abortController = new AbortController();
@@ -374,8 +405,12 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     } catch (e: any) { console.error("[Activity] Failed to log event:", e.message); }
 
     // ── DIRECT MODE: Boss answers directly ──────────────────────────────
+    let finalContent = bossResult.content;
+    if (humanizeMode) {
+      finalContent = await humanizeText(finalContent);
+    }
     await storage.createBossMessage({
-      id: uuidv4(), conversationId, role: "assistant", content: bossResult.content,
+      id: uuidv4(), conversationId, role: "assistant", content: finalContent,
       tokenCount: bossTokens, model: bossModel, createdAt: Date.now(),
     });
 
@@ -388,7 +423,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
         // Save Boss response
         const bossPath = `Boss/${timestamp}-${slug}.md`;
         const header = `# ${message.slice(0, 80)}\n*${new Date().toLocaleString()} | Boss Direct | Level: ${level} | User: ${userEmail || "unknown"}*\n\n---\n\n`;
-        await obsidianExec(obsConnector.id, "write_note", { path: bossPath, content: header + bossResult.content });
+        await obsidianExec(obsConnector.id, "write_note", { path: bossPath, content: header + finalContent });
         // Save input
         const inputPath = `Inputs/${timestamp}-${slug}.md`;
         const inputContent = `# Prompt\n*${new Date().toLocaleString()} | Level: ${level} | Direct (Boss) | User: ${userEmail || "unknown"}*\n\n---\n\n${message}`;
@@ -399,7 +434,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     activeAbortControllers.delete(conversationId);
 
     return {
-      conversationId, reply: bossResult.content,
+      conversationId, reply: finalContent,
       isDelegating: false, tokenCount: bossTokens, level,
     };
 
