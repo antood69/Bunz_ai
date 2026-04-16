@@ -95,7 +95,16 @@ User says: "write me a blog about ai"
 BAD task: "write a blog about ai"
 GOOD task: "Write a 1200-word blog post about current AI trends in 2026. Structure: intro paragraph, 5-7 sections with h2 headers covering major developments (LLMs, agents, open source, enterprise adoption, regulation), conclusion with forward-looking statement. Tone: professional but accessible. Include specific company names and product references where relevant."
 
-Always enhance vague requests into detailed, actionable prompts.` + bossInstructions;
+Always enhance vague requests into detailed, actionable prompts.
+
+ARTIFACTS:
+When generating HTML, interactive content, documents, or visual outputs, wrap them in artifact tags:
+<artifact type="html" title="My Page">...html content...</artifact>
+<artifact type="svg" title="Diagram">...svg content...</artifact>
+<artifact type="document" title="Report">...markdown document...</artifact>
+<artifact type="code" title="Script">...code content...</artifact>
+Use artifacts for: landing pages, charts, diagrams, forms, interactive demos, styled documents, data visualizations.
+Do NOT use artifacts for simple text responses — only for rich, renderable content.` + bossInstructions;
 
 // ── Parse Boss dispatch decision ────────────────────────────────────────────
 

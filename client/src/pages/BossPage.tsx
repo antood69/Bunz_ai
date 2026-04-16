@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import IntelligencePicker, { type IntelligenceLevel } from "@/components/IntelligencePicker";
 import { useAgentStream, type WorkerStatus } from "@/hooks/useAgentStream";
+import Artifact from "@/components/Artifact";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -253,7 +254,19 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
 function renderMarkdown(text: string): JSX.Element {
   const parts: JSX.Element[] = [];
   let key = 0;
-  const segments = text.split(/(```[\s\S]*?```)/g);
+
+  // Extract artifacts first
+  const artifactRegex = /<artifact\s+type="([^"]+)"(?:\s+title="([^"]*)")?>([\s\S]*?)<\/artifact>/g;
+  let processedText = text;
+  const artifacts: Array<{ type: string; title?: string; content: string; placeholder: string }> = [];
+  let match;
+  while ((match = artifactRegex.exec(text)) !== null) {
+    const placeholder = `__ARTIFACT_${artifacts.length}__`;
+    artifacts.push({ type: match[1], title: match[2], content: match[3].trim(), placeholder });
+    processedText = processedText.replace(match[0], placeholder);
+  }
+
+  const segments = processedText.split(/(```[\s\S]*?```)/g);
 
   for (const seg of segments) {
     if (seg.startsWith("```")) {
@@ -372,6 +385,17 @@ function renderMarkdown(text: string): JSX.Element {
               {quoteLines.map((ql, qi) => <p key={qi}>{inlineMarkdown(ql)}</p>)}
             </blockquote>
           );
+          continue;
+        }
+
+        // Artifact placeholder
+        const artifactMatch = line.match(/__ARTIFACT_(\d+)__/);
+        if (artifactMatch) {
+          const art = artifacts[parseInt(artifactMatch[1])];
+          if (art) {
+            parts.push(<Artifact key={key++} type={art.type} title={art.title} content={art.content} />);
+          }
+          i++;
           continue;
         }
 
