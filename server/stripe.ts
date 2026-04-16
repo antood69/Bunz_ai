@@ -97,6 +97,48 @@ export function registerStripeRoutes(app: Express) {
     res.json({ publishableKey: process.env.STRIPE_PUBLISHABLE_KEY });
   });
 
+  // ── Wallet: real Stripe balance + recent transactions ──────────────
+  app.get("/api/stripe/wallet", async (_req: Request, res: Response) => {
+    try {
+      const balance = await stripe.balance.retrieve();
+      const available = balance.available.reduce((sum, b) => sum + b.amount, 0) / 100;
+      const pending = balance.pending.reduce((sum, b) => sum + b.amount, 0) / 100;
+
+      // Recent charges (last 20)
+      const charges = await stripe.charges.list({ limit: 20 });
+      const transactions = charges.data.map(c => ({
+        id: c.id,
+        amount: c.amount / 100,
+        currency: c.currency,
+        status: c.status, // succeeded, pending, failed
+        description: c.description || c.metadata?.tier || "Payment",
+        customerEmail: c.billing_details?.email || c.receipt_email || null,
+        created: c.created * 1000,
+        refunded: c.refunded,
+      }));
+
+      // Recent payouts
+      const payouts = await stripe.payouts.list({ limit: 10 });
+      const payoutList = payouts.data.map(p => ({
+        id: p.id,
+        amount: p.amount / 100,
+        currency: p.currency,
+        status: p.status, // paid, pending, in_transit, canceled, failed
+        arrival: p.arrival_date * 1000,
+        created: p.created * 1000,
+        method: p.method,
+      }));
+
+      res.json({
+        balance: { available, pending, currency: balance.available[0]?.currency || "usd" },
+        transactions,
+        payouts: payoutList,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Webhook Handler ──────────────────────────────────────────────────────
   app.post(
     "/api/stripe/webhook",
