@@ -678,9 +678,9 @@ export default function WorkflowsPage() {
         </div>
       )}
 
-      {/* Quick Start Templates — show when empty or always as collapsible */}
-      {pipelines.length === 0 && (
-        <div className="mb-4">
+      {/* Quick Start Templates — always visible */}
+      <div className="mb-4">
+        {pipelines.length === 0 && (
           <div className="glass-card rounded-2xl p-5 mb-3">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -703,8 +703,9 @@ export default function WorkflowsPage() {
               ))}
             </div>
           </div>
+        )}
 
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Templates</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Templates</h3>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             {[
               { name: "Fiverr SEO Article", desc: "Research → Write → Format SEO article", icon: "📝", difficulty: "Beginner", est: "~2 min", steps: [
@@ -741,8 +742,7 @@ export default function WorkflowsPage() {
               </button>
             ))}
           </div>
-        </div>
-      )}
+      </div>
 
       {/* Pipeline list */}
       {isLoading ? (
