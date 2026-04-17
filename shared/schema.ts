@@ -363,6 +363,7 @@ export const conversations = sqliteTable("conversations", {
   userId: integer("user_id").notNull(),
   title: text("title").notNull().default("New conversation"),
   model: text("model").default("claude-sonnet"),
+  source: text("source").default("boss"), // "boss" | "editor"
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

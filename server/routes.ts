@@ -725,7 +725,7 @@ export async function registerRoutes(
   app.get("/api/user/export", async (req, res) => {
     const userId = req.user?.id || 1;
     try {
-      const conversations = await storage.getConversations(userId);
+      const conversations = await storage.getConversationsByUser(userId);
       const pipelines = await storage.getPipelinesByUser(userId);
       const bots = await storage.getBots(userId);
       const connectors = await storage.getConnectorsByUser(userId);

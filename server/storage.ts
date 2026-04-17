@@ -3302,13 +3302,8 @@ export class DatabaseStorage implements IStorage {
 
   // ── Phase 1: Conversations ──────────────────────────────────────────────────
 
-  async createConversation(data: InsertConversation & { source?: string }): Promise<Conversation> {
-    const conv = db.insert(conversations).values(data).returning().get();
-    // Always set source (column added via ALTER, not in drizzle schema)
-    try {
-      await dbRun("UPDATE conversations SET source = ? WHERE id = ?", data.source || "boss", (data as any).id || conv.id);
-    } catch {}
-    return conv;
+  async createConversation(data: InsertConversation): Promise<Conversation> {
+    return db.insert(conversations).values(data).returning().get();
   }
 
   async getConversation(id: string): Promise<Conversation | undefined> {
