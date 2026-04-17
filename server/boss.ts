@@ -259,6 +259,18 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     message = message.replace(/^\/design\s*/i, "").trim();
   }
 
+  // Detect /swarm command — parallel agent swarm with live visualization
+  const swarmMode = message.trim().toLowerCase().startsWith("/swarm");
+  if (swarmMode) {
+    message = message.replace(/^\/swarm\s*/i, "").trim();
+  }
+
+  // Detect /build command — Company in a Box
+  const buildMode = message.trim().toLowerCase().startsWith("/build");
+  if (buildMode) {
+    message = message.replace(/^\/build\s*/i, "").trim();
+  }
+
   const tier = INTELLIGENCE_TIERS[level];
   const bossModel = tier.bossModel;
   const abortController = new AbortController();
@@ -276,6 +288,16 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   // ── Design mode — screenshot/description to code ──────────────────
   if (designMode && message.length > 0) {
     return handleDesignToCode(input, message, level, abortController);
+  }
+
+  // ── Swarm mode — parallel agent coordination ──────────────────────
+  if (swarmMode && message.length > 0) {
+    return handleSwarm(input, message, level, abortController);
+  }
+
+  // ── Build mode — Company in a Box ─────────────────────────────────
+  if (buildMode && message.length > 0) {
+    return handleBuildProject(input, message, level, abortController);
   }
 
   // ── Art request detection → skip Boss routing, go straight to Artist ────
@@ -508,6 +530,249 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     return { conversationId: conversationId || "", reply: errorMsg, isDelegating: false, tokenCount: 0, level };
   }
 }
+// ── Company in a Box (/build — one prompt to full project) ───────────────────
+
+async function handleBuildProject(
+  input: BossChatInput,
+  idea: string,
+  level: IntelligenceLevel,
+  abortController: AbortController,
+): Promise<BossChatResult> {
+  const { userId } = input;
+  const tier = INTELLIGENCE_TIERS[level];
+
+  let conversationId = input.conversationId;
+  if (!conversationId) {
+    conversationId = uuidv4();
+    await storage.createConversation({
+      id: conversationId, userId, title: `Build: ${idea.slice(0, 60)}`,
+      model: tier.bossModel, createdAt: Date.now(), updatedAt: Date.now(),
+      source: input.source || "boss",
+    });
+  }
+
+  await storage.createBossMessage({
+    id: uuidv4(), conversationId, role: "user", content: `/build ${idea}`,
+    tokenCount: 0, model: null, createdAt: Date.now(),
+  });
+
+  const { broadcastToUser } = await import("./ws");
+
+  try {
+    // Broadcast start
+    broadcastToUser(userId, "pipelines", "build_started", { conversationId, idea });
+
+    // Phase 1: Research — understand the market and requirements
+    broadcastToUser(userId, "pipelines", "build_phase", { conversationId, phase: "research", status: "running" });
+    const research = await executeDepartment(
+      conversationId,
+      { department: "research", task: `Research this business idea thoroughly: "${idea}". Analyze: target market, competitors, pricing models, key features needed, tech stack recommendations. Be specific with data.` },
+      level, estimateComplexity(idea),
+    );
+    broadcastToUser(userId, "pipelines", "build_phase", { conversationId, phase: "research", status: "complete" });
+
+    // Phase 2: In parallel — Writer creates copy + Coder builds the landing page + Artist creates visuals
+    broadcastToUser(userId, "pipelines", "build_phase", { conversationId, phase: "create", status: "running" });
+
+    const [copyResult, codeResult, artResult] = await Promise.allSettled([
+      executeDepartment(conversationId,
+        { department: "writer", task: `Based on this research:\n${research.finalOutput.slice(0, 2000)}\n\nWrite complete website copy for "${idea}": hero headline, subheadline, 3-4 feature descriptions, pricing section (free/pro/enterprise), FAQ (5 questions), footer text, and 5 email templates (welcome, onboarding series). Make it compelling and conversion-focused.` },
+        level, "complex" as any,
+      ),
+      executeDepartment(conversationId,
+        { department: "coder", task: `Build a complete, production-ready landing page for "${idea}". Requirements from research:\n${research.finalOutput.slice(0, 1500)}\n\nCreate a single HTML file with Tailwind CSS (CDN), modern dark theme, hero section, features grid, pricing table, testimonials, FAQ accordion, email signup form, and footer. Make it responsive and beautiful. Include smooth scroll, animations, and proper SEO meta tags.` },
+        level, "complex" as any,
+      ),
+      executeDepartment(conversationId,
+        { department: "artist", task: `Create a professional logo or hero image for a product called "${idea}". Make it modern, clean, and suitable for a tech/SaaS product.` },
+        level, "simple" as any,
+      ),
+    ]);
+
+    broadcastToUser(userId, "pipelines", "build_phase", { conversationId, phase: "create", status: "complete" });
+
+    // Phase 3: Synthesize everything into a deliverable package
+    broadcastToUser(userId, "pipelines", "build_phase", { conversationId, phase: "package", status: "running" });
+
+    const copy = copyResult.status === "fulfilled" ? copyResult.value.finalOutput : "Copy generation failed";
+    const code = codeResult.status === "fulfilled" ? codeResult.value.finalOutput : "Code generation failed";
+    const artOutput = artResult.status === "fulfilled" ? artResult.value : null;
+
+    const synthesis = await modelRouter.chat({
+      model: tier.bossModel,
+      messages: [{
+        role: "user",
+        content: `I just built a complete project for "${idea}". Package everything into a final deliverable.
+
+RESEARCH:
+${research.finalOutput.slice(0, 1500)}
+
+WEBSITE COPY:
+${copy.slice(0, 2000)}
+
+LANDING PAGE CODE:
+${code.slice(0, 3000)}
+
+${artOutput?.imageUrl ? `LOGO/IMAGE: ${artOutput.imageUrl}` : ""}
+
+Create a comprehensive project package with:
+1. Executive summary of the business
+2. The complete landing page as an <artifact type="html" title="Landing Page: ${idea.slice(0, 30)}"> (merge the copy into the code, make it production-ready)
+3. Marketing copy package
+4. Next steps checklist (domain, hosting, payments, launch)
+
+Use <artifact> tags for the landing page HTML.`,
+      }],
+      systemPrompt: "You are a startup builder. Package project deliverables into polished, actionable outputs. Use <artifact> tags for renderable HTML.",
+      signal: abortController.signal,
+    });
+
+    broadcastToUser(userId, "pipelines", "build_phase", { conversationId, phase: "package", status: "complete" });
+    broadcastToUser(userId, "pipelines", "build_complete", { conversationId, idea });
+
+    const totalTokens = research.totalTokens + synthesis.usage.totalTokens +
+      (copyResult.status === "fulfilled" ? copyResult.value.totalTokens : 0) +
+      (codeResult.status === "fulfilled" ? codeResult.value.totalTokens : 0);
+
+    const reply = `# Project Built: ${idea}\n\n${synthesis.content}`;
+
+    await storage.createBossMessage({
+      id: uuidv4(), conversationId, role: "assistant", content: reply,
+      tokenCount: totalTokens, model: tier.bossModel, createdAt: Date.now(),
+    });
+
+    return { conversationId, reply, isDelegating: false, tokenCount: totalTokens, level };
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      return { conversationId, reply: "Build cancelled.", isDelegating: false, tokenCount: 0, level };
+    }
+    return { conversationId, reply: `Build failed: ${err.message}`, isDelegating: false, tokenCount: 0, level };
+  }
+}
+
+// ── Agent Swarm (parallel multi-department coordination with live updates) ────
+
+async function handleSwarm(
+  input: BossChatInput,
+  goal: string,
+  level: IntelligenceLevel,
+  abortController: AbortController,
+): Promise<BossChatResult> {
+  const { userId, userEmail } = input;
+  const tier = INTELLIGENCE_TIERS[level];
+
+  let conversationId = input.conversationId;
+  if (!conversationId) {
+    conversationId = uuidv4();
+    await storage.createConversation({
+      id: conversationId, userId, title: `Swarm: ${goal.slice(0, 60)}`,
+      model: tier.bossModel, createdAt: Date.now(), updatedAt: Date.now(),
+      source: input.source || "boss",
+    });
+  }
+
+  await storage.createBossMessage({
+    id: uuidv4(), conversationId, role: "user", content: `/swarm ${goal}`,
+    tokenCount: 0, model: null, createdAt: Date.now(),
+  });
+
+  try {
+    // Step 1: Boss decomposes the goal into parallel agent tasks
+    const planResult = await modelRouter.chat({
+      model: tier.bossModel,
+      messages: [{ role: "user", content: goal }],
+      systemPrompt: `You are a project coordinator. Break this goal into 3-6 parallel tasks that different specialist departments can work on SIMULTANEOUSLY. Return ONLY a JSON array:
+[
+  {"department": "research", "task": "specific task description", "label": "short label"},
+  {"department": "writer", "task": "specific task description", "label": "short label"},
+  {"department": "coder", "task": "specific task description", "label": "short label"}
+]
+Available departments: research, writer, coder, artist
+Each task should be independent enough to run in parallel. Be specific in task descriptions.`,
+      signal: abortController.signal,
+    });
+
+    let tasks: Array<{ department: string; task: string; label: string }> = [];
+    try {
+      const match = planResult.content.match(/\[[\s\S]*\]/);
+      tasks = match ? JSON.parse(match[0]) : [];
+    } catch {
+      tasks = [{ department: "research", task: goal, label: "Research" }];
+    }
+
+    if (tasks.length === 0) tasks = [{ department: "research", task: goal, label: "Research" }];
+
+    // Broadcast swarm start to all user devices
+    const { broadcastToUser } = await import("./ws");
+    broadcastToUser(userId, "pipelines", "swarm_started", {
+      conversationId, goal, agents: tasks.map(t => ({ department: t.department, label: t.label, status: "running" })),
+    });
+
+    // Step 2: Run ALL tasks in parallel
+    const results = await Promise.allSettled(
+      tasks.map(async (task, index) => {
+        broadcastToUser(userId, "pipelines", "swarm_agent_update", {
+          conversationId, index, department: task.department, label: task.label, status: "running",
+        });
+
+        const result = await executeDepartment(
+          conversationId,
+          { department: task.department as any, task: task.task },
+          level,
+          estimateComplexity(task.task),
+        );
+
+        broadcastToUser(userId, "pipelines", "swarm_agent_update", {
+          conversationId, index, department: task.department, label: task.label,
+          status: "complete", tokens: result.totalTokens,
+          preview: result.finalOutput.slice(0, 200),
+        });
+
+        return { ...task, output: result.finalOutput, tokens: result.totalTokens };
+      })
+    );
+
+    // Collect results
+    const completedTasks = results.map((r, i) => {
+      if (r.status === "fulfilled") return r.value;
+      return { ...tasks[i], output: `Failed: ${(r as any).reason?.message || "Unknown error"}`, tokens: 0 };
+    });
+
+    // Step 3: Synthesize all outputs into a final cohesive response
+    const synthesisInput = completedTasks.map(t =>
+      `### ${t.label} (${t.department})\n${t.output}`
+    ).join("\n\n---\n\n");
+
+    const synthesis = await modelRouter.chat({
+      model: tier.bossModel,
+      messages: [{ role: "user", content: `The following work was done by ${completedTasks.length} agents working in parallel on the goal: "${goal}"\n\n${synthesisInput}\n\nSynthesize all outputs into a cohesive final deliverable. If appropriate, use <artifact> tags for rich HTML output.` }],
+      systemPrompt: "You are The Boss — synthesize department outputs into polished responses. Use <artifact> tags for renderable content like HTML, SVG, documents, and code files.",
+      signal: abortController.signal,
+    });
+
+    const totalTokens = planResult.usage.totalTokens + synthesis.usage.totalTokens +
+      completedTasks.reduce((s, t) => s + (t.tokens || 0), 0);
+
+    broadcastToUser(userId, "pipelines", "swarm_complete", {
+      conversationId, totalAgents: tasks.length, totalTokens,
+    });
+
+    const reply = `**Agent Swarm Complete** — ${tasks.length} agents worked in parallel\n\n${synthesis.content}`;
+
+    await storage.createBossMessage({
+      id: uuidv4(), conversationId, role: "assistant", content: reply,
+      tokenCount: totalTokens, model: tier.bossModel, createdAt: Date.now(),
+    });
+
+    return { conversationId, reply, isDelegating: false, tokenCount: totalTokens, level };
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      return { conversationId, reply: "Swarm cancelled.", isDelegating: false, tokenCount: 0, level };
+    }
+    return { conversationId, reply: `Swarm failed: ${err.message}`, isDelegating: false, tokenCount: 0, level };
+  }
+}
+
 // ── Design to Code (screenshot/description → React+Tailwind artifact) ────────
 
 async function handleDesignToCode(

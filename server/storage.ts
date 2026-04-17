@@ -1002,6 +1002,26 @@ export async function initDatabase() {
     await dbExec("CREATE INDEX IF NOT EXISTS idx_memory_dept ON agent_memory(user_id, department)");
   } catch (_) {}
 
+  // Clone profiles (digital twin)
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS clone_profiles (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        bio TEXT,
+        system_prompt TEXT NOT NULL,
+        traits TEXT,
+        interview_data TEXT,
+        is_active INTEGER DEFAULT 1,
+        usage_count INTEGER DEFAULT 0,
+        last_used_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+  } catch (_) {}
+
   // API Keys for SDK
   try {
     await dbExec(`

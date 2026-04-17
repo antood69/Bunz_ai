@@ -182,6 +182,53 @@ export async function getMemoryContext(
   }\n--- END MEMORY ---\n`;
 }
 
+// ── Memory Palace: Proactive Connection Finder ───────────────────────────
+
+/** Scan recent memories and find non-obvious connections to older ones */
+export async function findMemoryConnections(userId: number): Promise<Array<{ insight: string; memories: string[] }>> {
+  // Get recent memories (last 7 days)
+  const recent = await dbAll(
+    "SELECT id, content, category, created_at FROM agent_memory WHERE user_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT 10",
+    userId, Date.now() - 7 * 24 * 60 * 60 * 1000,
+  ) as any[];
+
+  if (recent.length < 2) return [];
+
+  // Get older memories (7-90 days ago)
+  const older = await dbAll(
+    "SELECT id, content, category, created_at FROM agent_memory WHERE user_id = ? AND created_at < ? AND created_at > ? ORDER BY relevance DESC LIMIT 20",
+    userId, Date.now() - 7 * 24 * 60 * 60 * 1000, Date.now() - 90 * 24 * 60 * 60 * 1000,
+  ) as any[];
+
+  if (older.length === 0) return [];
+
+  try {
+    const result = await modelRouter.chat({
+      model: "gpt-5.4-mini",
+      messages: [{
+        role: "user",
+        content: `Find non-obvious connections between these recent and older memories.
+
+RECENT (last 7 days):
+${recent.map((m: any) => `- [${m.category || "general"}] ${m.content}`).join("\n")}
+
+OLDER (7-90 days ago):
+${older.map((m: any) => `- [${m.category || "general"}] ${m.content}`).join("\n")}
+
+Find 1-3 surprising connections, patterns, or insights. Return as JSON:
+[{"insight": "This recent work on X connects to the earlier idea about Y because...", "recentId": "...", "olderId": "..."}]
+Only include genuinely useful connections. Return [] if nothing interesting.`,
+      }],
+      systemPrompt: "You find non-obvious connections between ideas across time. Be specific and actionable.",
+    });
+
+    const match = result.content.match(/\[[\s\S]*\]/);
+    return match ? JSON.parse(match[0]) : [];
+  } catch {
+    return [];
+  }
+}
+
 // ── Memory Decay (reduce relevance of old unused memories) ───────────────
 
 export async function decayMemories(): Promise<void> {

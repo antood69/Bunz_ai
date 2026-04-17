@@ -31,6 +31,7 @@ import { createArtifactsRouter } from "./artifacts";
 import { createEvalsRouter } from "./evals";
 import { createWorkspacesRouter } from "./workspaces";
 import { createApiKeyRouter, createSdkRouter } from "./sdk";
+import { createCloneRouter } from "./clone";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -64,6 +65,7 @@ export async function registerRoutes(
   app.use("/api/evals", createEvalsRouter());
   app.use("/api/workspaces", createWorkspacesRouter());
   app.use("/api/keys", createApiKeyRouter());
+  app.use("/api/clone", createCloneRouter());
 
   // ── Local File System Access (for Editor) ───────────────────────────────
   app.get("/api/local/tree", async (req, res) => {
@@ -554,6 +556,80 @@ export async function registerRoutes(
       await dbRun("DELETE FROM conversations WHERE user_id = ?", userId);
       res.json({ ok: true, deleted: convs.length });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // === TIME MACHINE: Fork & Rewind Conversations ===
+
+  // Fork a conversation at a specific message — creates a new conversation
+  // with all messages up to that point, ready to take a different path
+  app.post("/api/conversations/:id/fork", async (req, res) => {
+    const userId = req.user?.id || 1;
+    const { atMessageId } = req.body;
+    const sourceId = req.params.id as string;
+    const { v4: uuidv4 } = await import("uuid");
+
+    try {
+      const sourceConv = await storage.getConversation(sourceId);
+      if (!sourceConv) return res.status(404).json({ error: "Conversation not found" });
+
+      const allMessages = await storage.getBossMessagesByConversation(sourceId);
+
+      // Find the cutoff point
+      let messagesToCopy = allMessages;
+      if (atMessageId) {
+        const idx = allMessages.findIndex((m: any) => m.id === atMessageId);
+        if (idx >= 0) messagesToCopy = allMessages.slice(0, idx + 1);
+      }
+
+      // Create new conversation
+      const newId = uuidv4();
+      await storage.createConversation({
+        id: newId, userId,
+        title: `Fork: ${(sourceConv as any).title}`,
+        model: (sourceConv as any).model,
+        createdAt: Date.now(), updatedAt: Date.now(),
+        source: (sourceConv as any).source || "boss",
+      });
+
+      // Copy messages
+      for (const msg of messagesToCopy) {
+        await storage.createBossMessage({
+          id: uuidv4(),
+          conversationId: newId,
+          role: (msg as any).role,
+          content: (msg as any).content,
+          tokenCount: (msg as any).token_count || 0,
+          model: (msg as any).model,
+          createdAt: (msg as any).created_at,
+        });
+      }
+
+      res.json({ ok: true, forkedConversationId: newId, messagesCopied: messagesToCopy.length });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Rewind — delete all messages after a specific message ID
+  app.post("/api/conversations/:id/rewind", async (req, res) => {
+    const { toMessageId } = req.body;
+    const convId = req.params.id as string;
+
+    try {
+      const allMessages = await storage.getBossMessagesByConversation(convId);
+      const idx = allMessages.findIndex((m: any) => m.id === toMessageId);
+      if (idx < 0) return res.status(404).json({ error: "Message not found" });
+
+      // Delete all messages after the target
+      const toDelete = allMessages.slice(idx + 1);
+      for (const msg of toDelete) {
+        await dbRun("DELETE FROM boss_messages WHERE id = ?", (msg as any).id);
+      }
+
+      res.json({ ok: true, deleted: toDelete.length, remaining: idx + 1 });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // === AGENT JOBS ===
