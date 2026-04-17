@@ -83,10 +83,8 @@ app.use((req, res, next) => {
   // Always serve generated images (Artist dept saves them here)
   app.use("/generated", express.static(path.join(process.cwd(), "dist", "public", "generated")));
 
-  // In development, skip static serving — use Vite dev server for the client
-  if (process.env.NODE_ENV !== "development") {
-    serveStatic(app);
-  }
+  // Serve static files (built frontend)
+  serveStatic(app);
 
   const port = parseInt(process.env.PORT || "3000", 10);
   httpServer.listen({ port, host: "0.0.0.0" }, () => {
