@@ -141,24 +141,31 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function ConnectorIcon({ icon, provider }: { icon: string; provider: string }) {
-  const colors: Record<string, string> = {
-    openai: "bg-emerald-500/20 text-emerald-500",
-    anthropic: "bg-orange-500/20 text-orange-400",
-    github: "bg-gray-500/20 text-gray-300",
-    slack: "bg-purple-500/20 text-purple-400",
-    stripe: "bg-indigo-500/20 text-indigo-400",
-    google: "bg-blue-500/20 text-blue-500",
-    notion: "bg-gray-500/20 text-gray-300",
-    hubspot: "bg-orange-500/20 text-orange-400",
-    discord: "bg-indigo-500/20 text-indigo-400",
-    dropbox: "bg-blue-500/20 text-blue-500",
-    custom_rest: "bg-cyan-500/20 text-cyan-400",
-    custom_webhook: "bg-yellow-500/20 text-yellow-400",
-    custom_oauth2: "bg-pink-500/20 text-pink-400",
+  const configs: Record<string, { bg: string; letter: string }> = {
+    openai: { bg: "bg-emerald-500/20 text-emerald-400", letter: "AI" },
+    anthropic: { bg: "bg-orange-500/20 text-orange-400", letter: "C" },
+    github: { bg: "bg-gray-400/20 text-gray-300", letter: "GH" },
+    slack: { bg: "bg-purple-500/20 text-purple-400", letter: "S" },
+    stripe: { bg: "bg-violet-500/20 text-violet-400", letter: "$" },
+    google: { bg: "bg-blue-500/20 text-blue-400", letter: "G" },
+    notion: { bg: "bg-gray-400/20 text-gray-200", letter: "N" },
+    hubspot: { bg: "bg-orange-600/20 text-orange-400", letter: "HS" },
+    discord: { bg: "bg-indigo-500/20 text-indigo-400", letter: "D" },
+    dropbox: { bg: "bg-blue-600/20 text-blue-400", letter: "DB" },
+    linkedin: { bg: "bg-sky-600/20 text-sky-400", letter: "in" },
+    shopify: { bg: "bg-green-500/20 text-green-400", letter: "Sh" },
+    gumroad: { bg: "bg-pink-500/20 text-pink-400", letter: "Gm" },
+    supabase: { bg: "bg-emerald-600/20 text-emerald-400", letter: "Sb" },
+    vercel: { bg: "bg-gray-400/20 text-gray-200", letter: "V" },
+    figma: { bg: "bg-purple-600/20 text-purple-400", letter: "Fi" },
+    custom_rest: { bg: "bg-cyan-500/20 text-cyan-400", letter: "API" },
+    custom_webhook: { bg: "bg-yellow-500/20 text-yellow-400", letter: "WH" },
+    custom_oauth2: { bg: "bg-pink-500/20 text-pink-400", letter: "O2" },
   };
+  const cfg = configs[provider] || { bg: "bg-primary/20 text-primary", letter: icon };
   return (
-    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${colors[provider] || "bg-primary/20 text-primary"}`}>
-      {icon}
+    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold ${cfg.bg}`}>
+      {cfg.letter}
     </div>
   );
 }
