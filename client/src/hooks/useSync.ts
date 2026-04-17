@@ -9,7 +9,7 @@
  *   useSyncChannel("workflows", (event, data) => { ... });
  */
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { queryClient } from "@/lib/queryClient";
 
 type SyncChannel =

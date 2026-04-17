@@ -221,7 +221,7 @@ export default function ArtifactGallery() {
               <h3 className="text-sm font-semibold text-foreground truncate">{selectedArtifact.title}</h3>
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => favMutation.mutate(selectedArtifact.id)}
+                  onClick={() => selectedArtifact && favMutation.mutate(selectedArtifact.id)}
                   className="p-1.5 rounded-lg hover:bg-secondary transition-colors"
                 >
                   <Heart className={`w-4 h-4 ${selectedArtifact.is_favorite ? "text-red-400 fill-red-400" : "text-muted-foreground"}`} />
@@ -239,7 +239,7 @@ export default function ArtifactGallery() {
                   <Download className="w-4 h-4 text-muted-foreground" />
                 </button>
                 <button
-                  onClick={() => deleteMutation.mutate(selectedArtifact.id)}
+                  onClick={() => selectedArtifact && deleteMutation.mutate(selectedArtifact.id)}
                   className="p-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
                 >
                   <Trash2 className="w-4 h-4 text-red-400" />

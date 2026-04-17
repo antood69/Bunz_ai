@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useSyncChannel } from "@/hooks/useSync";
 import {
   Activity, Clock, Cpu, DollarSign, AlertTriangle,
-  ChevronDown, ChevronRight, Filter, BarChart3,
-  Zap, Search, ArrowUpDown, Eye
+  ChevronDown, ChevronRight, BarChart3,
+  Zap, Search, Eye
 } from "lucide-react";
 
 interface Trace {
@@ -81,7 +81,10 @@ function formatTokens(n: number): string {
 function TraceRow({ trace, isChild = false }: { trace: Trace; isChild?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
-  const meta = trace.metadata ? JSON.parse(trace.metadata) : null;
+  let meta: any = null;
+  if (trace.metadata) {
+    try { meta = JSON.parse(trace.metadata); } catch {}
+  }
   const hasChildren = trace.children && trace.children.length > 0;
   const time = new Date(trace.created_at);
 

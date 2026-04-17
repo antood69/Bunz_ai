@@ -1,20 +1,8 @@
 import { Link, useLocation } from "wouter";
 import {
-  LayoutDashboard,
-  GitBranch,
-  Bot,
-  Zap,
-  Settings,
-  LogOut,
-  ShieldAlert,
-  MessageSquare,
-  PanelLeftClose,
-  PanelLeftOpen,
-  ListChecks,
-  Code,
-  Store,
-  Wallet,
-  Puzzle,
+  LayoutDashboard, GitBranch, Bot, Zap, Settings, LogOut, ShieldAlert,
+  MessageSquare, PanelLeftClose, PanelLeftOpen, ListChecks, Code, Store,
+  Wallet, Puzzle, Wifi, WifiOff, Monitor, Activity, Layers,
 } from "lucide-react";
 import TokenCounter from "./TokenCounter";
 import NotificationBell from "./NotificationBell";
@@ -27,7 +15,6 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSyncStatus } from "@/hooks/useSync";
 import { useEffect, useState } from "react";
-import { Wifi, WifiOff, Monitor, Activity, Layers } from "lucide-react";
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/boss", label: "Chat", icon: MessageSquare },
@@ -66,6 +53,7 @@ export default function AppLayout({ children, allowPublic = false }: { children:
   const { wallpaperUrl, wallpaperType } = useTheme();
   const hasWallpaper = !!(wallpaperUrl && wallpaperType !== "none");
   const isMobile = useIsMobile();
+  const sync = useSyncStatus();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem("bunz-sidebar-collapsed") === "true"; } catch { return false; }
   });
@@ -104,7 +92,6 @@ export default function AppLayout({ children, allowPublic = false }: { children:
   }
 
   const displayLabel = user?.displayName ?? user?.email ?? "User";
-  const sync = useSyncStatus();
 
   return (
     <div className="flex h-screen overflow-hidden bg-background relative">
