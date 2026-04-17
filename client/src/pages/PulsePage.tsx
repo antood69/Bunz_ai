@@ -47,7 +47,9 @@ function getMotivation(): string {
     "Your agents handled things while you were away.",
     "The best time to automate was yesterday. The second best is now.",
   ];
-  return quotes[Math.floor(Math.random() * quotes.length)];
+  // Change every 30 minutes instead of every render
+  const halfHourSlot = Math.floor(Date.now() / (30 * 60 * 1000));
+  return quotes[halfHourSlot % quotes.length];
 }
 
 const ICON_MAP: Record<string, any> = {
@@ -129,9 +131,9 @@ export default function PulsePage() {
     if (!quickInput.trim()) return;
     const msg = quickInput.trim();
     setQuickInput("");
-    navigate(`/boss`);
-    // Store the message so BossPage picks it up
+    // Store message FIRST, then navigate
     try { sessionStorage.setItem("bunz-quick-message", msg); } catch {}
+    navigate("/boss");
   };
 
   return (

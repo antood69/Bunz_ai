@@ -757,6 +757,18 @@ export default function BossPage() {
     });
   }, []);
 
+  // Pick up quick message from Pulse page
+  useEffect(() => {
+    try {
+      const quickMsg = sessionStorage.getItem("bunz-quick-message");
+      if (quickMsg) {
+        sessionStorage.removeItem("bunz-quick-message");
+        // Small delay to ensure component is fully mounted
+        setTimeout(() => sendMessage(quickMsg), 300);
+      }
+    } catch {}
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Agent stream hook
   const streamState = useAgentStream(activeJobId);
 
