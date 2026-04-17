@@ -83,10 +83,10 @@ export default function NotificationBell() {
       {open && (
         <>
           {/* Backdrop */}
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-[199]" onClick={() => setOpen(false)} />
 
           {/* Dropdown */}
-          <div className="absolute right-0 top-full mt-2 w-[360px] max-h-[480px] bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col">
+          <div className="fixed right-4 top-14 w-[360px] max-h-[480px] bg-card border border-border rounded-xl shadow-2xl z-[200] overflow-hidden flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
