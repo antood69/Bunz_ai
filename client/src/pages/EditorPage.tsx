@@ -70,12 +70,12 @@ function buildTree(paths: string[]): TreeNode[] {
   return toN(root);
 }
 
-// ── Conversation History Panel ──────────────────────────────────────
-function ConversationHistory({ onSelect }: { onSelect: (msgs: Array<{ role: "user" | "assistant"; content: string }>) => void }) {
+// ── Editor History Panel (only shows editor conversations) ──────────
+function EditorHistory({ onSelect }: { onSelect: (msgs: Array<{ role: "user" | "assistant"; content: string }>) => void }) {
   const { data: conversations = [], isLoading } = useQuery<any[]>({
-    queryKey: ["/api/conversations"],
+    queryKey: ["/api/conversations", "editor"],
     queryFn: async () => {
-      const res = await fetch("/api/conversations", { credentials: "include" });
+      const res = await fetch("/api/conversations?source=editor", { credentials: "include" });
       return res.ok ? res.json() : [];
     },
   });
@@ -242,6 +242,7 @@ export default function EditorPage() {
           message: userMsg + fileCtx + repoCtx,
           level: "medium",
           history: msgs.slice(-10),
+          source: "editor",
         }),
       });
       const data = await res.json();
@@ -440,11 +441,15 @@ export default function EditorPage() {
                 <span className="text-xs font-medium">Boss AI</span>
               </div>
               <div className="flex items-center gap-1.5">
+                <button onClick={() => setShowHistory(!showHistory)} className={`p-1 rounded ${showHistory ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"}`} title="Past editor sessions">
+                  <History className="w-3.5 h-3.5" />
+                </button>
                 {aiMsgs.length > 0 && <button onClick={() => setAiMsgs([])} className="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>}
                 <button onClick={() => setAiOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
               </div>
             </div>
-            <div ref={aiRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
+            {showHistory && <EditorHistory onSelect={(msgs) => { setAiMsgs(msgs); setShowHistory(false); }} />}
+            <div ref={aiRef} className={`flex-1 overflow-y-auto px-3 py-2 space-y-2 ${showHistory ? "hidden" : ""}`}>
               {aiMsgs.length === 0 && (
                 <div className="text-center py-6">
                   <Bot className="w-8 h-8 mx-auto mb-2 opacity-20 text-muted-foreground" />

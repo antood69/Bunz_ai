@@ -434,6 +434,7 @@ export async function registerRoutes(
         userEmail: req.user?.email,
         history: Array.isArray(history) ? history : [],
         imageContents,
+        source: req.body.source || "boss",
       });
 
       res.json(result);
@@ -488,7 +489,11 @@ export async function registerRoutes(
   // === CONVERSATIONS ===
   app.get("/api/conversations", async (req, res) => {
     const userId = req.user?.id || 1;
-    const convs = await storage.getConversationsByUser(userId);
+    const source = req.query.source as string | undefined;
+    let convs = await storage.getConversationsByUser(userId);
+    if (source) {
+      convs = convs.filter((c: any) => (c.source || "boss") === source);
+    }
     res.json(convs);
   });
 

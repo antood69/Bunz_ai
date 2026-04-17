@@ -878,6 +878,7 @@ export async function initDatabase() {
   await safeAlter("ALTER TABLE marketplace_listings ADD COLUMN attached_item_data TEXT");
 
   // Fiverr orders pipeline columns
+  await safeAlter("ALTER TABLE conversations ADD COLUMN source TEXT DEFAULT 'boss'");
   await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN client_name TEXT");
   await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN client_email TEXT");
   await safeAlter("ALTER TABLE fiverr_orders ADD COLUMN gig_type TEXT");
@@ -3301,8 +3302,12 @@ export class DatabaseStorage implements IStorage {
 
   // ── Phase 1: Conversations ──────────────────────────────────────────────────
 
-  async createConversation(data: InsertConversation): Promise<Conversation> {
-    return db.insert(conversations).values(data).returning().get();
+  async createConversation(data: InsertConversation & { source?: string }): Promise<Conversation> {
+    const conv = db.insert(conversations).values(data).returning().get();
+    if (data.source && data.source !== "boss") {
+      await dbRun("UPDATE conversations SET source = ? WHERE id = ?", data.source, data.id);
+    }
+    return conv;
   }
 
   async getConversation(id: string): Promise<Conversation | undefined> {

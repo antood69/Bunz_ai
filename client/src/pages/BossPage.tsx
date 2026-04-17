@@ -650,7 +650,7 @@ function genId() {
 /** Fetch conversations + messages from the server and merge with localStorage cache */
 async function loadConversationsFromServer(): Promise<Conversation[]> {
   try {
-    const res = await fetch("/api/conversations");
+    const res = await fetch("/api/conversations?source=boss");
     if (!res.ok) return [];
     const serverConvs: Array<{
       id: string;

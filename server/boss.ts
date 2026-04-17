@@ -217,6 +217,7 @@ export interface BossChatInput {
   userEmail?: string;
   history?: Array<{ role: "user" | "assistant"; content: string }>;
   imageContents?: Array<{ type: "image_url"; image_url: { url: string } }>;
+  source?: string; // "boss" | "editor" — where the chat originated
 }
 
 export interface BossChatResult {
@@ -265,6 +266,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     await storage.createConversation({
       id: conversationId, userId, title: message.slice(0, 80),
       model: bossModel, createdAt: Date.now(), updatedAt: Date.now(),
+      source: input.source || "boss",
     });
   }
   activeAbortControllers.set(conversationId, abortController);
