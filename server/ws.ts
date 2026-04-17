@@ -17,7 +17,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
 import type { IncomingMessage } from "http";
 import { parse as parseCookie } from "cookie";
-import { log } from "./index";
+import { log } from "./lib/logger";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
