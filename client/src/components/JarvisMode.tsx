@@ -1,7 +1,7 @@
 /**
  * Bun Bun — AI screen viewer with floating overlay chat.
  *
- * Activated via Alt+J or the trigger button.
+ * Activated via Alt+J, or clicking the floating trigger button.
  * Uses Screen Capture API to let user pick which monitor/window to share.
  * Captures frames on demand and sends to Boss AI as vision attachments.
  */
@@ -25,7 +25,7 @@ export default function JarvisMode() {
   const [messages, setMessages] = useState<BunBunMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
-  const [screenName, setScreenName] = useState<string>("");
+  const [screenName, setScreenName] = useState("");
   const [capturing, setCapturing] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -35,19 +35,20 @@ export default function JarvisMode() {
 
   // Global keyboard shortcut: Alt+J to toggle
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.altKey && e.key.toLowerCase() === "j") {
+    function handler(e: KeyboardEvent) {
+      if (e.altKey && (e.key === "j" || e.key === "J")) {
         e.preventDefault();
-        setActive(prev => !prev);
+        e.stopPropagation();
+        setActive(function (prev) { return !prev; });
       }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    }
+    document.addEventListener("keydown", handler, true);
+    return function () { document.removeEventListener("keydown", handler, true); };
   }, []);
 
   useEffect(() => {
     if (active && !minimized) {
-      setTimeout(() => inputRef.current?.focus(), 100);
+      setTimeout(() => { if (inputRef.current) inputRef.current.focus(); }, 200);
     }
   }, [active, minimized]);
 
@@ -55,11 +56,10 @@ export default function JarvisMode() {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [messages]);
 
-  // Start screen sharing — browser shows monitor/window picker
   const startScreenCapture = async () => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 1 },
+        video: { frameRate: 1 } as any,
         audio: false,
       });
       setScreenStream(stream);
@@ -67,7 +67,7 @@ export default function JarvisMode() {
       setScreenName(track.label || "Screen");
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        videoRef.current.play().catch(() => {});
       }
       track.onended = () => { setScreenStream(null); setScreenName(""); };
     } catch (err: any) {
@@ -108,13 +108,12 @@ export default function JarvisMode() {
       setCapturing(false);
     }
 
-    const userMsg: BunBunMessage = { role: "user", content: userText, screenshot: screenshot || undefined };
-    setMessages(prev => [...prev, userMsg]);
+    setMessages(prev => [...prev, { role: "user", content: userText, screenshot: screenshot || undefined }]);
 
     try {
-      const body: any = {
+      const body: Record<string, any> = {
         message: screenshot
-          ? `[User is sharing their screen. Screenshot attached.]\n\n${userText}`
+          ? "[User is sharing their screen. Screenshot attached.]\n\n" + userText
           : userText,
         level: "medium",
         source: "boss",
@@ -130,14 +129,16 @@ export default function JarvisMode() {
       const data = await res.json();
       setMessages(prev => [...prev, { role: "assistant", content: data.reply || data.error || "No response" }]);
     } catch (err: any) {
-      setMessages(prev => [...prev, { role: "assistant", content: `Error: ${err.message}` }]);
+      setMessages(prev => [...prev, { role: "assistant", content: "Error: " + (err.message || "Unknown error") }]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    return () => { screenStream?.getTracks().forEach(t => t.stop()); };
+    return () => {
+      if (screenStream) screenStream.getTracks().forEach(t => t.stop());
+    };
   }, [screenStream]);
 
   const deactivate = () => {
@@ -147,139 +148,166 @@ export default function JarvisMode() {
     setInput("");
   };
 
-  if (!active) return null;
-
-  if (minimized) {
-    return (
-      <div className="fixed top-3 right-3 z-[9999]">
-        <button
-          onClick={() => setMinimized(false)}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-blue-600/90 to-violet-600/90 backdrop-blur-xl text-white text-xs font-medium shadow-2xl hover:shadow-blue-500/20 transition-all border border-white/10"
-        >
-          <Eye className="w-3.5 h-3.5" />
-          Bun Bun
-          {screenStream && <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />}
-          {loading && <Loader2 className="w-3 h-3 animate-spin" />}
-        </button>
-      </div>
-    );
-  }
-
+  // Always render the hidden video/canvas + trigger button
+  // Only conditionally render the overlay panel
   return (
     <>
-      <video ref={videoRef} className="hidden" muted playsInline />
-      <canvas ref={canvasRef} className="hidden" />
+      {/* Hidden elements for screen capture — always mounted */}
+      <video ref={videoRef} style={{ display: "none" }} muted playsInline />
+      <canvas ref={canvasRef} style={{ display: "none" }} />
 
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[9999] w-[560px] max-w-[95vw]">
-        <div className="rounded-2xl bg-gradient-to-b from-[#1a1a2e]/95 to-[#16162a]/95 backdrop-blur-2xl border border-white/[0.08] shadow-2xl shadow-black/40">
+      {/* Floating trigger button — always visible in bottom-right */}
+      {!active && (
+        <button
+          onClick={() => setActive(true)}
+          className="fixed bottom-20 right-4 z-[9998] w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-110 transition-all border border-white/20"
+          title="Bun Bun — AI Screen Viewer (Alt+J)"
+        >
+          <Eye className="w-4 h-4" />
+        </button>
+      )}
 
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
-                <Eye className="w-3.5 h-3.5 text-white" />
+      {/* Minimized badge */}
+      {active && minimized && (
+        <div className="fixed top-3 right-3 z-[9999]">
+          <button
+            onClick={() => setMinimized(false)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-blue-600/90 to-violet-600/90 backdrop-blur-xl text-white text-xs font-medium shadow-2xl hover:shadow-blue-500/20 transition-all border border-white/10"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Bun Bun
+            {screenStream && <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />}
+            {loading && <Loader2 className="w-3 h-3 animate-spin" />}
+          </button>
+        </div>
+      )}
+
+      {/* Full overlay panel */}
+      {active && !minimized && (
+        <div className="fixed top-3 left-1/2 z-[9999] w-[560px] max-w-[95vw]" style={{ transform: "translateX(-50%)" }}>
+          <div className="rounded-2xl border border-white/[0.08] shadow-2xl" style={{ background: "rgba(22,22,42,0.95)", backdropFilter: "blur(24px)" }}>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}>
+                  <Eye className="w-3.5 h-3.5 text-white" />
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-white">Bun Bun</span>
+                  <span className="text-[10px] ml-2" style={{ color: "rgba(255,255,255,0.4)" }}>Alt+J</span>
+                </div>
               </div>
-              <div>
-                <span className="text-xs font-semibold text-white">Bun Bun</span>
-                <span className="text-[10px] text-white/40 ml-2">Alt+J</span>
+              <div className="flex items-center gap-1">
+                {screenStream ? (
+                  <button
+                    onClick={stopScreenCapture}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium"
+                    style={{ background: "rgba(16,185,129,0.15)", color: "#34d399" }}
+                  >
+                    <MonitorPlay className="w-3 h-3" />
+                    {screenName.length > 20 ? screenName.slice(0, 20) + "..." : screenName}
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#34d399" }} />
+                  </button>
+                ) : (
+                  <button
+                    onClick={startScreenCapture}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-colors"
+                    style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)" }}
+                  >
+                    <Monitor className="w-3 h-3" />
+                    Share Screen
+                  </button>
+                )}
+                <button onClick={() => setMinimized(true)} className="p-1.5 rounded-lg transition-colors" style={{ color: "rgba(255,255,255,0.4)" }}>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={deactivate} className="p-1.5 rounded-lg transition-colors" style={{ color: "rgba(255,255,255,0.4)" }}>
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              {screenStream ? (
+
+            {/* Messages */}
+            <div ref={chatRef} className="overflow-y-auto px-4 py-3 space-y-3" style={{ maxHeight: "300px" }}>
+              {messages.length === 0 && (
+                <div className="text-center py-4">
+                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
+                    {screenStream
+                      ? "Screen connected. Ask me what you see."
+                      : "Click \"Share Screen\" to let me see your monitor, then ask a question."}
+                  </p>
+                </div>
+              )}
+              {messages.map((msg, i) => (
+                <div key={i} className="flex" style={{ justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+                  <div
+                    className="rounded-xl px-3 py-2 text-xs leading-relaxed"
+                    style={{
+                      maxWidth: "85%",
+                      background: msg.role === "user" ? "rgba(59,130,246,0.2)" : "rgba(255,255,255,0.05)",
+                      color: msg.role === "user" ? "#bfdbfe" : "rgba(255,255,255,0.8)",
+                      border: msg.role === "user" ? "1px solid rgba(59,130,246,0.2)" : "1px solid rgba(255,255,255,0.06)",
+                    }}
+                  >
+                    {msg.screenshot && (
+                      <img src={msg.screenshot} alt="Screenshot" className="w-full rounded-lg object-contain mb-2" style={{ maxHeight: "128px", border: "1px solid rgba(255,255,255,0.08)" }} />
+                    )}
+                    <p style={{ whiteSpace: "pre-wrap" }}>{msg.content}</p>
+                  </div>
+                </div>
+              ))}
+              {loading && (
+                <div className="flex" style={{ justifyContent: "flex-start" }}>
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                    <Loader2 className="w-3 h-3 animate-spin" style={{ color: "#60a5fa" }} />
+                    <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.5)" }}>{capturing ? "Capturing screen..." : "Thinking..."}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input */}
+            <div className="flex items-center gap-2 px-3 py-2.5" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              {screenStream && (
                 <button
-                  onClick={stopScreenCapture}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-[10px] font-medium hover:bg-emerald-500/25 transition-colors"
+                  onClick={() => {
+                    const frame = captureFrame();
+                    if (frame) setMessages(prev => [...prev, { role: "user", content: "[Screenshot captured]", screenshot: frame }]);
+                  }}
+                  className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+                  style={{ color: "rgba(255,255,255,0.4)" }}
+                  title="Take screenshot"
                 >
-                  <MonitorPlay className="w-3 h-3" />
-                  {screenName.slice(0, 20)}
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                </button>
-              ) : (
-                <button
-                  onClick={startScreenCapture}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-white/60 text-[10px] font-medium hover:bg-white/[0.1] hover:text-white/80 transition-colors"
-                >
-                  <Monitor className="w-3 h-3" />
-                  Share Screen
+                  <Camera className="w-4 h-4" />
                 </button>
               )}
-              <button onClick={() => setMinimized(true)} className="p-1.5 rounded-lg text-white/40 hover:text-white/70 hover:bg-white/[0.06] transition-colors">
-                <Minimize2 className="w-3.5 h-3.5" />
-              </button>
-              <button onClick={deactivate} className="p-1.5 rounded-lg text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-colors">
-                <X className="w-3.5 h-3.5" />
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                placeholder={screenStream ? "What do you see on my screen?" : "Ask Bun Bun anything..."}
+                className="flex-1 rounded-lg px-3 py-2 text-xs outline-none"
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "white",
+                }}
+                disabled={loading}
+              />
+              <button
+                onClick={sendMessage}
+                disabled={!input.trim() || loading}
+                className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-white transition-colors"
+                style={{ background: input.trim() && !loading ? "rgba(59,130,246,0.8)" : "rgba(59,130,246,0.3)", opacity: !input.trim() || loading ? 0.3 : 1 }}
+              >
+                <Send className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
-
-          {/* Messages */}
-          <div ref={chatRef} className="max-h-[300px] overflow-y-auto px-4 py-3 space-y-3">
-            {messages.length === 0 && (
-              <div className="text-center py-4">
-                <p className="text-xs text-white/30">
-                  {screenStream
-                    ? "Screen connected. Ask me what you see."
-                    : "Click \"Share Screen\" to let me see your monitor, then ask a question."}
-                </p>
-              </div>
-            )}
-            {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed ${
-                  msg.role === "user"
-                    ? "bg-blue-500/20 text-blue-100 border border-blue-500/20"
-                    : "bg-white/[0.05] text-white/80 border border-white/[0.06]"
-                }`}>
-                  {msg.screenshot && (
-                    <img src={msg.screenshot} alt="Screenshot" className="w-full max-h-32 rounded-lg object-contain mb-2 border border-white/[0.08]" />
-                  )}
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                </div>
-              </div>
-            ))}
-            {loading && (
-              <div className="flex justify-start">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.05] border border-white/[0.06]">
-                  <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
-                  <span className="text-[10px] text-white/50">{capturing ? "Capturing screen..." : "Thinking..."}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Input */}
-          <div className="flex items-center gap-2 px-3 py-2.5 border-t border-white/[0.06]">
-            {screenStream && (
-              <button
-                onClick={() => {
-                  const frame = captureFrame();
-                  if (frame) setMessages(prev => [...prev, { role: "user", content: "[Screenshot captured]", screenshot: frame }]);
-                }}
-                className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white/70 hover:bg-white/[0.06] transition-colors"
-                title="Take screenshot"
-              >
-                <Camera className="w-4 h-4" />
-              </button>
-            )}
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              placeholder={screenStream ? "What do you see on my screen?" : "Ask Bun Bun anything..."}
-              className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/25 outline-none focus:border-blue-500/40 transition-colors"
-              disabled={loading}
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!input.trim() || loading}
-              className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-500/80 flex items-center justify-center text-white disabled:opacity-30 hover:bg-blue-500 transition-colors"
-            >
-              <Send className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
