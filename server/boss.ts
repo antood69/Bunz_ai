@@ -275,29 +275,86 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   const bossModel = tier.bossModel;
   const abortController = new AbortController();
 
-  // ── Deep Research short-circuit ──────────────────────────────────────
-  if (deepResearchMode && message.length > 0) {
-    return handleDeepResearch(input, message, level, abortController);
-  }
+  // ── Long-running command handler (returns immediately, streams via SSE) ──
+  const longRunningCommands: Array<{ mode: boolean; label: string; handler: Function }> = [
+    { mode: deepResearchMode, label: "Deep Research", handler: handleDeepResearch },
+    { mode: chartMode, label: "Chart Generation", handler: handleChartRequest },
+    { mode: designMode, label: "Design to Code", handler: handleDesignToCode },
+    { mode: swarmMode, label: "Agent Swarm", handler: handleSwarm },
+    { mode: buildMode, label: "Build Project", handler: handleBuildProject },
+  ];
 
-  // ── Chart mode — generate data viz as artifact ─────────────────────
-  if (chartMode && message.length > 0) {
-    return handleChartRequest(input, message, level, abortController);
-  }
+  for (const cmd of longRunningCommands) {
+    if (cmd.mode && message.length > 0) {
+      // Create conversation if needed
+      let convId = input.conversationId;
+      if (!convId) {
+        convId = uuidv4();
+        await storage.createConversation({
+          id: convId, userId, title: `${cmd.label}: ${message.slice(0, 50)}`,
+          model: bossModel, createdAt: Date.now(), updatedAt: Date.now(),
+          source: input.source || "boss",
+        });
+      }
 
-  // ── Design mode — screenshot/description to code ──────────────────
-  if (designMode && message.length > 0) {
-    return handleDesignToCode(input, message, level, abortController);
-  }
+      // Create a job and return immediately
+      const jobId = uuidv4();
+      await storage.createAgentJob({
+        id: jobId, conversationId: convId, userId,
+        type: "boss" as any, status: "running",
+        input: JSON.stringify({ command: cmd.label, message }),
+        createdAt: Date.now(),
+      });
 
-  // ── Swarm mode — parallel agent coordination ──────────────────────
-  if (swarmMode && message.length > 0) {
-    return handleSwarm(input, message, level, abortController);
-  }
+      // Store user message
+      await storage.createBossMessage({
+        id: uuidv4(), conversationId: convId, role: "user",
+        content: message, tokenCount: 0, model: null, createdAt: Date.now(),
+      });
 
-  // ── Build mode — Company in a Box ─────────────────────────────────
-  if (buildMode && message.length > 0) {
-    return handleBuildProject(input, message, level, abortController);
+      // Run in background — stream progress via eventBus
+      (async () => {
+        try {
+          eventBus.emit(jobId, "progress", {
+            workerType: cmd.label.toLowerCase().replace(/\s+/g, "_"),
+            status: "running", message: `${cmd.label} starting...`,
+          });
+
+          const result = await cmd.handler(
+            { ...input, conversationId: convId },
+            message, level, abortController,
+          );
+
+          // Emit the final result
+          eventBus.emit(jobId, "complete", {
+            synthesis: result.reply,
+            totalTokens: result.tokenCount,
+          });
+
+          // Update job
+          await storage.updateAgentJob(jobId, {
+            status: "complete",
+            output: result.reply?.slice(0, 5000),
+            tokenCount: result.tokenCount,
+            completedAt: Date.now(),
+          });
+        } catch (err: any) {
+          eventBus.emit(jobId, "error", { error: err.message });
+          await storage.updateAgentJob(jobId, {
+            status: "failed", output: err.message, completedAt: Date.now(),
+          });
+        }
+      })();
+
+      return {
+        conversationId: convId,
+        reply: `Starting ${cmd.label}...`,
+        isDelegating: true,
+        jobId,
+        tokenCount: 0,
+        level,
+      };
+    }
   }
 
   // ── Art request detection → skip Boss routing, go straight to Artist ────
@@ -540,21 +597,7 @@ async function handleBuildProject(
 ): Promise<BossChatResult> {
   const { userId } = input;
   const tier = INTELLIGENCE_TIERS[level];
-
-  let conversationId = input.conversationId;
-  if (!conversationId) {
-    conversationId = uuidv4();
-    await storage.createConversation({
-      id: conversationId, userId, title: `Build: ${idea.slice(0, 60)}`,
-      model: tier.bossModel, createdAt: Date.now(), updatedAt: Date.now(),
-      source: input.source || "boss",
-    });
-  }
-
-  await storage.createBossMessage({
-    id: uuidv4(), conversationId, role: "user", content: `/build ${idea}`,
-    tokenCount: 0, model: null, createdAt: Date.now(),
-  });
+  const conversationId = input.conversationId || uuidv4();
 
   const { broadcastToUser } = await import("./ws");
 
@@ -660,16 +703,7 @@ async function handleSwarm(
 ): Promise<BossChatResult> {
   const { userId, userEmail } = input;
   const tier = INTELLIGENCE_TIERS[level];
-
-  let conversationId = input.conversationId;
-  if (!conversationId) {
-    conversationId = uuidv4();
-    await storage.createConversation({
-      id: conversationId, userId, title: `Swarm: ${goal.slice(0, 60)}`,
-      model: tier.bossModel, createdAt: Date.now(), updatedAt: Date.now(),
-      source: input.source || "boss",
-    });
-  }
+  const conversationId = input.conversationId || uuidv4();
 
   await storage.createBossMessage({
     id: uuidv4(), conversationId, role: "user", content: `/swarm ${goal}`,
@@ -783,21 +817,7 @@ async function handleDesignToCode(
 ): Promise<BossChatResult> {
   const { userId } = input;
   const tier = INTELLIGENCE_TIERS[level];
-
-  let conversationId = input.conversationId;
-  if (!conversationId) {
-    conversationId = uuidv4();
-    await storage.createConversation({
-      id: conversationId, userId, title: `Design: ${request.slice(0, 60)}`,
-      model: tier.bossModel, createdAt: Date.now(), updatedAt: Date.now(),
-      source: input.source || "boss",
-    });
-  }
-
-  await storage.createBossMessage({
-    id: uuidv4(), conversationId, role: "user", content: `/design ${request}`,
-    tokenCount: 0, model: null, createdAt: Date.now(),
-  });
+  const conversationId = input.conversationId || uuidv4();
 
   try {
     // Use vision if screenshot attached, otherwise use description
@@ -857,21 +877,7 @@ async function handleChartRequest(
 ): Promise<BossChatResult> {
   const { userId } = input;
   const tier = INTELLIGENCE_TIERS[level];
-
-  let conversationId = input.conversationId;
-  if (!conversationId) {
-    conversationId = uuidv4();
-    await storage.createConversation({
-      id: conversationId, userId, title: `Chart: ${request.slice(0, 60)}`,
-      model: tier.bossModel, createdAt: Date.now(), updatedAt: Date.now(),
-      source: input.source || "boss",
-    });
-  }
-
-  await storage.createBossMessage({
-    id: uuidv4(), conversationId, role: "user", content: `/chart ${request}`,
-    tokenCount: 0, model: null, createdAt: Date.now(),
-  });
+  const conversationId = input.conversationId || uuidv4();
 
   try {
     const result = await modelRouter.chat({
@@ -922,21 +928,7 @@ async function handleDeepResearch(
 ): Promise<BossChatResult> {
   const { userId, userEmail } = input;
   const tier = INTELLIGENCE_TIERS[level];
-
-  let conversationId = input.conversationId;
-  if (!conversationId) {
-    conversationId = uuidv4();
-    await storage.createConversation({
-      id: conversationId, userId, title: `Research: ${topic.slice(0, 60)}`,
-      model: tier.bossModel, createdAt: Date.now(), updatedAt: Date.now(),
-      source: input.source || "boss",
-    });
-  }
-
-  await storage.createBossMessage({
-    id: uuidv4(), conversationId, role: "user", content: `/research ${topic}`,
-    tokenCount: 0, model: null, createdAt: Date.now(),
-  });
+  const conversationId = input.conversationId || uuidv4();
 
   try {
     // Step 1: Decompose the research question into sub-queries
