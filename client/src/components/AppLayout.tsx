@@ -20,6 +20,7 @@ import TokenCounter from "./TokenCounter";
 import NotificationBell from "./NotificationBell";
 import WallpaperLayer from "./WallpaperLayer";
 import MobileTabBar from "./MobileTabBar";
+import GlobalSearch from "./GlobalSearch";
 import OnboardingTour from "./OnboardingTour";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -304,6 +305,7 @@ export default function AppLayout({ children, allowPublic = false }: { children:
 
       {isMobile && <MobileTabBar />}
       {isAuthenticated && <OnboardingTour />}
+      {isAuthenticated && <GlobalSearch />}
     </div>
   );
 }

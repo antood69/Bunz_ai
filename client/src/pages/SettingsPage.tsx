@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   User, Palette, Plug, Coins, CreditCard, Brain, Sun, Moon, Lock,
-  Trash2, Save, Loader2, Check, X, Image, Layers, Layout,
+  Trash2, Save, Loader2, Check, X, Image, Layers, Layout, Download,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -350,6 +350,31 @@ function GeneralTab() {
           }}>
             <Trash2 className="w-3 h-3 mr-1.5" />
             Clear All
+          </Button>
+        </div>
+      </section>
+
+      {/* Export Data */}
+      <section className="bg-card border border-border rounded-2xl p-6">
+        <SectionHeader icon={Download} title="Export Data" description="Download all your data as JSON" />
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-foreground">Download Everything</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Conversations, workflows, bots, settings — all in one JSON file.</p>
+          </div>
+          <Button variant="outline" size="sm" className="text-xs" onClick={async () => {
+            try {
+              const res = await fetch("/api/user/export", { credentials: "include" });
+              const data = await res.json();
+              const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url; a.download = `bunz-export-${new Date().toISOString().slice(0, 10)}.json`;
+              a.click(); URL.revokeObjectURL(url);
+              toast({ title: "Data exported!" });
+            } catch (e: any) { toast({ title: "Export failed", description: e.message, variant: "destructive" }); }
+          }}>
+            <Download className="w-3 h-3 mr-1.5" /> Export
           </Button>
         </div>
       </section>

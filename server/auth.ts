@@ -348,6 +348,30 @@ export function createAuthRouter(): Router {
     res.json({ ok: true });
   });
 
+  // Change password
+  router.post("/change-password", async (req: Request, res: Response) => {
+    const sessionId = req.cookies?.[COOKIE_NAME];
+    if (!sessionId) return res.status(401).json({ error: "Not authenticated" });
+    const session = await storage.getSession(sessionId);
+    if (!session) return res.status(401).json({ error: "Not authenticated" });
+    const user = await storage.getUser(session.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: "Both current and new password required" });
+    if (newPassword.length < 8) return res.status(400).json({ error: "New password must be at least 8 characters" });
+
+    // Verify current password
+    if (user.passwordHash) {
+      const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!valid) return res.status(400).json({ error: "Current password is incorrect" });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await storage.updateUser(user.id, { passwordHash: newHash });
+    res.json({ ok: true });
+  });
+
   // Get current user (session check)
   router.get("/me", async (req: Request, res: Response) => {
     const sessionId = req.cookies?.[COOKIE_NAME];

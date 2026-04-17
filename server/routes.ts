@@ -710,6 +710,29 @@ export async function registerRoutes(
   });
 
   // ── User Preferences / Customization ────────────────────────────────────
+  // Export all user data
+  app.get("/api/user/export", async (req, res) => {
+    const userId = req.user?.id || 1;
+    try {
+      const conversations = await storage.getConversations(userId);
+      const pipelines = await storage.getPipelinesByUser(userId);
+      const bots = await storage.getBots(userId);
+      const connectors = await storage.getConnectorsByUser(userId);
+      const prefs = await storage.getUserPreferences(userId);
+      const plan = await storage.getUserPlan(userId);
+      res.json({
+        exportDate: new Date().toISOString(),
+        user: { id: userId, email: req.user?.email },
+        conversations,
+        workflows: pipelines,
+        bots,
+        connectors: connectors.map((c: any) => ({ id: c.id, provider: c.provider, name: c.name, status: c.status })),
+        preferences: prefs,
+        plan,
+      });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   app.get("/api/preferences", async (req, res) => {
     const userId = req.user?.id || 1;
     const prefs = await storage.getUserPreferences(userId);
