@@ -724,7 +724,7 @@ export default function BossPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<IntelligenceLevel>("medium");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
