@@ -4,7 +4,7 @@ import MonacoEditor from "@monaco-editor/react";
 import {
   FolderOpen, File, ChevronRight, ChevronDown, Save, Loader2,
   Bot, Send, GitBranch, RefreshCw, X, HardDrive, FolderSearch,
-  PanelRightOpen, PanelRightClose,
+  PanelRightOpen, PanelRightClose, History, MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,6 +70,63 @@ function buildTree(paths: string[]): TreeNode[] {
   return toN(root);
 }
 
+// ── Conversation History Panel ──────────────────────────────────────
+function ConversationHistory({ onSelect }: { onSelect: (msgs: Array<{ role: "user" | "assistant"; content: string }>) => void }) {
+  const { data: conversations = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/conversations"],
+    queryFn: async () => {
+      const res = await fetch("/api/conversations", { credentials: "include" });
+      return res.ok ? res.json() : [];
+    },
+  });
+
+  const loadConversation = async (convId: string) => {
+    try {
+      const res = await fetch(`/api/conversations/${convId}/messages`, { credentials: "include" });
+      if (!res.ok) return;
+      const messages = await res.json();
+      const mapped = messages.map((m: any) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+      onSelect(mapped);
+    } catch {}
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto border-b border-border">
+      <div className="px-3 py-2 border-b border-white/[0.04]">
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Past Conversations</p>
+      </div>
+      {isLoading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+      ) : conversations.length === 0 ? (
+        <p className="text-xs text-muted-foreground text-center py-8">No past conversations</p>
+      ) : (
+        <div className="p-1.5 space-y-0.5">
+          {conversations.slice(0, 20).map((conv: any) => (
+            <button key={conv.id} onClick={() => loadConversation(conv.id)}
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-all group">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                <span className="text-xs font-medium text-foreground truncate flex-1">
+                  {conv.title || conv.lastMessage?.slice(0, 40) || "Untitled"}
+                </span>
+              </div>
+              <p className="text-[9px] text-muted-foreground truncate mt-0.5 ml-5">
+                {conv.lastMessage?.slice(0, 60) || "No messages"}
+              </p>
+              <span className="text-[8px] text-muted-foreground/50 ml-5">
+                {conv.updatedAt ? new Date(conv.updatedAt).toLocaleDateString() : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function EditorPage() {
   const { toast } = useToast();
   const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
@@ -85,6 +142,7 @@ export default function EditorPage() {
   const [aiIn, setAiIn] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiStatus, setAiStatus] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
   const editorRef = useRef<any>(null);
   const aiRef = useRef<HTMLDivElement>(null);
 
@@ -382,11 +440,17 @@ export default function EditorPage() {
                 <span className="text-xs font-medium">Boss AI</span>
               </div>
               <div className="flex items-center gap-1.5">
+                <button onClick={() => setShowHistory(!showHistory)} className={`p-1 rounded ${showHistory ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"}`} title="Past conversations">
+                  <History className="w-3.5 h-3.5" />
+                </button>
                 {aiMsgs.length > 0 && <button onClick={() => setAiMsgs([])} className="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>}
                 <button onClick={() => setAiOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
               </div>
             </div>
-            <div ref={aiRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
+            {/* Past Conversations Panel */}
+            {showHistory && <ConversationHistory onSelect={(msgs) => { setAiMsgs(msgs); setShowHistory(false); }} />}
+
+            <div ref={aiRef} className={`flex-1 overflow-y-auto px-3 py-2 space-y-2 ${showHistory ? "hidden" : ""}`}>
               {aiMsgs.length === 0 && (
                 <div className="text-center py-6">
                   <Bot className="w-8 h-8 mx-auto mb-2 opacity-20 text-muted-foreground" />
