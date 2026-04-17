@@ -25,7 +25,9 @@ import OnboardingTour from "./OnboardingTour";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useSyncStatus } from "@/hooks/useSync";
 import { useEffect, useState } from "react";
+import { Wifi, WifiOff, Monitor, Activity, Layers } from "lucide-react";
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/boss", label: "Chat", icon: MessageSquare },
@@ -36,6 +38,8 @@ const navItems = [
   { href: "/wallet", label: "Wallet", icon: Wallet },
   { href: "/workshop", label: "Workshop", icon: Store },
   { href: "/plugins", label: "Plugins", icon: Puzzle },
+  { href: "/gallery", label: "Gallery", icon: Layers },
+  { href: "/traces", label: "Traces", icon: Activity },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -100,6 +104,7 @@ export default function AppLayout({ children, allowPublic = false }: { children:
   }
 
   const displayLabel = user?.displayName ?? user?.email ?? "User";
+  const sync = useSyncStatus();
 
   return (
     <div className="flex h-screen overflow-hidden bg-background relative">
@@ -291,6 +296,20 @@ export default function AppLayout({ children, allowPublic = false }: { children:
                 : "bg-card border-b border-border"
             }`}
           >
+            {/* Live sync indicator */}
+            <div className="flex items-center gap-1.5 mr-2" title={sync.statusText}>
+              {sync.isConnected ? (
+                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+              ) : (
+                <WifiOff className="w-3.5 h-3.5 text-red-400 animate-pulse" />
+              )}
+              {sync.connectedDevices > 1 && (
+                <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
+                  <Monitor className="w-3 h-3" />
+                  {sync.connectedDevices}
+                </span>
+              )}
+            </div>
             <NotificationBell />
             <UserAvatar name={user?.displayName} email={user?.email} />
           </div>

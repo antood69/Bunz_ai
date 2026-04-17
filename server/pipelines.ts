@@ -10,10 +10,11 @@ import { eventBus } from "./lib/eventBus";
 import { executeDepartment, type DepartmentResult } from "./departments/executor";
 import { estimateComplexity, type IntelligenceLevel } from "./departments/types";
 import { connectorRegistry } from "./lib/connectorRegistry";
+import { broadcastToUser } from "./ws";
 
 interface PipelineStep {
   id: string;
-  type: "department" | "connector" | "transform";
+  type: "department" | "connector" | "transform" | "ai_decision" | "approval_gate" | "output";
   department?: string;
   connectorId?: number;
   connectorAction?: string;
@@ -21,6 +22,7 @@ interface PipelineStep {
   params?: Record<string, any>;
   retryCount?: number;
   skipOnFail?: boolean;
+  branches?: { yes?: string; no?: string; approved?: string; rejected?: string };
 }
 
 // Track active pipeline runs for pause/cancel
@@ -58,6 +60,9 @@ async function executePipeline(
   try {
     eventBus.emit(runId, "pipeline_start", {
       pipelineId, name: pipeline.name, totalSteps: steps.length,
+    });
+    broadcastToUser(userId, "pipelines", "run_started", {
+      pipelineId, runId, name: pipeline.name, totalSteps: steps.length,
     });
 
     for (let i = 0; i < steps.length; i++) {
@@ -134,6 +139,41 @@ async function executePipeline(
             });
             stepOutput = result.ok ? (typeof result.data === "string" ? result.data : JSON.stringify(result.data)) : `Error: ${result.error}`;
             if (!result.ok) throw new Error(result.error || "Connector failed");
+          } else if (step.type === "ai_decision") {
+            // AI evaluates condition and returns yes/no decision
+            const decisionResult = await modelRouter.chat({
+              model: "gpt-5.4-mini",
+              messages: [{ role: "user", content: `Evaluate this condition based on the input below. Respond with ONLY a JSON object: {"decision": true or false, "reasoning": "brief explanation"}\n\nCondition: ${prompt}\n\nInput:\n${previousOutput}` }],
+              systemPrompt: "You are a decision evaluator. Analyze the condition and input, then decide true or false. Respond with ONLY valid JSON.",
+            });
+            stepTokens = decisionResult.usage.totalTokens;
+            try {
+              const jsonMatch = decisionResult.content.match(/\{[\s\S]*\}/);
+              const decision = jsonMatch ? JSON.parse(jsonMatch[0]) : { decision: true, reasoning: "Parse failed, defaulting to true" };
+              stepOutput = JSON.stringify(decision);
+              // Log the decision for the UI
+              eventBus.emit(runId, "ai_decision", {
+                stepIndex: i, decision: decision.decision, reasoning: decision.reasoning,
+              });
+            } catch {
+              stepOutput = JSON.stringify({ decision: true, reasoning: "Parse error" });
+            }
+          } else if (step.type === "approval_gate") {
+            // Pause execution until human approves
+            eventBus.emit(runId, "approval_required", {
+              stepIndex: i, prompt, context: previousOutput.slice(0, 500),
+            });
+            activeRuns.set(runId, { status: "paused" });
+            await waitForResume(runId);
+            const afterApproval = activeRuns.get(runId);
+            if (!afterApproval || afterApproval.status === "cancelled") {
+              stepOutput = JSON.stringify({ approved: false, reason: "Rejected by user" });
+            } else {
+              stepOutput = JSON.stringify({ approved: true });
+            }
+          } else if (step.type === "output") {
+            // Output node just passes through
+            stepOutput = previousOutput;
           } else if (step.type === "transform") {
             const transformResult = await modelRouter.chat({
               model: "gpt-5.4-mini",
@@ -235,6 +275,12 @@ async function executePipeline(
       output: previousOutput.slice(0, 1000),
       stepResults: stepResults.map(s => ({ label: s.label, status: s.status, tokens: s.tokens, durationMs: s.durationMs })),
     });
+    broadcastToUser(userId, "pipelines", "run_completed", {
+      pipelineId, runId, name: pipeline.name, status: "complete", totalTokens,
+      stepResults: stepResults.map(s => ({ label: s.label, status: s.status })),
+    });
+    broadcastToUser(userId, "workflows", "updated", { pipelineId });
+    broadcastToUser(userId, "notifications", "new", {});
 
   } catch (err: any) {
     await storage.updatePipelineRun(runId, { status: "failed", error: err.message, completedAt: Date.now() });
@@ -387,7 +433,7 @@ export function createPipelineRouter() {
     res.json(run);
   });
 
-  // Workflow AI Assistant
+  // Workflow AI Assistant (conversational design)
   router.post("/assist", async (req: Request, res: Response) => {
     const { description, messages } = req.body;
     const userId = req.user?.id || 1;
@@ -402,7 +448,7 @@ export function createPipelineRouter() {
 
 Available departments (AI workers): research, coder, writer, artist
 Available connectors: ${connectedList || "none connected"}
-Step types: department (AI work), connector (external service), transform (data processing)
+Step types: department (AI work), connector (external service), transform (data processing), ai_decision (AI evaluates condition, branches yes/no), approval_gate (pauses for human approval), output (final output)
 
 When the user describes what they want, design a multi-step workflow.
 If you have enough info, return the workflow as JSON inside <workflow>...</workflow> tags:
@@ -411,7 +457,8 @@ If you have enough info, return the workflow as JSON inside <workflow>...</workf
   "description": "...",
   "steps": [
     { "id": "step-1", "type": "department", "department": "research", "prompt": "..." },
-    { "id": "step-2", "type": "transform", "prompt": "Summarize: {{prev}}" }
+    { "id": "step-2", "type": "ai_decision", "prompt": "Is the research comprehensive enough?" },
+    { "id": "step-3", "type": "transform", "prompt": "Summarize: {{prev}}" }
   ]
 }
 
@@ -435,6 +482,73 @@ Ask clarifying questions if the request is ambiguous. Be concise.`;
       }
 
       res.json({ reply: result.content, workflow, tokens: result.usage.totalTokens });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Natural Language → Auto-Create Pipeline (one-shot)
+  router.post("/generate", async (req: Request, res: Response) => {
+    const userId = req.user?.id || 1;
+    const { description } = req.body;
+    if (!description) return res.status(400).json({ error: "description required" });
+
+    const connectors = await storage.getConnectorsByUser(userId);
+    const connectedList = connectors
+      .filter((c: any) => c.status === "connected")
+      .map((c: any) => `${c.provider} (id:${c.id}, actions: ${c.name})`)
+      .join("\n");
+
+    try {
+      const result = await modelRouter.chat({
+        model: "gpt-5.4",
+        systemPrompt: "You create workflow pipelines from natural language descriptions. Return ONLY valid JSON.",
+        messages: [{
+          role: "user",
+          content: `Create a workflow pipeline from this description:
+
+"${description}"
+
+Available department types: research, coder, writer, artist
+Available step types: department, connector, transform, ai_decision, approval_gate, output
+Connected services:
+${connectedList || "none"}
+
+Return ONLY a JSON object (no markdown, no explanation):
+{
+  "name": "Short name",
+  "description": "One sentence",
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "department",
+      "department": "research",
+      "prompt": "Detailed instruction for this step. Use {{prev}} to reference previous step output."
+    }
+  ]
+}`,
+        }],
+      });
+
+      const jsonMatch = result.content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return res.status(400).json({ error: "Failed to generate workflow" });
+
+      const generated = JSON.parse(jsonMatch[0]);
+      if (!generated.steps?.length) return res.status(400).json({ error: "No steps generated" });
+
+      // Auto-create the pipeline
+      const pipeline = await storage.createPipeline({
+        id: uuidv4(),
+        userId,
+        name: generated.name || "Generated Workflow",
+        description: generated.description || description,
+        triggerType: "manual",
+        steps: generated.steps,
+      });
+
+      broadcastToUser(userId, "workflows", "created", { id: pipeline.id, name: pipeline.name });
+
+      res.json({ pipeline, steps: generated.steps, tokens: result.usage.totalTokens });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

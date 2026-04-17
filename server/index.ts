@@ -6,8 +6,9 @@ import path from "path";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { createRedisSessionMiddleware } from "./lib/session";
+import { createRedisSessionMiddleware, sessionStore } from "./lib/session";
 import { initDatabase } from "./storage";
+import { setupWebSocketServer } from "./ws";
 
 const app = express();
 const httpServer = createServer(app);
@@ -68,7 +69,11 @@ app.use((req, res, next) => {
   await initDatabase();
 
   // Session store (Redis in production, in-memory for local dev)
-  app.use(await createRedisSessionMiddleware());
+  const sessionMiddleware = await createRedisSessionMiddleware();
+  app.use(sessionMiddleware);
+
+  // WebSocket server for real-time cross-device sync
+  setupWebSocketServer(httpServer, sessionStore);
 
   await registerRoutes(httpServer, app);
 

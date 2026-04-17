@@ -9,6 +9,7 @@ import { executeDepartment } from "./departments/executor";
 import { estimateComplexity, type IntelligenceLevel } from "./departments/types";
 import { connectorRegistry } from "./lib/connectorRegistry";
 import { runReflection } from "./lib/vaultBrain";
+import { broadcastToUser } from "./ws";
 
 // Active bot intervals (in-memory)
 const activeBots = new Map<string, NodeJS.Timeout>();
@@ -177,9 +178,15 @@ If nothing needs to be done right now, use action "none".`;
       }
     } catch {}
 
+    // Broadcast cycle complete to all devices
+    broadcastToUser(bot.user_id, "bots", "cycle_complete", {
+      botId, name: bot.name, action: decision.action,
+    });
+
   } catch (e: any) {
     await storage.addBotLog(botId, "error", `Cycle failed: ${e.message}`);
     try { await storage.createNotification({ userId: bot.user_id, type: "bot_error", title: `Bot "${bot.name}" error`, message: e.message.slice(0, 100), link: "/bots" }); } catch {}
+    broadcastToUser(bot.user_id, "bots", "cycle_error", { botId, name: bot.name, error: e.message });
   }
 }
 
@@ -187,6 +194,8 @@ async function startBot(botId: string, intervalMs = 60000): Promise<void> {
   if (activeBots.has(botId)) return;
   await storage.updateBot(botId, { status: "running" });
   await storage.addBotLog(botId, "lifecycle", "Bot started");
+  const bot = await storage.getBot(botId);
+  if (bot) broadcastToUser(bot.user_id, "bots", "started", { botId, name: bot.name });
 
   // Run first cycle immediately
   runBotCycle(botId);
@@ -199,8 +208,10 @@ async function startBot(botId: string, intervalMs = 60000): Promise<void> {
 async function stopBot(botId: string): Promise<void> {
   const timer = activeBots.get(botId);
   if (timer) { clearInterval(timer); activeBots.delete(botId); }
+  const bot = await storage.getBot(botId);
   await storage.updateBot(botId, { status: "stopped" });
   await storage.addBotLog(botId, "lifecycle", "Bot stopped");
+  if (bot) broadcastToUser(bot.user_id, "bots", "stopped", { botId, name: bot.name });
 }
 
 /**

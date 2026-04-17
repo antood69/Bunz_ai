@@ -307,6 +307,13 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       console.error("[RAG] Context search failed:", e.message);
     }
 
+    // ── Agent Memory: recall relevant past experiences ──────────────────
+    let memoryContext = "";
+    try {
+      const { getMemoryContext } = await import("./memory");
+      memoryContext = await getMemoryContext(userId, message);
+    } catch {}
+
     // ── Call Boss AI to decide: direct answer or dispatch ─────────────────
     // Build user message content — include images if attached
     const imageContents = input.imageContents || [];
@@ -320,7 +327,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
         ...history.slice(-20).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
         { role: "user" as const, content: userContent },
       ],
-      systemPrompt: systemPrompt + vaultContext,
+      systemPrompt: systemPrompt + vaultContext + memoryContext,
       signal: abortController.signal,
     });
 
@@ -446,6 +453,12 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     } catch (e: any) { console.error("[Boss] Obsidian auto-save failed:", e.message); }
 
     activeAbortControllers.delete(conversationId);
+
+    // Extract memories from this interaction (async, non-blocking)
+    try {
+      const { extractMemories } = await import("./memory");
+      extractMemories(userId, "boss", message, finalContent, input.source || "boss", conversationId).catch(() => {});
+    } catch {}
 
     return {
       conversationId, reply: finalContent,

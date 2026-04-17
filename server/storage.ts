@@ -977,6 +977,165 @@ export async function initDatabase() {
     `);
   } catch (_) {}
 
+  // Agent Memory table for 3-tier memory system
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS agent_memory (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        tier TEXT NOT NULL,
+        department TEXT,
+        category TEXT,
+        content TEXT NOT NULL,
+        embedding TEXT,
+        source TEXT,
+        source_id TEXT,
+        relevance INTEGER DEFAULT 50,
+        access_count INTEGER DEFAULT 0,
+        last_accessed_at INTEGER,
+        metadata TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_memory_user ON agent_memory(user_id, tier)");
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_memory_dept ON agent_memory(user_id, department)");
+  } catch (_) {}
+
+  // API Keys for SDK
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        key_hash TEXT NOT NULL,
+        key_prefix TEXT NOT NULL,
+        scopes TEXT DEFAULT 'all',
+        last_used_at INTEGER,
+        usage_count INTEGER DEFAULT 0,
+        expires_at INTEGER,
+        is_active INTEGER DEFAULT 1,
+        created_at INTEGER NOT NULL
+      );
+    `);
+  } catch (_) {}
+
+  // Workspaces + RBAC tables
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS workspaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL UNIQUE,
+        description TEXT,
+        owner_id INTEGER NOT NULL,
+        plan TEXT DEFAULT 'free',
+        settings TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS workspace_members (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        role TEXT NOT NULL DEFAULT 'viewer',
+        joined_at INTEGER NOT NULL,
+        UNIQUE(workspace_id, user_id)
+      );
+    `);
+  } catch (_) {}
+
+  // Evaluation test suites table
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS eval_suites (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        pipeline_id TEXT,
+        test_cases TEXT NOT NULL DEFAULT '[]',
+        last_run_at INTEGER,
+        last_run_status TEXT,
+        last_run_results TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+  } catch (_) {}
+
+  // Artifacts gallery table
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS artifacts (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        type TEXT NOT NULL,
+        content TEXT NOT NULL,
+        language TEXT,
+        thumbnail TEXT,
+        source_type TEXT,
+        source_id TEXT,
+        tags TEXT,
+        is_favorite INTEGER DEFAULT 0,
+        is_public INTEGER DEFAULT 0,
+        view_count INTEGER DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+    `);
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_artifacts_user ON artifacts(user_id, created_at DESC)");
+  } catch (_) {}
+
+  // MCP servers table for external tool connections
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS mcp_servers (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        auth_type TEXT DEFAULT 'none',
+        auth_token TEXT,
+        is_active INTEGER DEFAULT 1,
+        tools TEXT,
+        last_sync_at INTEGER,
+        created_at INTEGER NOT NULL
+      );
+    `);
+  } catch (_) {}
+
+  // Agent Traces table for observability
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS agent_traces (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        source_id TEXT,
+        source_name TEXT,
+        department TEXT,
+        model TEXT,
+        provider TEXT,
+        input_prompt TEXT,
+        output_preview TEXT,
+        input_tokens INTEGER DEFAULT 0,
+        output_tokens INTEGER DEFAULT 0,
+        total_tokens INTEGER DEFAULT 0,
+        cost_usd TEXT,
+        duration_ms INTEGER DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'success',
+        error TEXT,
+        metadata TEXT,
+        parent_trace_id TEXT,
+        created_at INTEGER NOT NULL
+      );
+    `);
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_traces_user ON agent_traces(user_id, created_at DESC)");
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_traces_parent ON agent_traces(parent_trace_id)");
+  } catch (_) {}
+
   // ── Auto-seed admin accounts (runs after all schema migrations) ──
   try {
     const seedAccounts = [
@@ -1758,7 +1917,15 @@ export class DatabaseStorage implements IStorage {
 
   // Notifications
   async createNotification(data: { userId: number; type: string; title: string; message: string; link?: string }) {
-    return db.insert(notifications).values({ ...data, createdAt: new Date().toISOString() } as any).returning().get();
+    const result = db.insert(notifications).values({ ...data, createdAt: new Date().toISOString() } as any).returning().get();
+    // Push to all user's connected devices in real-time
+    try {
+      const { broadcastToUser } = await import("./ws");
+      broadcastToUser(data.userId, "notifications", "new", {
+        type: data.type, title: data.title, message: data.message,
+      });
+    } catch {}
+    return result;
   }
   async getNotifications(userId: number, limit = 50) {
     return db.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(desc(notifications.id)).limit(limit).all();

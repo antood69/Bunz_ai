@@ -23,6 +23,14 @@ const REASONING_SYSTEM_PROMPT = "You are a reasoning agent. Think step by step."
 import { classifyTier } from "./lib/tierClassifier";
 import { TIER_CREDIT_LIMITS, requireCredits } from "./lib/rateLimiter";
 import { INTELLIGENCE_TIERS } from "./departments/types";
+import { broadcastToUser } from "./ws";
+import { createTracesRouter } from "./traces";
+import { createMemoryRouter } from "./memory";
+import { createMcpRouter } from "./mcp";
+import { createArtifactsRouter } from "./artifacts";
+import { createEvalsRouter } from "./evals";
+import { createWorkspacesRouter } from "./workspaces";
+import { createApiKeyRouter, createSdkRouter } from "./sdk";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -33,6 +41,9 @@ export async function registerRoutes(
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: Date.now(), version: "2.0.0" });
   });
+
+  // === SDK API (own auth via API keys, before session auth) ===
+  app.use("/api/sdk", createSdkRouter());
 
   // === COOKIE PARSER + AUTH ===
   app.use(cookieParser());
@@ -46,6 +57,13 @@ export async function registerRoutes(
   app.use("/api/bots", createBotRouter());
   app.use("/api/webhooks/inbound", createWebhookInboundRouter());
   app.use("/api/github", githubRouter);
+  app.use("/api/traces", createTracesRouter());
+  app.use("/api/memory", createMemoryRouter());
+  app.use("/api/mcp", createMcpRouter());
+  app.use("/api/artifacts", createArtifactsRouter());
+  app.use("/api/evals", createEvalsRouter());
+  app.use("/api/workspaces", createWorkspacesRouter());
+  app.use("/api/keys", createApiKeyRouter());
 
   // ── Local File System Access (for Editor) ───────────────────────────────
   app.get("/api/local/tree", async (req, res) => {

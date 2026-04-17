@@ -1,6 +1,9 @@
 import session from "express-session";
 import createMemoryStore from "memorystore";
 
+/** Exported so WebSocket server can look up sessions by SID */
+export let sessionStore: session.Store | undefined;
+
 /**
  * Express session middleware.
  * Uses Redis in production (when REDIS_URL set), in-memory store otherwise.
@@ -37,5 +40,7 @@ export async function createRedisSessionMiddleware() {
     console.log("[session] Using in-memory session store (no Redis)");
   }
 
-  return session(sessionOpts);
+  const middleware = session(sessionOpts);
+  sessionStore = sessionOpts.store;
+  return middleware;
 }

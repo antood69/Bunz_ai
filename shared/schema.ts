@@ -156,6 +156,125 @@ export const notifications = sqliteTable("notifications", {
 });
 export type Notification = typeof notifications.$inferSelect;
 
+// Agent Traces — full observability for every AI operation
+export const agentTraces = sqliteTable("agent_traces", {
+  id: text("id").primaryKey(), // UUID
+  userId: integer("user_id").notNull(),
+  source: text("source").notNull(), // "boss" | "editor" | "pipeline" | "bot"
+  sourceId: text("source_id"), // pipeline run ID, bot ID, conversation ID
+  sourceName: text("source_name"), // pipeline name, bot name, etc
+  department: text("department"), // research | writer | coder | artist | boss
+  model: text("model"), // actual model used
+  provider: text("provider"), // openai | anthropic | google | perplexity
+  inputPrompt: text("input_prompt"), // truncated to 1000 chars
+  outputPreview: text("output_preview"), // truncated to 500 chars
+  inputTokens: integer("input_tokens").default(0),
+  outputTokens: integer("output_tokens").default(0),
+  totalTokens: integer("total_tokens").default(0),
+  costUsd: text("cost_usd"), // estimated cost in USD (as string for precision)
+  durationMs: integer("duration_ms").default(0),
+  status: text("status").notNull().default("success"), // success | error | timeout
+  error: text("error"), // error message if failed
+  metadata: text("metadata"), // JSON: tools used, sub-agents, images generated, etc
+  parentTraceId: text("parent_trace_id"), // for nested traces (boss -> department)
+  createdAt: integer("created_at").notNull(),
+});
+export type AgentTrace = typeof agentTraces.$inferSelect;
+
+// API Keys — for SDK access
+export const apiKeys = sqliteTable("api_keys", {
+  id: text("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  keyHash: text("key_hash").notNull(), // hashed API key
+  keyPrefix: text("key_prefix").notNull(), // first 8 chars for display
+  scopes: text("scopes").default("all"), // JSON: ["workflows", "bots", "chat"]
+  lastUsedAt: integer("last_used_at"),
+  usageCount: integer("usage_count").default(0),
+  expiresAt: integer("expires_at"),
+  isActive: integer("is_active").default(1),
+  createdAt: integer("created_at").notNull(),
+});
+export type ApiKey = typeof apiKeys.$inferSelect;
+
+// Workspaces — team isolation and RBAC
+export const workspaces = sqliteTable("workspaces", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(), // URL-safe unique name
+  description: text("description"),
+  ownerId: integer("owner_id").notNull(),
+  plan: text("plan").default("free"), // free | team | enterprise
+  settings: text("settings"), // JSON: theme, limits, features
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+export type Workspace = typeof workspaces.$inferSelect;
+
+export const workspaceMembers = sqliteTable("workspace_members", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  userId: integer("user_id").notNull(),
+  role: text("role").notNull().default("viewer"), // "admin" | "builder" | "viewer"
+  joinedAt: integer("joined_at").notNull(),
+});
+export type WorkspaceMember = typeof workspaceMembers.$inferSelect;
+
+// Evaluation Test Suites — regression testing for AI workflows
+export const evalSuites = sqliteTable("eval_suites", {
+  id: text("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  pipelineId: text("pipeline_id"), // which workflow this tests
+  testCases: text("test_cases").notNull(), // JSON: Array<{ input, expectedOutput, assertions }>
+  lastRunAt: integer("last_run_at"),
+  lastRunStatus: text("last_run_status"), // "pass" | "fail" | "partial"
+  lastRunResults: text("last_run_results"), // JSON: per-case pass/fail/output
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+export type EvalSuite = typeof evalSuites.$inferSelect;
+
+// Artifact Gallery — stored generated artifacts for browsing/reuse
+export const artifacts = sqliteTable("artifacts", {
+  id: text("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  title: text("title").notNull(),
+  type: text("type").notNull(), // "html" | "svg" | "code" | "image" | "document"
+  content: text("content").notNull(), // the artifact content
+  language: text("language"), // for code artifacts: "python", "typescript", etc
+  thumbnail: text("thumbnail"), // base64 or URL preview
+  sourceType: text("source_type"), // "boss" | "editor" | "pipeline"
+  sourceId: text("source_id"), // conversation/pipeline ID
+  tags: text("tags"), // JSON array of tags
+  isFavorite: integer("is_favorite").default(0),
+  isPublic: integer("is_public").default(0),
+  viewCount: integer("view_count").default(0),
+  createdAt: integer("created_at").notNull(),
+});
+export type Artifact = typeof artifacts.$inferSelect;
+
+// Agent Memory — 3-tier memory system (episodic + shared knowledge)
+export const agentMemory = sqliteTable("agent_memory", {
+  id: text("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  tier: text("tier").notNull(), // "episodic" | "knowledge" | "preference"
+  department: text("department"), // which department created/uses this memory
+  category: text("category"), // user-defined or auto-categorized
+  content: text("content").notNull(), // the actual memory content
+  embedding: text("embedding"), // future: vector embedding for similarity search
+  source: text("source"), // what created this: "boss_chat", "pipeline", "bot", "manual"
+  sourceId: text("source_id"), // conversation/pipeline/bot ID
+  relevance: integer("relevance").default(50), // 0-100 relevance score (decays over time)
+  accessCount: integer("access_count").default(0), // how many times recalled
+  lastAccessedAt: integer("last_accessed_at"),
+  metadata: text("metadata"), // JSON: tags, outcome, quality rating, etc
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+export type AgentMemoryEntry = typeof agentMemory.$inferSelect;
+
 // Escalations — agent watchdog escalation records
 export const escalations = sqliteTable("escalations", {
   id: integer("id").primaryKey({ autoIncrement: true }),

@@ -14,6 +14,7 @@ import {
   type DepartmentId, type IntelligenceLevel, type TaskComplexity,
   DEPARTMENTS, getModel, getActiveSubAgents,
 } from "./types";
+import { startTrace, type TraceInput } from "../traces";
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -52,17 +53,70 @@ export async function executeDepartment(
   complexity: TaskComplexity,
   signal?: AbortSignal,
   github?: { token: string; repo: string },
+  traceContext?: { userId?: number; source?: string; sourceId?: string; sourceName?: string; parentTraceId?: string },
 ): Promise<DepartmentResult> {
   const dept = DEPARTMENTS[task.department];
   const activeAgents = getActiveSubAgents(task.department, complexity);
   const startTime = Date.now();
 
-  // Special routing for Artist (image gen) and Coder (tool use)
-  if (task.department === "artist") return runArtistDept(parentJobId, task, activeAgents, level, signal);
-  if (task.department === "coder") return runCoderDept(parentJobId, task, activeAgents, level, signal, github);
+  // Start trace for this department execution
+  const userId = traceContext?.userId || 1;
+  const { traceId, finish } = startTrace({
+    userId,
+    source: (traceContext?.source || "boss") as any,
+    sourceId: traceContext?.sourceId || parentJobId,
+    sourceName: traceContext?.sourceName,
+    department: task.department,
+    model: getModel(task.department, level, activeAgents[0]?.id || "lead"),
+    provider: detectProvider(getModel(task.department, level, activeAgents[0]?.id || "lead")),
+    inputPrompt: task.task,
+    parentTraceId: traceContext?.parentTraceId,
+  });
 
-  // Standard departments (Research, Writer): run sub-agents in sequence
-  return runStandardDept(parentJobId, task, activeAgents, level, signal);
+  try {
+    let result: DepartmentResult;
+    // Special routing for Artist (image gen) and Coder (tool use)
+    if (task.department === "artist") {
+      result = await runArtistDept(parentJobId, task, activeAgents, level, signal);
+    } else if (task.department === "coder") {
+      result = await runCoderDept(parentJobId, task, activeAgents, level, signal, github);
+    } else {
+      result = await runStandardDept(parentJobId, task, activeAgents, level, signal);
+    }
+
+    // Finish trace with success
+    await finish({
+      outputPreview: result.finalOutput,
+      totalTokens: result.totalTokens,
+      inputTokens: Math.floor(result.totalTokens * 0.3),
+      outputTokens: Math.floor(result.totalTokens * 0.7),
+      status: "success",
+      metadata: {
+        subAgents: result.subAgentResults.map(r => ({
+          id: r.agentId, label: r.label, tokens: r.tokens, durationMs: r.durationMs,
+        })),
+        imageUrl: result.imageUrl,
+      },
+    });
+
+    return result;
+  } catch (err: any) {
+    await finish({
+      status: "error",
+      error: err.message,
+      totalTokens: 0,
+    });
+    throw err;
+  }
+}
+
+function detectProvider(model: string): string {
+  if (model.includes("claude")) return "anthropic";
+  if (model.includes("gpt") || model.includes("o1") || model.includes("o3") || model.includes("o4")) return "openai";
+  if (model.includes("gemini") || model.includes("gemma")) return "google";
+  if (model.includes("sonar")) return "perplexity";
+  if (model.includes("mistral")) return "mistral";
+  return "unknown";
 }
 
 // ── Standard Department (Research / Writer) ─────────────────────────────────

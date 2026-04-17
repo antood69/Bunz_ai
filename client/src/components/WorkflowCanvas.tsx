@@ -35,6 +35,9 @@ const PALETTE_ITEMS = [
   { type: "connector", connectorAction: "send_message", label: "Discord Message", icon: MessageSquare, color: "#5865f2", description: "Send to Discord" },
   { type: "connector", connectorAction: "list_contacts", label: "HubSpot Contacts", icon: Globe, color: "#ff7a59", description: "CRM contacts" },
   { type: "connector", connectorAction: "insert_row", label: "Supabase Insert", icon: Code, color: "#3ecf8e", description: "Insert database row" },
+  { type: "ai_decision", label: "AI Decision", icon: Bot, color: "#f97316", description: "AI evaluates condition, picks branch" },
+  { type: "approval_gate", label: "Approval Gate", icon: CheckCircle2, color: "#eab308", description: "Pause until human approves" },
+  { type: "output", label: "Output", icon: FileOutput, color: "#06b6d4", description: "Final output node" },
 ];
 
 // ── Custom Node Component ───────────────────────────────────────────
@@ -96,7 +99,28 @@ function WorkflowNode({ data, selected }: NodeProps) {
         )}
       </div>
 
-      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !border-2 !bg-background" style={{ borderColor: color }} />
+      {/* AI Decision nodes get labeled branch handles */}
+      {d.stepType === "ai_decision" ? (
+        <>
+          <div className="flex items-center justify-between px-3 pb-2 text-[8px]">
+            <span className="text-emerald-400 font-medium">Yes/True</span>
+            <span className="text-red-400 font-medium">No/False</span>
+          </div>
+          <Handle type="source" position={Position.Bottom} id="yes" className="!w-3 !h-3 !border-2 !bg-emerald-400" style={{ left: "30%" }} />
+          <Handle type="source" position={Position.Bottom} id="no" className="!w-3 !h-3 !border-2 !bg-red-400" style={{ left: "70%" }} />
+        </>
+      ) : d.stepType === "approval_gate" ? (
+        <>
+          <div className="flex items-center justify-between px-3 pb-2 text-[8px]">
+            <span className="text-emerald-400 font-medium">Approved</span>
+            <span className="text-red-400 font-medium">Rejected</span>
+          </div>
+          <Handle type="source" position={Position.Bottom} id="approved" className="!w-3 !h-3 !border-2 !bg-emerald-400" style={{ left: "30%" }} />
+          <Handle type="source" position={Position.Bottom} id="rejected" className="!w-3 !h-3 !border-2 !bg-red-400" style={{ left: "70%" }} />
+        </>
+      ) : (
+        <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !border-2 !bg-background" style={{ borderColor: color }} />
+      )}
     </div>
   );
 }

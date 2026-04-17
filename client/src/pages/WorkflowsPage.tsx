@@ -6,6 +6,7 @@ import {
   Clock, ChevronDown, ChevronRight, Pencil, X, Save, Zap,
   Globe, Code, PenTool, Palette, Bot, Send, Pause, SkipForward,
   RotateCcw, History, Coins, AlertTriangle, Square, Share2, LayoutGrid,
+  Sparkles,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 const WorkflowCanvas = lazy(() => import("@/components/WorkflowCanvas"));
@@ -506,6 +507,9 @@ export default function WorkflowsPage() {
   const [canvasPipeline, setCanvasPipeline] = useState<Pipeline | null>(null);
   const [runInputPipeline, setRunInputPipeline] = useState<Pipeline | null>(null);
   const [runInputText, setRunInputText] = useState("");
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [generateDesc, setGenerateDesc] = useState("");
+  const [generating, setGenerating] = useState(false);
 
   const { data: pipelines = [], isLoading } = useQuery<Pipeline[]>({
     queryKey: ["/api/pipelines"],
@@ -654,6 +658,9 @@ export default function WorkflowsPage() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setAssistMode(true)} className="gap-1.5 text-xs">
             <Bot className="w-3.5 h-3.5" /> AI Assist
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setGenerateOpen(true)} className="gap-1.5 text-xs">
+            <Sparkles className="w-3.5 h-3.5" /> Generate
           </Button>
           <Button size="sm" onClick={() => { setEditPipeline(null); setBuilderOpen(true); }} className="gap-1.5 text-xs">
             <Plus className="w-3.5 h-3.5" /> New Workflow
@@ -963,6 +970,59 @@ export default function WorkflowsPage() {
         <PublishDialog pipeline={publishPipeline} onClose={() => setPublishPipeline(null)}
           onPublished={() => { setPublishPipeline(null); toast({ title: "Published to Workshop!" }); }} />
       )}
+
+      {/* AI Generate Workflow Dialog */}
+      <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" />
+              Generate Workflow with AI
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Describe what you want to automate in plain English. The AI will design and create a multi-step workflow for you.
+            </p>
+            <Textarea
+              placeholder="e.g., Research my competitors, write a summary report, and email it to my team every Monday"
+              value={generateDesc}
+              onChange={(e) => setGenerateDesc(e.target.value)}
+              className="min-h-[100px] text-sm"
+            />
+            <div className="bg-secondary/50 rounded-xl p-3 text-[10px] text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">Tips for better results:</p>
+              <p>- Be specific about what each step should do</p>
+              <p>- Mention which services to use (Gmail, Slack, etc.)</p>
+              <p>- Include conditions or decisions ("if the report is negative, alert me")</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGenerateOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!generateDesc.trim() || generating}
+              onClick={async () => {
+                setGenerating(true);
+                try {
+                  const res = await apiRequest("POST", "/api/pipelines/generate", { description: generateDesc });
+                  const data = await res.json();
+                  queryClient.invalidateQueries({ queryKey: ["/api/pipelines"] });
+                  toast({ title: `Workflow "${data.pipeline.name}" created with ${data.steps.length} steps` });
+                  setGenerateOpen(false);
+                  setGenerateDesc("");
+                } catch (err: any) {
+                  toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+                } finally {
+                  setGenerating(false);
+                }
+              }}
+            >
+              {generating ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
+              Generate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
