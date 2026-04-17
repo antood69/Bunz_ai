@@ -241,9 +241,42 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   if (humanizeMode) {
     message = message.replace(/^\/human\s*/i, "").trim();
   }
+  // Detect /research command — deep multi-source research with citations
+  const deepResearchMode = message.trim().toLowerCase().startsWith("/research");
+  if (deepResearchMode) {
+    message = message.replace(/^\/research\s*/i, "").trim();
+  }
+
+  // Detect /chart command — generate data visualizations as artifacts
+  const chartMode = message.trim().toLowerCase().startsWith("/chart");
+  if (chartMode) {
+    message = message.replace(/^\/chart\s*/i, "").trim();
+  }
+
+  // Detect /design command — screenshot/description → React+Tailwind code
+  const designMode = message.trim().toLowerCase().startsWith("/design");
+  if (designMode) {
+    message = message.replace(/^\/design\s*/i, "").trim();
+  }
+
   const tier = INTELLIGENCE_TIERS[level];
   const bossModel = tier.bossModel;
   const abortController = new AbortController();
+
+  // ── Deep Research short-circuit ──────────────────────────────────────
+  if (deepResearchMode && message.length > 0) {
+    return handleDeepResearch(input, message, level, abortController);
+  }
+
+  // ── Chart mode — generate data viz as artifact ─────────────────────
+  if (chartMode && message.length > 0) {
+    return handleChartRequest(input, message, level, abortController);
+  }
+
+  // ── Design mode — screenshot/description to code ──────────────────
+  if (designMode && message.length > 0) {
+    return handleDesignToCode(input, message, level, abortController);
+  }
 
   // ── Art request detection → skip Boss routing, go straight to Artist ────
   const ART_PATTERNS = [
@@ -475,6 +508,250 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     return { conversationId: conversationId || "", reply: errorMsg, isDelegating: false, tokenCount: 0, level };
   }
 }
+// ── Design to Code (screenshot/description → React+Tailwind artifact) ────────
+
+async function handleDesignToCode(
+  input: BossChatInput,
+  request: string,
+  level: IntelligenceLevel,
+  abortController: AbortController,
+): Promise<BossChatResult> {
+  const { userId } = input;
+  const tier = INTELLIGENCE_TIERS[level];
+
+  let conversationId = input.conversationId;
+  if (!conversationId) {
+    conversationId = uuidv4();
+    await storage.createConversation({
+      id: conversationId, userId, title: `Design: ${request.slice(0, 60)}`,
+      model: tier.bossModel, createdAt: Date.now(), updatedAt: Date.now(),
+      source: input.source || "boss",
+    });
+  }
+
+  await storage.createBossMessage({
+    id: uuidv4(), conversationId, role: "user", content: `/design ${request}`,
+    tokenCount: 0, model: null, createdAt: Date.now(),
+  });
+
+  try {
+    // Use vision if screenshot attached, otherwise use description
+    const imageContents = input.imageContents || [];
+    const hasImage = imageContents.length > 0;
+
+    const userContent: any = hasImage
+      ? [{ type: "text", text: `Convert this design into production-ready code.\n\nAdditional instructions: ${request || "Match the design exactly"}` }, ...imageContents]
+      : `Convert this design description into production-ready code:\n\n${request}`;
+
+    const result = await modelRouter.chat({
+      model: tier.models?.coder || "gpt-5.4",
+      messages: [{ role: "user", content: userContent }],
+      systemPrompt: `You are an expert UI developer who converts designs into pixel-perfect code.
+
+When given a screenshot or description, generate a complete, working HTML page with:
+- Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
+- Modern, responsive design
+- Dark theme matching the original design
+- Proper spacing, typography, colors
+- Interactive hover states and transitions
+- All content from the original design preserved
+
+ALWAYS wrap your output in <artifact type="html" title="Design: [component name]"> tags.
+The HTML must be completely self-contained and renderable.
+If the design has multiple sections, recreate ALL of them.
+Use placeholder images from https://placehold.co/ if needed.
+Make buttons, links, and interactive elements functional where possible.`,
+      signal: abortController.signal,
+    });
+
+    await storage.createBossMessage({
+      id: uuidv4(), conversationId, role: "assistant",
+      content: result.content,
+      tokenCount: result.usage.totalTokens, model: tier.bossModel, createdAt: Date.now(),
+    });
+
+    return {
+      conversationId, reply: result.content,
+      isDelegating: false, tokenCount: result.usage.totalTokens, level,
+    };
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      return { conversationId, reply: "Design conversion cancelled.", isDelegating: false, tokenCount: 0, level };
+    }
+    return { conversationId, reply: `Design failed: ${err.message}`, isDelegating: false, tokenCount: 0, level };
+  }
+}
+
+// ── Chart / Data Viz (generates interactive charts as artifacts) ──────────────
+
+async function handleChartRequest(
+  input: BossChatInput,
+  request: string,
+  level: IntelligenceLevel,
+  abortController: AbortController,
+): Promise<BossChatResult> {
+  const { userId } = input;
+  const tier = INTELLIGENCE_TIERS[level];
+
+  let conversationId = input.conversationId;
+  if (!conversationId) {
+    conversationId = uuidv4();
+    await storage.createConversation({
+      id: conversationId, userId, title: `Chart: ${request.slice(0, 60)}`,
+      model: tier.bossModel, createdAt: Date.now(), updatedAt: Date.now(),
+      source: input.source || "boss",
+    });
+  }
+
+  await storage.createBossMessage({
+    id: uuidv4(), conversationId, role: "user", content: `/chart ${request}`,
+    tokenCount: 0, model: null, createdAt: Date.now(),
+  });
+
+  try {
+    const result = await modelRouter.chat({
+      model: tier.models?.coder || "gpt-5.4",
+      messages: [{ role: "user", content: request }],
+      systemPrompt: `You are a data visualization expert. Generate an interactive chart based on the user's request.
+
+ALWAYS respond with an <artifact type="html" title="Chart: [description]"> tag containing a complete, self-contained HTML page with:
+- Chart.js loaded via CDN: <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+- A <canvas> element for the chart
+- A <script> block that creates the chart with proper data, colors, and labels
+- Clean, modern dark styling (dark background #1a1a2e, white text)
+- Responsive sizing
+
+If the user provides CSV data, parse it and visualize it.
+If the user asks for a specific chart type (bar, line, pie, radar, etc.), use that type.
+If no data is provided, generate realistic sample data based on the request.
+
+Make charts visually beautiful with gradients, proper spacing, and animations.`,
+      signal: abortController.signal,
+    });
+
+    await storage.createBossMessage({
+      id: uuidv4(), conversationId, role: "assistant",
+      content: result.content,
+      tokenCount: result.usage.totalTokens, model: tier.bossModel, createdAt: Date.now(),
+    });
+
+    return {
+      conversationId, reply: result.content,
+      isDelegating: false, tokenCount: result.usage.totalTokens, level,
+    };
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      return { conversationId, reply: "Chart generation cancelled.", isDelegating: false, tokenCount: 0, level };
+    }
+    return { conversationId, reply: `Chart failed: ${err.message}`, isDelegating: false, tokenCount: 0, level };
+  }
+}
+
+// ── Deep Research (multi-step web research with citations) ────────────────────
+
+async function handleDeepResearch(
+  input: BossChatInput,
+  topic: string,
+  level: IntelligenceLevel,
+  abortController: AbortController,
+): Promise<BossChatResult> {
+  const { userId, userEmail } = input;
+  const tier = INTELLIGENCE_TIERS[level];
+
+  let conversationId = input.conversationId;
+  if (!conversationId) {
+    conversationId = uuidv4();
+    await storage.createConversation({
+      id: conversationId, userId, title: `Research: ${topic.slice(0, 60)}`,
+      model: tier.bossModel, createdAt: Date.now(), updatedAt: Date.now(),
+      source: input.source || "boss",
+    });
+  }
+
+  await storage.createBossMessage({
+    id: uuidv4(), conversationId, role: "user", content: `/research ${topic}`,
+    tokenCount: 0, model: null, createdAt: Date.now(),
+  });
+
+  try {
+    // Step 1: Decompose the research question into sub-queries
+    const planResult = await modelRouter.chat({
+      model: tier.bossModel,
+      messages: [{ role: "user", content: topic }],
+      systemPrompt: `You are a research planner. Break this research question into 3-5 specific sub-queries that together will provide comprehensive coverage. Return ONLY a JSON array of search query strings. Example: ["query 1", "query 2", "query 3"]`,
+      signal: abortController.signal,
+    });
+
+    let queries: string[] = [];
+    try {
+      const match = planResult.content.match(/\[[\s\S]*\]/);
+      queries = match ? JSON.parse(match[0]) : [topic];
+    } catch {
+      queries = [topic];
+    }
+
+    // Step 2: Research each sub-query using the Research department
+    const findings: string[] = [];
+    for (const query of queries.slice(0, 5)) {
+      try {
+        const result = await executeDepartment(
+          conversationId,
+          { department: "research", task: `Research this specific question thoroughly: "${query}". Provide detailed findings with specific facts, data points, and sources.` },
+          level,
+          estimateComplexity(query),
+        );
+        findings.push(`### Sub-query: ${query}\n\n${result.finalOutput}`);
+      } catch (err: any) {
+        findings.push(`### Sub-query: ${query}\n\n*Research failed: ${err.message}*`);
+      }
+    }
+
+    // Step 3: Synthesize into a comprehensive cited report
+    const synthesisResult = await modelRouter.chat({
+      model: tier.models?.writer || "gpt-5.4",
+      messages: [{
+        role: "user",
+        content: `Synthesize these research findings into a comprehensive, well-structured report on: "${topic}"
+
+RESEARCH FINDINGS:
+${findings.join("\n\n---\n\n")}
+
+Write a professional report with:
+1. Executive Summary (2-3 sentences)
+2. Key Findings (organized by theme, not by sub-query)
+3. Detailed Analysis
+4. Conclusions & Recommendations
+5. Sources (list all sources mentioned in the findings)
+
+Use clear headings, bullet points, and data where available. If you can wrap the report in <artifact type="html" title="Research Report: ${topic.slice(0, 40)}"> tags, do so with professional styling.`,
+      }],
+      systemPrompt: "You are a senior research analyst. Write comprehensive, well-cited reports. Use <artifact> tags for rich HTML output.",
+      signal: abortController.signal,
+    });
+
+    const totalTokens = planResult.usage.totalTokens + synthesisResult.usage.totalTokens;
+
+    await storage.createBossMessage({
+      id: uuidv4(), conversationId, role: "assistant",
+      content: synthesisResult.content,
+      tokenCount: totalTokens, model: tier.bossModel, createdAt: Date.now(),
+    });
+
+    return {
+      conversationId,
+      reply: synthesisResult.content,
+      isDelegating: false,
+      tokenCount: totalTokens,
+      level,
+    };
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      return { conversationId, reply: "Research cancelled.", isDelegating: false, tokenCount: 0, level };
+    }
+    return { conversationId, reply: `Research failed: ${err.message}`, isDelegating: false, tokenCount: 0, level };
+  }
+}
+
 // ── Art Short-Circuit (skip Boss routing for obvious image requests) ─────────
 
 async function handleArtShortCircuit(

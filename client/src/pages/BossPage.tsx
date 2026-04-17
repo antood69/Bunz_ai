@@ -3,7 +3,7 @@ import {
   Bot, Send, Plus, MessageSquare, Copy, Check, ChevronLeft, ChevronRight,
   Search, Code2, FileText, BarChart3, ShieldCheck, Palette, Globe,
   Loader2, CheckCircle, AlertCircle, Zap, Square,
-  Paperclip, Download, X, Brain,
+  Paperclip, Download, X, Brain, Mic, MicOff, Volume2, VolumeX,
 } from "lucide-react";
 import IntelligencePicker, { type IntelligenceLevel } from "@/components/IntelligencePicker";
 import { useAgentStream, type WorkerStatus } from "@/hooks/useAgentStream";
@@ -1122,6 +1122,67 @@ export default function BossPage() {
     }
   };
 
+  // ── Voice Input (Speech-to-Text) ─────────────────────────────────────
+  const [isRecording, setIsRecording] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser. Try Chrome or Edge.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      setInput(transcript);
+    };
+
+    recognition.onerror = () => { setIsRecording(false); };
+    recognition.onend = () => { setIsRecording(false); };
+
+    recognition.start();
+    recognitionRef.current = recognition;
+    setIsRecording(true);
+  };
+
+  // Text-to-Speech — read AI responses aloud
+  const speakText = useCallback((text: string) => {
+    if (!ttsEnabled || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    // Strip markdown/HTML for clean speech
+    const clean = text.replace(/```[\s\S]*?```/g, "code block").replace(/[#*_`>\[\]()]/g, "").replace(/<[^>]*>/g, "").trim();
+    if (!clean) return;
+    const utterance = new SpeechSynthesisUtterance(clean.slice(0, 3000));
+    utterance.rate = 1.05;
+    utterance.pitch = 1;
+    window.speechSynthesis.speak(utterance);
+  }, [ttsEnabled]);
+
+  // Auto-speak new assistant messages
+  useEffect(() => {
+    if (!ttsEnabled || messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    if (last.role === "assistant" && !last.isDelegating) {
+      speakText(last.content);
+    }
+  }, [messages.length, ttsEnabled, speakText]);
+
   const isEmpty = messages.length === 0;
   const charCount = input.length;
 
@@ -1284,13 +1345,25 @@ export default function BossPage() {
               >
                 <Paperclip className="w-[18px] h-[18px]" />
               </button>
+              <button
+                onClick={toggleRecording}
+                className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
+                  isRecording
+                    ? "bg-red-500/20 text-red-400 animate-pulse"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                }`}
+                title={isRecording ? "Stop recording" : "Voice input"}
+                disabled={isLoading}
+              >
+                {isRecording ? <MicOff className="w-[18px] h-[18px]" /> : <Mic className="w-[18px] h-[18px]" />}
+              </button>
               <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                placeholder="Ask me anything... (Ctrl+V to paste screenshots)"
+                placeholder={isRecording ? "Listening... speak now" : "Ask me anything... (Ctrl+V to paste screenshots)"}
                 rows={1}
                 className="flex-1 bg-transparent text-[15px] text-foreground placeholder:text-muted-foreground resize-none outline-none leading-6 min-h-[24px] max-h-[144px] py-1.5"
                 disabled={isLoading}
@@ -1316,6 +1389,14 @@ export default function BossPage() {
             <div className="flex items-center justify-between mt-2 px-1">
               <p className="text-[11px] text-muted-foreground">Enter to send · Shift+Enter for newline</p>
               <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { setTtsEnabled(!ttsEnabled); if (ttsEnabled) window.speechSynthesis?.cancel(); }}
+                  className={`flex items-center gap-1 text-[11px] transition-colors ${ttsEnabled ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                  title={ttsEnabled ? "Disable voice responses" : "Enable voice responses"}
+                >
+                  {ttsEnabled ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
+                  {ttsEnabled ? "Voice on" : "Voice off"}
+                </button>
                 <IntelligencePicker value={selectedLevel} onChange={setSelectedLevel} compact />
                 {charCount > 0 && (
                   <p className={`text-[11px] ${charCount > 2000 ? "text-destructive" : "text-muted-foreground"}`}>

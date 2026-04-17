@@ -435,5 +435,66 @@ IMPORTANT:
     }
   });
 
+  // ── Event-Driven Webhook Trigger ─────────────────────────────────────
+  // External services can POST to this endpoint to trigger a bot run
+  // e.g., "When a new email arrives" → Gmail webhook → triggers Email Triager bot
+  router.post("/:id/trigger", async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const bot = await storage.getBot(id);
+    if (!bot) return res.status(404).json({ error: "Bot not found" });
+
+    const { event, source, data } = req.body;
+    const triggerContext = `EVENT TRIGGER: ${event || "webhook"} from ${source || "external"}\n\nPayload:\n${JSON.stringify(data || {}, null, 2)}`;
+
+    try {
+      await storage.addBotLog(id, "trigger", `Event trigger: ${event || "webhook"} from ${source || "external"}`);
+
+      // Run bot with the trigger context as input
+      const userConnectors = await storage.getConnectorsByUser(bot.user_id);
+      const connectedServices = userConnectors
+        .filter((c: any) => c.status === "connected")
+        .map((c: any) => `- ${c.provider} (id: ${c.id})`);
+
+      const result = await modelRouter.chat({
+        model: bot.brain_model || "gpt-5.4-mini",
+        messages: [{ role: "user", content: triggerContext }],
+        systemPrompt: `${bot.brain_prompt}\n\nYou were triggered by an external event. Analyze the event data and take appropriate action.\n\nRULES:\n${(bot.rules || []).join("\n")}\n\nCONNECTED SERVICES:\n${connectedServices.join("\n") || "None"}\n\nRespond with a JSON object: {"action": "none"|"department"|"connector"|"notify", ...}`,
+      });
+
+      await storage.addBotLog(id, "result", `Trigger response: ${result.content.slice(0, 200)}`);
+      await storage.updateBot(id, {
+        totalRuns: (bot.total_runs || 0) + 1,
+        totalTokens: (bot.total_tokens || 0) + result.usage.totalTokens,
+        lastActiveAt: Date.now(),
+      });
+
+      broadcastToUser(bot.user_id, "bots", "triggered", { botId: id, name: bot.name, event });
+
+      res.json({ ok: true, response: result.content.slice(0, 500) });
+    } catch (err: any) {
+      await storage.addBotLog(id, "error", `Trigger failed: ${err.message}`);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get webhook URL for a bot (so users can configure external services)
+  router.get("/:id/webhook-url", async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const bot = await storage.getBot(id);
+    if (!bot) return res.status(404).json({ error: "Bot not found" });
+
+    const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+    res.json({
+      webhookUrl: `${baseUrl}/api/bots/${id}/trigger`,
+      botId: id,
+      botName: bot.name,
+      example: {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: { event: "new_email", source: "gmail", data: { subject: "...", from: "..." } },
+      },
+    });
+  });
+
   return router;
 }
