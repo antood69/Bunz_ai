@@ -1,5 +1,5 @@
 /**
- * Bun Bun — AI screen viewer with floating overlay chat.
+ * Bun Bun — AI screen viewer with floating, resizable, draggable overlay chat.
  *
  * Activated via Alt+J, or clicking the floating trigger button.
  * Uses Screen Capture API to let user pick which monitor/window to share.
@@ -9,7 +9,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Eye, Send, X, Monitor, Minimize2,
-  Loader2, Camera, MonitorPlay,
+  Loader2, Camera, MonitorPlay, GripHorizontal,
 } from "lucide-react";
 
 interface BunBunMessage {
@@ -17,6 +17,11 @@ interface BunBunMessage {
   content: string;
   screenshot?: string;
 }
+
+const MIN_W = 340;
+const MIN_H = 220;
+const DEFAULT_W = 560;
+const DEFAULT_H = 400;
 
 export default function JarvisMode() {
   const [active, setActive] = useState(false);
@@ -28,10 +33,37 @@ export default function JarvisMode() {
   const [screenName, setScreenName] = useState("");
   const [capturing, setCapturing] = useState(false);
 
+  // Position & size state (persisted to localStorage)
+  const [pos, setPos] = useState(() => {
+    try {
+      const saved = localStorage.getItem("bunbun-pos");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { x: -1, y: 12 }; // -1 = centered
+  });
+  const [size, setSize] = useState(() => {
+    try {
+      const saved = localStorage.getItem("bunbun-size");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { w: DEFAULT_W, h: DEFAULT_H };
+  });
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
+  const resizeRef = useRef<{ startX: number; startY: number; startW: number; startH: number; edge: string } | null>(null);
+
+  // Save position/size to localStorage
+  useEffect(() => {
+    try { localStorage.setItem("bunbun-pos", JSON.stringify(pos)); } catch {}
+  }, [pos]);
+  useEffect(() => {
+    try { localStorage.setItem("bunbun-size", JSON.stringify(size)); } catch {}
+  }, [size]);
 
   // Global keyboard shortcut: Alt+J to toggle
   useEffect(() => {
@@ -56,6 +88,73 @@ export default function JarvisMode() {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [messages]);
 
+  // ── Drag to move ────────────────────────────────────────────────────
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const panel = panelRef.current;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startPosX: rect.left, startPosY: rect.top };
+
+    function onMove(ev: MouseEvent) {
+      if (!dragRef.current) return;
+      const dx = ev.clientX - dragRef.current.startX;
+      const dy = ev.clientY - dragRef.current.startY;
+      const newX = Math.max(0, Math.min(window.innerWidth - 100, dragRef.current.startPosX + dx));
+      const newY = Math.max(0, Math.min(window.innerHeight - 50, dragRef.current.startPosY + dy));
+      setPos({ x: newX, y: newY });
+    }
+    function onUp() {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, []);
+
+  // ── Resize from edges/corners ───────────────────────────────────────
+  const onResizeStart = useCallback((edge: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeRef.current = { startX: e.clientX, startY: e.clientY, startW: size.w, startH: size.h, edge };
+
+    function onMove(ev: MouseEvent) {
+      if (!resizeRef.current) return;
+      const dx = ev.clientX - resizeRef.current.startX;
+      const dy = ev.clientY - resizeRef.current.startY;
+      const ed = resizeRef.current.edge;
+
+      let newW = resizeRef.current.startW;
+      let newH = resizeRef.current.startH;
+
+      if (ed.includes("e")) newW = Math.max(MIN_W, resizeRef.current.startW + dx);
+      if (ed.includes("w")) newW = Math.max(MIN_W, resizeRef.current.startW - dx);
+      if (ed.includes("s")) newH = Math.max(MIN_H, resizeRef.current.startH + dy);
+      if (ed.includes("n")) newH = Math.max(MIN_H, resizeRef.current.startH - dy);
+
+      // Cap to viewport
+      newW = Math.min(newW, window.innerWidth - 20);
+      newH = Math.min(newH, window.innerHeight - 20);
+
+      setSize({ w: newW, h: newH });
+
+      // If dragging west or north edges, shift position too
+      if (ed.includes("w")) {
+        const actualDx = resizeRef.current.startW - newW;
+        setPos((p: any) => ({ ...p, x: Math.max(0, (p.x === -1 ? (window.innerWidth - resizeRef.current!.startW) / 2 : p.x) + (dx > 0 ? dx : actualDx < 0 ? -actualDx : 0)) }));
+      }
+    }
+    function onUp() {
+      resizeRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [size]);
+
+  // ── Screen capture ──────────────────────────────────────────────────
   const startScreenCapture = async () => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -148,15 +247,23 @@ export default function JarvisMode() {
     setInput("");
   };
 
-  // Always render the hidden video/canvas + trigger button
-  // Only conditionally render the overlay panel
+  // Compute left position (centered if x === -1)
+  const leftPx = pos.x === -1 ? Math.max(0, (window.innerWidth - size.w) / 2) : pos.x;
+
+  // Resize handle style helper
+  const handle = (cursor: string, edge: string, styles: React.CSSProperties): React.ReactElement => (
+    <div
+      onMouseDown={onResizeStart(edge)}
+      style={{ position: "absolute", zIndex: 10, cursor, ...styles }}
+    />
+  );
+
   return (
     <>
-      {/* Hidden elements for screen capture — always mounted */}
       <video ref={videoRef} style={{ display: "none" }} muted playsInline />
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
-      {/* Floating trigger button — always visible in bottom-right */}
+      {/* Floating trigger button */}
       {!active && (
         <button
           onClick={() => setActive(true)}
@@ -172,7 +279,8 @@ export default function JarvisMode() {
         <div className="fixed top-3 right-3 z-[9999]">
           <button
             onClick={() => setMinimized(false)}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-blue-600/90 to-violet-600/90 backdrop-blur-xl text-white text-xs font-medium shadow-2xl hover:shadow-blue-500/20 transition-all border border-white/10"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-white text-xs font-medium shadow-2xl transition-all border border-white/10"
+            style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.9), rgba(124,58,237,0.9))", backdropFilter: "blur(12px)" }}
           >
             <Eye className="w-3.5 h-3.5" />
             Bun Bun
@@ -182,57 +290,101 @@ export default function JarvisMode() {
         </div>
       )}
 
-      {/* Full overlay panel */}
+      {/* Full overlay — resizable + draggable */}
       {active && !minimized && (
-        <div className="fixed top-3 left-1/2 z-[9999] w-[560px] max-w-[95vw]" style={{ transform: "translateX(-50%)" }}>
-          <div className="rounded-2xl border border-white/[0.08] shadow-2xl" style={{ background: "rgba(22,22,42,0.95)", backdropFilter: "blur(24px)" }}>
+        <div
+          ref={panelRef}
+          style={{
+            position: "fixed",
+            top: pos.y,
+            left: leftPx,
+            width: size.w,
+            height: size.h,
+            zIndex: 9999,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {/* Resize handles — edges */}
+          {handle("ew-resize", "e", { top: 0, right: -3, width: 6, bottom: 0 })}
+          {handle("ew-resize", "w", { top: 0, left: -3, width: 6, bottom: 0 })}
+          {handle("ns-resize", "s", { bottom: -3, left: 0, right: 0, height: 6 })}
+          {handle("ns-resize", "n", { top: -3, left: 0, right: 0, height: 6 })}
+          {/* Corners */}
+          {handle("nwse-resize", "se", { bottom: -4, right: -4, width: 12, height: 12, borderRadius: "50%" })}
+          {handle("nesw-resize", "sw", { bottom: -4, left: -4, width: 12, height: 12, borderRadius: "50%" })}
+          {handle("nesw-resize", "ne", { top: -4, right: -4, width: 12, height: 12, borderRadius: "50%" })}
+          {handle("nwse-resize", "nw", { top: -4, left: -4, width: 12, height: 12, borderRadius: "50%" })}
 
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              borderRadius: 16,
+              background: "rgba(22,22,42,0.95)",
+              backdropFilter: "blur(24px)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "0 25px 50px rgba(0,0,0,0.4)",
+              overflow: "hidden",
+            }}
+          >
+            {/* Header — drag handle */}
+            <div
+              onMouseDown={onDragStart}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "8px 16px",
+                borderBottom: "1px solid rgba(255,255,255,0.06)",
+                cursor: "grab",
+                userSelect: "none",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Eye className="w-3.5 h-3.5 text-white" />
                 </div>
                 <div>
-                  <span className="text-xs font-semibold text-white">Bun Bun</span>
-                  <span className="text-[10px] ml-2" style={{ color: "rgba(255,255,255,0.4)" }}>Alt+J</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "white" }}>Bun Bun</span>
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginLeft: 8 }}>Alt+J</span>
                 </div>
+                <GripHorizontal className="w-4 h-4" style={{ color: "rgba(255,255,255,0.15)", marginLeft: 4 }} />
               </div>
-              <div className="flex items-center gap-1">
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 {screenStream ? (
                   <button
                     onClick={stopScreenCapture}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium"
-                    style={{ background: "rgba(16,185,129,0.15)", color: "#34d399" }}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 8, background: "rgba(16,185,129,0.15)", color: "#34d399", fontSize: 10, fontWeight: 500, border: "none", cursor: "pointer" }}
                   >
                     <MonitorPlay className="w-3 h-3" />
-                    {screenName.length > 20 ? screenName.slice(0, 20) + "..." : screenName}
-                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#34d399" }} />
+                    {screenName.length > 15 ? screenName.slice(0, 15) + "..." : screenName}
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", animation: "pulse 2s infinite" }} />
                   </button>
                 ) : (
                   <button
                     onClick={startScreenCapture}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-colors"
-                    style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)" }}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 8, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)", fontSize: 10, fontWeight: 500, border: "none", cursor: "pointer" }}
                   >
                     <Monitor className="w-3 h-3" />
                     Share Screen
                   </button>
                 )}
-                <button onClick={() => setMinimized(true)} className="p-1.5 rounded-lg transition-colors" style={{ color: "rgba(255,255,255,0.4)" }}>
+                <button onClick={() => setMinimized(true)} style={{ padding: 6, borderRadius: 8, background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer" }}>
                   <Minimize2 className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={deactivate} className="p-1.5 rounded-lg transition-colors" style={{ color: "rgba(255,255,255,0.4)" }}>
+                <button onClick={deactivate} style={{ padding: 6, borderRadius: 8, background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer" }}>
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
-            {/* Messages */}
-            <div ref={chatRef} className="overflow-y-auto px-4 py-3 space-y-3" style={{ maxHeight: "300px" }}>
+            {/* Messages — fills remaining space */}
+            <div ref={chatRef} style={{ flex: 1, overflowY: "auto", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
               {messages.length === 0 && (
-                <div className="text-center py-4">
-                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
+                <div style={{ textAlign: "center", padding: "24px 0" }}>
+                  <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
                     {screenStream
                       ? "Screen connected. Ask me what you see."
                       : "Click \"Share Screen\" to let me see your monitor, then ask a question."}
@@ -240,43 +392,45 @@ export default function JarvisMode() {
                 </div>
               )}
               {messages.map((msg, i) => (
-                <div key={i} className="flex" style={{ justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+                <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
                   <div
-                    className="rounded-xl px-3 py-2 text-xs leading-relaxed"
                     style={{
                       maxWidth: "85%",
+                      borderRadius: 12,
+                      padding: "8px 12px",
+                      fontSize: 12,
+                      lineHeight: 1.6,
                       background: msg.role === "user" ? "rgba(59,130,246,0.2)" : "rgba(255,255,255,0.05)",
                       color: msg.role === "user" ? "#bfdbfe" : "rgba(255,255,255,0.8)",
                       border: msg.role === "user" ? "1px solid rgba(59,130,246,0.2)" : "1px solid rgba(255,255,255,0.06)",
                     }}
                   >
                     {msg.screenshot && (
-                      <img src={msg.screenshot} alt="Screenshot" className="w-full rounded-lg object-contain mb-2" style={{ maxHeight: "128px", border: "1px solid rgba(255,255,255,0.08)" }} />
+                      <img src={msg.screenshot} alt="Screenshot" style={{ width: "100%", maxHeight: 150, borderRadius: 8, objectFit: "contain", marginBottom: 8, border: "1px solid rgba(255,255,255,0.08)" }} />
                     )}
-                    <p style={{ whiteSpace: "pre-wrap" }}>{msg.content}</p>
+                    <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{msg.content}</p>
                   </div>
                 </div>
               ))}
               {loading && (
-                <div className="flex" style={{ justifyContent: "flex-start" }}>
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 12, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.06)" }}>
                     <Loader2 className="w-3 h-3 animate-spin" style={{ color: "#60a5fa" }} />
-                    <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.5)" }}>{capturing ? "Capturing screen..." : "Thinking..."}</span>
+                    <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)" }}>{capturing ? "Capturing screen..." : "Thinking..."}</span>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Input */}
-            <div className="flex items-center gap-2 px-3 py-2.5" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
               {screenStream && (
                 <button
                   onClick={() => {
                     const frame = captureFrame();
                     if (frame) setMessages(prev => [...prev, { role: "user", content: "[Screenshot captured]", screenshot: frame }]);
                   }}
-                  className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-                  style={{ color: "rgba(255,255,255,0.4)" }}
+                  style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.4)", background: "none", border: "none", cursor: "pointer" }}
                   title="Take screenshot"
                 >
                   <Camera className="w-4 h-4" />
@@ -288,19 +442,13 @@ export default function JarvisMode() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
                 placeholder={screenStream ? "What do you see on my screen?" : "Ask Bun Bun anything..."}
-                className="flex-1 rounded-lg px-3 py-2 text-xs outline-none"
-                style={{
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  color: "white",
-                }}
+                style={{ flex: 1, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "white", outline: "none" }}
                 disabled={loading}
               />
               <button
                 onClick={sendMessage}
                 disabled={!input.trim() || loading}
-                className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-white transition-colors"
-                style={{ background: input.trim() && !loading ? "rgba(59,130,246,0.8)" : "rgba(59,130,246,0.3)", opacity: !input.trim() || loading ? 0.3 : 1 }}
+                style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "white", background: input.trim() && !loading ? "rgba(59,130,246,0.8)" : "rgba(59,130,246,0.3)", border: "none", cursor: input.trim() && !loading ? "pointer" : "default", opacity: !input.trim() || loading ? 0.3 : 1 }}
               >
                 <Send className="w-3.5 h-3.5" />
               </button>
