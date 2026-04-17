@@ -143,6 +143,7 @@ export default function EditorPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiStatus, setAiStatus] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [pastedImages, setPastedImages] = useState<Array<{ id: string; name: string; url: string; thumbnailUrl: string | null; mimeType: string }>>([]);
   const editorRef = useRef<any>(null);
   const aiRef = useRef<HTMLDivElement>(null);
 
@@ -221,10 +222,41 @@ export default function EditorPage() {
     onError: (e: Error) => { toast({ title: "Failed", description: e.message, variant: "destructive" }); },
   });
 
+  const handleEditorPaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        const formData = new FormData();
+        formData.append("file", file, `screenshot-${Date.now()}.png`);
+        try {
+          const res = await fetch("/api/chat/upload", { method: "POST", body: formData });
+          if (res.ok) {
+            const data = await res.json();
+            setPastedImages(prev => [...prev, {
+              id: data.id,
+              name: data.originalName || "Screenshot",
+              url: data.url,
+              thumbnailUrl: data.thumbnailUrl,
+              mimeType: data.mimeType,
+            }]);
+          }
+        } catch {}
+        break;
+      }
+    }
+  };
+
   const sendAI = async () => {
-    if (!aiIn.trim()) return;
+    if (!aiIn.trim() && pastedImages.length === 0) return;
     const userMsg = aiIn.trim();
-    const msg = { role: "user" as const, content: userMsg };
+    const currentImages = [...pastedImages];
+    setPastedImages([]);
+    const msgContent = userMsg || (currentImages.length > 0 ? `[Attached ${currentImages.length} screenshot(s)]` : "");
+    const msg = { role: "user" as const, content: msgContent };
     const msgs = [...aiMsgs, msg];
     setAiMsgs(msgs); setAiIn(""); setAiLoading(true); setAiStatus("Thinking...");
     setTimeout(() => aiRef.current?.scrollTo(0, aiRef.current.scrollHeight), 50);
@@ -239,10 +271,11 @@ export default function EditorPage() {
       const res = await fetch("/api/boss/chat", {
         method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
         body: JSON.stringify({
-          message: userMsg + fileCtx + repoCtx,
+          message: (userMsg || "") + fileCtx + repoCtx,
           level: "medium",
           history: msgs.slice(-10),
           source: "editor",
+          attachments: currentImages.length > 0 ? currentImages.map(a => ({ id: a.id, url: a.url, mimeType: a.mimeType, name: a.name })) : undefined,
         }),
       });
       const data = await res.json();
@@ -528,11 +561,25 @@ export default function EditorPage() {
                 </div>
               )}
             </div>
+            {pastedImages.length > 0 && (
+              <div className="flex gap-2 px-3 pt-2 flex-wrap">
+                {pastedImages.map(img => (
+                  <div key={img.id} className="relative group">
+                    <img src={img.thumbnailUrl || img.url} alt={img.name} className="w-16 h-16 rounded-lg object-cover border border-border" />
+                    <button
+                      onClick={() => setPastedImages(prev => prev.filter(p => p.id !== img.id))}
+                      className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >x</button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex items-center gap-2 px-3 py-3 border-t border-border">
-              <Input placeholder="Ask anything — code, design, research..." value={aiIn} onChange={(e) => setAiIn(e.target.value)}
+              <Input placeholder="Ask anything... (Ctrl+V to paste screenshots)" value={aiIn} onChange={(e) => setAiIn(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAI(); } }}
+                onPaste={handleEditorPaste}
                 disabled={aiLoading} className="flex-1 h-9 text-sm" />
-              <Button size="sm" className="h-9 w-9 p-0" onClick={sendAI} disabled={aiLoading || !aiIn.trim()}>
+              <Button size="sm" className="h-9 w-9 p-0" onClick={sendAI} disabled={aiLoading || (!aiIn.trim() && pastedImages.length === 0)}>
                 <Send className="w-4 h-4" />
               </Button>
             </div>

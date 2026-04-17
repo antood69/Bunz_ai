@@ -1093,6 +1093,35 @@ export default function BossPage() {
     }
   };
 
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        const formData = new FormData();
+        formData.append("file", file, `screenshot-${Date.now()}.png`);
+        if (serverConvId) formData.append("conversationId", serverConvId);
+        try {
+          const res = await fetch("/api/chat/upload", { method: "POST", body: formData });
+          if (res.ok) {
+            const data = await res.json();
+            setAttachedFiles(prev => [...prev, {
+              id: data.id,
+              name: data.originalName || "Screenshot",
+              url: data.url,
+              thumbnailUrl: data.thumbnailUrl,
+              mimeType: data.mimeType,
+            }]);
+          }
+        } catch {}
+        break;
+      }
+    }
+  };
+
   const isEmpty = messages.length === 0;
   const charCount = input.length;
 
@@ -1260,7 +1289,8 @@ export default function BossPage() {
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask me anything..."
+                onPaste={handlePaste}
+                placeholder="Ask me anything... (Ctrl+V to paste screenshots)"
                 rows={1}
                 className="flex-1 bg-transparent text-[15px] text-foreground placeholder:text-muted-foreground resize-none outline-none leading-6 min-h-[24px] max-h-[144px] py-1.5"
                 disabled={isLoading}
