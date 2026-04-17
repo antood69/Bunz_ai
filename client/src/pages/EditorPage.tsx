@@ -81,9 +81,10 @@ export default function EditorPage() {
   const [content, setContent] = useState("");
   const [origContent, setOrigContent] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
-  const [aiMsgs, setAiMsgs] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [aiMsgs, setAiMsgs] = useState<Array<{ role: "user" | "assistant"; content: string; imageUrl?: string; isDelegating?: boolean }>>([]);
   const [aiIn, setAiIn] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiStatus, setAiStatus] = useState("");
   const editorRef = useRef<any>(null);
   const aiRef = useRef<HTMLDivElement>(null);
 
@@ -164,22 +165,103 @@ export default function EditorPage() {
 
   const sendAI = async () => {
     if (!aiIn.trim()) return;
-    const msg = { role: "user" as const, content: aiIn.trim() };
+    const userMsg = aiIn.trim();
+    const msg = { role: "user" as const, content: userMsg };
     const msgs = [...aiMsgs, msg];
-    setAiMsgs(msgs); setAiIn(""); setAiLoading(true);
+    setAiMsgs(msgs); setAiIn(""); setAiLoading(true); setAiStatus("Thinking...");
     setTimeout(() => aiRef.current?.scrollTo(0, aiRef.current.scrollHeight), 50);
     try {
+      // Build context from editor
       const sel = editorRef.current?.getModel()?.getValueInRange(editorRef.current.getSelection()) || "";
       const ctx = sel || content.slice(0, 3000);
-      const fileCtx = selFile ? `\nFile: ${selFile}\n\`\`\`\n${ctx}\n\`\`\`` : "";
+      const fileCtx = selFile ? `\nCurrently editing: ${selFile}\n\`\`\`\n${ctx}\n\`\`\`` : "";
+      const repoCtx = selectedRepo ? `\nGitHub repo: ${selectedRepo}` : "";
+
+      // Send to Boss — it will dispatch to departments as needed
       const res = await fetch("/api/boss/chat", {
         method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-        body: JSON.stringify({ message: aiIn.trim() + fileCtx, level: "medium", history: msgs.slice(-10) }),
+        body: JSON.stringify({
+          message: userMsg + fileCtx + repoCtx,
+          level: "medium",
+          history: msgs.slice(-10),
+        }),
       });
       const data = await res.json();
-      setAiMsgs(p => [...p, { role: "assistant", content: data.reply || "No response" }]);
-    } catch { setAiMsgs(p => [...p, { role: "assistant", content: "Error occurred." }]); }
-    finally { setAiLoading(false); setTimeout(() => aiRef.current?.scrollTo(0, aiRef.current.scrollHeight), 50); }
+
+      if (data.isDelegating && data.jobId) {
+        // Stream department results via SSE
+        setAiStatus("Departments working...");
+        setAiMsgs(p => [...p, { role: "assistant", content: data.reply || "Dispatching to departments...", isDelegating: true }]);
+
+        const es = new EventSource(`/api/agent/stream/${data.jobId}`);
+        let finalContent = "";
+        let imageUrl = "";
+
+        es.addEventListener("token", (e) => {
+          const d = JSON.parse(e.data);
+          if (d.isSynthesis) {
+            finalContent += d.text;
+            setAiMsgs(p => {
+              const updated = [...p];
+              const last = updated[updated.length - 1];
+              if (last?.isDelegating) {
+                updated[updated.length - 1] = { ...last, content: finalContent };
+              }
+              return updated;
+            });
+            setTimeout(() => aiRef.current?.scrollTo(0, aiRef.current.scrollHeight), 50);
+          }
+        });
+
+        es.addEventListener("agent_image", (e) => {
+          const d = JSON.parse(e.data);
+          imageUrl = d.imageUrl;
+          setAiMsgs(p => {
+            const updated = [...p];
+            const last = updated[updated.length - 1];
+            if (last?.isDelegating) {
+              updated[updated.length - 1] = { ...last, imageUrl };
+            }
+            return updated;
+          });
+        });
+
+        es.addEventListener("progress", (e) => {
+          const d = JSON.parse(e.data);
+          setAiStatus(`${d.workerType || "Working"}${d.subAgent ? ` — ${d.subAgent}` : ""}...`);
+        });
+
+        es.addEventListener("step_complete", (e) => {
+          const d = JSON.parse(e.data);
+          setAiStatus(`${d.workerType} complete`);
+        });
+
+        es.addEventListener("complete", () => {
+          es.close();
+          setAiLoading(false);
+          setAiStatus("");
+          // Make sure we have the final content
+          if (finalContent) {
+            setAiMsgs(p => {
+              const updated = [...p];
+              const last = updated[updated.length - 1];
+              if (last?.isDelegating) {
+                updated[updated.length - 1] = { ...last, content: finalContent, imageUrl: imageUrl || last.imageUrl, isDelegating: false };
+              }
+              return updated;
+            });
+          }
+          setTimeout(() => aiRef.current?.scrollTo(0, aiRef.current.scrollHeight), 50);
+        });
+
+        es.addEventListener("error", () => { es.close(); setAiLoading(false); setAiStatus(""); });
+      } else {
+        // Direct response
+        setAiMsgs(p => [...p, { role: "assistant", content: data.reply || "No response", imageUrl: data.imageUrl }]);
+        setAiLoading(false); setAiStatus("");
+      }
+    } catch { setAiMsgs(p => [...p, { role: "assistant", content: "Error occurred." }]); setAiLoading(false); setAiStatus(""); }
+    finally { setTimeout(() => aiRef.current?.scrollTo(0, aiRef.current.scrollHeight), 50); }
   };
 
   const dirty = content !== origContent;
@@ -296,14 +378,86 @@ export default function EditorPage() {
               </div>
             </div>
             <div ref={aiRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
-              {aiMsgs.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Ask about your code. Select text in the editor for targeted help.</p>}
+              {aiMsgs.length === 0 && (
+                <div className="text-center py-6">
+                  <Bot className="w-8 h-8 mx-auto mb-2 opacity-20 text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground">Ask anything — I can research, write, code, and generate images.</p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-1">Select code in the editor for targeted help.</p>
+                  <div className="flex flex-wrap gap-1 justify-center mt-3">
+                    {["Design a UI for this", "Write tests", "Explain this code", "Create a logo"].map(s => (
+                      <button key={s} onClick={() => setAiIn(s)} className="text-[9px] px-2 py-1 rounded-full border border-white/[0.06] text-muted-foreground hover:text-foreground hover:border-primary/50">{s}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {aiMsgs.map((m, i) => (
-                <div key={i} className={`text-sm px-3 py-2.5 rounded-xl whitespace-pre-wrap ${m.role === "user" ? "bg-primary/12 ml-6" : "bg-secondary mr-2"}`}>{m.content}</div>
+                <div key={i} className={`text-sm rounded-xl ${m.role === "user" ? "bg-primary/12 ml-6 px-3 py-2.5" : "mr-1"}`}>
+                  {m.role === "user" ? (
+                    <span className="whitespace-pre-wrap">{m.content}</span>
+                  ) : (
+                    <div className="space-y-2">
+                      {/* Render artifact tags inline */}
+                      {(() => {
+                        let text = m.content;
+                        const artifacts: Array<{ type: string; title: string; content: string }> = [];
+                        text = text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+                        text = text.replace(/<artifact\s+type=["']([^"']+)["'](?:\s+title=["']([^"']*)["'])?\s*>([\s\S]*?)(?:<\/artifact>|$)/g,
+                          (_, type, title, content) => { artifacts.push({ type, title: title || "Preview", content: content.trim() }); return `\n[ARTIFACT_${artifacts.length - 1}]\n`; });
+
+                        return text.split(/\[ARTIFACT_(\d+)\]/).map((part, j) => {
+                          if (j % 2 === 1) {
+                            const art = artifacts[parseInt(part)];
+                            if (!art) return null;
+                            const isHtml = art.type === "html" || art.type === "svg";
+                            const src = isHtml ? `data:text/html;charset=utf-8,${encodeURIComponent(art.content.includes("<!") ? art.content : `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;box-sizing:border-box}body{font-family:system-ui;background:#0a0a12;color:#e5e7eb;padding:12px}</style></head><body>${art.content}</body></html>`)}` : undefined;
+                            return (
+                              <div key={j} className="rounded-xl border border-white/[0.08] overflow-hidden my-2">
+                                <div className="flex items-center justify-between px-2.5 py-1.5 bg-white/[0.02] border-b border-white/[0.04]">
+                                  <span className="text-[9px] font-semibold text-foreground">{art.title}</span>
+                                  <div className="flex gap-1">
+                                    <button className="text-[8px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-white/[0.06]"
+                                      onClick={() => navigator.clipboard.writeText(art.content)}>Copy</button>
+                                    {isHtml && <button className="text-[8px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-white/[0.06]"
+                                      onClick={() => { const w = window.open("", "_blank"); if (w) { w.document.write(art.content); w.document.close(); } }}>Open</button>}
+                                  </div>
+                                </div>
+                                {isHtml ? (
+                                  <iframe src={src} className="w-full border-0 bg-[#0a0a12]" style={{ height: "280px" }}
+                                    sandbox="allow-scripts allow-same-origin" />
+                                ) : (
+                                  <pre className="text-[10px] text-foreground/80 p-2.5 max-h-48 overflow-auto whitespace-pre-wrap">{art.content}</pre>
+                                )}
+                              </div>
+                            );
+                          }
+                          return part ? <div key={j} className="bg-secondary/80 rounded-xl px-3 py-2.5 whitespace-pre-wrap text-[13px] leading-relaxed">{part}</div> : null;
+                        });
+                      })()}
+                      {/* Image from Artist department */}
+                      {m.imageUrl && (
+                        <div className="rounded-xl overflow-hidden border border-white/[0.08]">
+                          <img src={m.imageUrl} alt="Generated" className="w-full max-h-64 object-contain bg-black/20" />
+                          <div className="flex gap-1 p-1.5 bg-white/[0.02]">
+                            <button className="text-[8px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-white/[0.06]"
+                              onClick={() => window.open(m.imageUrl, "_blank")}>Full Size</button>
+                            <button className="text-[8px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-white/[0.06]"
+                              onClick={() => setAiIn(`Build this UI design in code using the image above as reference`)}>Use as Reference</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               ))}
-              {aiLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground px-3"><Loader2 className="w-4 h-4 animate-spin" /> Thinking...</div>}
+              {aiLoading && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground px-3 py-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>{aiStatus || "Thinking..."}</span>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2 px-3 py-3 border-t border-border">
-              <Input placeholder="Ask about this code..." value={aiIn} onChange={(e) => setAiIn(e.target.value)}
+              <Input placeholder="Ask anything — code, design, research..." value={aiIn} onChange={(e) => setAiIn(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAI(); } }}
                 disabled={aiLoading} className="flex-1 h-9 text-sm" />
               <Button size="sm" className="h-9 w-9 p-0" onClick={sendAI} disabled={aiLoading || !aiIn.trim()}>
