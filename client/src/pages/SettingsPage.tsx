@@ -590,99 +590,11 @@ function AppearanceTab() {
         />
       </section>
 
-      {/* Glass Effect */}
-      <section className="bg-card border border-border rounded-2xl p-6">
-        <SectionHeader
-          icon={Layers}
-          title="Glass Effect"
-          description="Glassmorphism applied to the sidebar and top bar when a wallpaper is active"
-        />
-
-        <div className="grid grid-cols-2 gap-6 mb-6">
-          <StyledSlider
-            label="Blur intensity"
-            min={0}
-            max={30}
-            step={1}
-            value={glassBlur}
-            onChange={(v) => setCustomization({ glassBlur: v })}
-            format={(v) => `${v}px`}
-          />
-          <StyledSlider
-            label="Panel opacity"
-            min={0}
-            max={0.3}
-            step={0.01}
-            value={glassOpacity}
-            onChange={(v) => setCustomization({ glassOpacity: v })}
-            format={(v) => `${Math.round(v * 100)}%`}
-          />
-        </div>
-
-        {/* Glass preview panel */}
-        <div className="relative rounded-2xl overflow-hidden h-36 border border-border">
-          {/* Background — always show something visible */}
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{
-              backgroundImage: wallpaperUrl
-                ? `url(${wallpaperUrl})`
-                : "linear-gradient(135deg, #7c3aed 0%, #3b82f6 30%, #06b6d4 60%, #10b981 100%)",
-            }}
-          />
-          {/* Tint overlay */}
-          <div
-            className="absolute inset-0"
-            style={{ background: `rgba(0,0,0,${wallpaperTint})` }}
-          />
-          {/* Glass panel */}
-          <div
-            className="absolute inset-4 rounded-xl border border-white/20 flex items-center justify-center shadow-xl"
-            style={{
-              backdropFilter: `blur(${glassBlur}px)`,
-              WebkitBackdropFilter: `blur(${glassBlur}px)`,
-              background: `rgba(255,255,255,${Math.max(glassOpacity, 0.03)})`,
-            }}
-          >
-            <div className="text-center">
-              <span className="text-sm font-medium text-white/90">Glass panel preview</span>
-              <p className="text-[10px] text-white/50 mt-1">Blur: {glassBlur}px · Opacity: {Math.round(glassOpacity * 100)}%</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Layout */}
       <section className="bg-card border border-border rounded-2xl p-6">
-        <SectionHeader icon={Layout} title="Layout" description="Configure sidebar position and density" />
+        <SectionHeader icon={Layout} title="Layout" description="Adjust display density" />
 
         <div className="space-y-4">
-          {/* Sidebar position */}
-          <div>
-            <p className="text-xs text-muted-foreground mb-2">Sidebar position</p>
-            <div className="flex gap-2">
-              {(["left", "right"] as const).map((pos) => (
-                <button
-                  key={pos}
-                  onClick={() => setCustomization({ sidebarPosition: pos })}
-                  className={`flex-1 py-2 px-4 rounded-xl border text-sm font-medium capitalize transition-all ${
-                    sidebarPosition === pos
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                  }`}
-                >
-                  {pos === sidebarPosition && <Check className="w-3 h-3 inline mr-1.5" />}
-                  {pos}
-                </button>
-              ))}
-            </div>
-            {sidebarPosition === "right" && (
-              <p className="text-[11px] text-muted-foreground mt-2 italic">
-                Note: Right sidebar layout requires a page refresh to fully apply.
-              </p>
-            )}
-          </div>
-
           {/* Compact mode */}
           <div className="flex items-center justify-between py-3 border-t border-border">
             <div>
