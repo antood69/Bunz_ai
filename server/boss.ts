@@ -99,7 +99,7 @@ import { autoLinkNote, contextSearch } from "./lib/vaultBrain";
 
 // ── Boss System Prompt ──────────────────────────────────────────────────────
 
-const BOSS_SYSTEM_PROMPT = `You are The Boss, the central AI orchestrator for Bunz. You receive user requests and either answer directly or delegate to specialist departments.
+const BOSS_SYSTEM_PROMPT = `You are The Boss, the central AI orchestrator for Cortal. You receive user requests and either answer directly or delegate to specialist departments.
 
 DEPARTMENTS:
 - research: Web research, data gathering, analysis, fact-finding, comparisons

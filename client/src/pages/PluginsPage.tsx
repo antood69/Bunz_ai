@@ -290,7 +290,7 @@ export default function PluginsPage() {
                             {isActive ? "Active" : "Disabled"}
                           </Badge>
                         </div>
-                        <span className="text-[9px] text-muted-foreground">{plugin.author || "Bunz"}</span>
+                        <span className="text-[9px] text-muted-foreground">{plugin.author || "Cortal"}</span>
                       </div>
                       <div className="flex gap-1.5">
                         <button onClick={() => togglePlugin(plugin.id)} className="p-1.5 rounded-lg hover:bg-white/[0.04]">

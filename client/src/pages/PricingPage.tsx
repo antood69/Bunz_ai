@@ -106,7 +106,7 @@ const tiers = [
 const faqs = [
   {
     q: "What are tokens?",
-    a: "Tokens are the units that power AI calls in Bunz. Each message sent to an AI model consumes tokens based on the length of input and output. Your plan includes a monthly token allowance, and you can buy additional token packs anytime.",
+    a: "Tokens are the units that power AI calls in Cortal. Each message sent to an AI model consumes tokens based on the length of input and output. Your plan includes a monthly token allowance, and you can buy additional token packs anytime.",
   },
   {
     q: "Can I switch plans at any time?",
@@ -122,7 +122,7 @@ const faqs = [
   },
   {
     q: "What's white-label?",
-    a: "Agency plan lets you remove Bunz branding and replace it with your own logo and colors — great for client deployments.",
+    a: "Agency plan lets you remove Cortal branding and replace it with your own logo and colors — great for client deployments.",
   },
 ];
 
@@ -197,7 +197,7 @@ export default function PricingPage() {
 
       {checkoutSuccess && (
         <div className="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-500 text-center">
-          Subscription activated! Welcome to Bunz — let's get it.
+          Subscription activated! Welcome to Cortal — let's get it.
         </div>
       )}
       {checkoutCanceled && (

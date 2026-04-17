@@ -1,7 +1,7 @@
 {
-  "name": "bunz",
-  "version": "1.0.0",
-  "description": "Bunz — AI Agent Orchestrator Platform",
+  "name": "cortal",
+  "version": "2.0.0",
+  "description": "Cortal — Your AI is Live",
   "license": "MIT",
   "type": "module",
   "scripts": {

@@ -42,7 +42,8 @@
       "Bash(taskkill //F //IM node.exe)",
       "Bash(ls \"c:/Users/reede/OneDrive/Documents/bunz-1/\"*.db)",
       "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"reederb46@gmail.com\",\"password\":\"0192837465Br!\"}')",
-      "Bash(grep \"server/storage.ts\\\\|server\\\\\\\\storage.ts\")"
+      "Bash(grep \"server/storage.ts\\\\|server\\\\\\\\storage.ts\")",
+      "WebFetch(domain:nexus-os-production-50a1.up.railway.app)"
     ]
   }
 }

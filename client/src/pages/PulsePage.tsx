@@ -1,5 +1,5 @@
 /**
- * The Pulse — the soul of Bunz.
+ * The Pulse — the soul of Cortal.
  *
  * Not a dashboard of stats. A living conversation with your AI.
  * Shows what happened while you were away, surfaces connections,
@@ -141,7 +141,7 @@ export default function PulsePage() {
       <div className="relative mb-6">
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center shadow-lg shadow-blue-500/20"
           style={{ animation: "breathe 4s ease-in-out infinite" }}>
-          <span className="text-white font-bold text-2xl">B</span>
+          <span className="text-white font-bold text-2xl">C</span>
         </div>
         <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-400 border-2 border-background"
           style={{ animation: "pulse 2s ease-in-out infinite" }} />
@@ -227,7 +227,7 @@ export default function PulsePage() {
       ) : (
         <div className="text-center py-8">
           <p className="text-sm text-muted-foreground">
-            Your Pulse will fill up as you use Bunz.
+            Your Pulse will fill up as you use Cortal.
           </p>
           <p className="text-xs text-muted-foreground/60 mt-1">
             Start a conversation, create a workflow, or deploy a bot.

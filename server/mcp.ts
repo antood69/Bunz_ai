@@ -1,10 +1,10 @@
 /**
  * MCP (Model Context Protocol) Integration.
  *
- * Bunz acts as BOTH:
- * 1. MCP Server — exposes Bunz departments/tools so external AI clients
+ * Cortal acts as BOTH:
+ * 1. MCP Server — exposes Cortal departments/tools so external AI clients
  *    (Claude, GPT, etc.) can call them
- * 2. MCP Client — connects to external MCP servers so Bunz agents can
+ * 2. MCP Client — connects to external MCP servers so Cortal agents can
  *    use any MCP-compatible tool
  *
  * Server endpoints follow the MCP spec: tool discovery + tool execution.
@@ -22,7 +22,7 @@ import { recallMemories } from "./memory";
 
 const BUNZ_TOOLS = [
   {
-    name: "bunz_research",
+    name: "cortal_research",
     description: "Deep research and analysis on any topic. Returns comprehensive findings with sources.",
     inputSchema: {
       type: "object",
@@ -34,7 +34,7 @@ const BUNZ_TOOLS = [
     },
   },
   {
-    name: "bunz_write",
+    name: "cortal_write",
     description: "Professional content writing — articles, emails, copy, documentation, scripts.",
     inputSchema: {
       type: "object",
@@ -46,7 +46,7 @@ const BUNZ_TOOLS = [
     },
   },
   {
-    name: "bunz_code",
+    name: "cortal_code",
     description: "Code generation, review, debugging, and refactoring across all languages.",
     inputSchema: {
       type: "object",
@@ -58,7 +58,7 @@ const BUNZ_TOOLS = [
     },
   },
   {
-    name: "bunz_art",
+    name: "cortal_art",
     description: "AI image generation — create illustrations, logos, photos, designs.",
     inputSchema: {
       type: "object",
@@ -70,7 +70,7 @@ const BUNZ_TOOLS = [
     },
   },
   {
-    name: "bunz_memory_recall",
+    name: "cortal_memory_recall",
     description: "Search the agent's memory for relevant past experiences and knowledge.",
     inputSchema: {
       type: "object",
@@ -181,10 +181,10 @@ export function createMcpRouter() {
       let result: any;
 
       const deptMap: Record<string, string> = {
-        bunz_research: "research",
-        bunz_write: "writer",
-        bunz_code: "coder",
-        bunz_art: "artist",
+        cortal_research: "research",
+        cortal_write: "writer",
+        cortal_code: "coder",
+        cortal_art: "artist",
       };
 
       if (deptMap[toolName]) {
@@ -203,7 +203,7 @@ export function createMcpRouter() {
         if (deptResult.imageUrl) {
           result.content.push({ type: "image", data: deptResult.imageUrl, mimeType: "image/png" });
         }
-      } else if (toolName === "bunz_memory_recall") {
+      } else if (toolName === "cortal_memory_recall") {
         const memories = await recallMemories(userId, args.query);
         result = {
           content: [{ type: "text", text: JSON.stringify(memories, null, 2) }],
@@ -301,9 +301,9 @@ export function createMcpRouter() {
   router.get("/tools", async (req: Request, res: Response) => {
     const userId = req.user?.id || 1;
 
-    // Bunz native tools
+    // Cortal native tools
     const allTools: any[] = BUNZ_TOOLS.map(t => ({
-      ...t, source: "bunz", serverId: null,
+      ...t, source: "cortal", serverId: null,
     }));
 
     // External MCP server tools

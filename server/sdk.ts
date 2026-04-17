@@ -1,7 +1,7 @@
 /**
- * Bunz SDK API — external programmatic access to Bunz features.
+ * Cortal SDK API — external programmatic access to Cortal features.
  *
- * Developers authenticate with API keys (bunz_sk_...) and can:
+ * Developers authenticate with API keys (cortal_sk_...) and can:
  * - Trigger workflows/pipelines
  * - Run department tasks (research, write, code, art)
  * - Execute bot cycles
@@ -22,7 +22,7 @@ import { modelRouter } from "./ai";
 // ── API Key Management ───────────────────────────────────────────────────
 
 function generateApiKey(): string {
-  return `bunz_sk_${crypto.randomBytes(32).toString("hex")}`;
+  return `cortal_sk_${crypto.randomBytes(32).toString("hex")}`;
 }
 
 function hashKey(key: string): string {
@@ -32,8 +32,8 @@ function hashKey(key: string): string {
 /** Authenticate SDK requests via API key */
 async function sdkAuthMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer bunz_sk_")) {
-    return res.status(401).json({ error: "Invalid API key. Use: Authorization: Bearer bunz_sk_..." });
+  if (!authHeader?.startsWith("Bearer cortal_sk_")) {
+    return res.status(401).json({ error: "Invalid API key. Use: Authorization: Bearer cortal_sk_..." });
   }
 
   const key = authHeader.slice(7);

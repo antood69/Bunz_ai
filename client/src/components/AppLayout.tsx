@@ -41,7 +41,7 @@ function BunzLogo() {
   return (
     <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-500/20"
       style={{ animation: "breathe 4s ease-in-out infinite" }}>
-      <span className="text-white font-bold text-sm">B</span>
+      <span className="text-white font-bold text-sm">C</span>
       <style>{`@keyframes breathe { 0%,100% { transform: scale(1); box-shadow: 0 4px 12px rgba(59,130,246,0.15); } 50% { transform: scale(1.06); box-shadow: 0 6px 20px rgba(59,130,246,0.25); } }`}</style>
     </div>
   );
@@ -121,7 +121,7 @@ export default function AppLayout({ children, allowPublic = false }: { children:
           <div className={`flex items-center gap-3 ${sidebarCollapsed ? "justify-center" : ""}`}>
             <BunzLogo />
             {!sidebarCollapsed && (
-              <span className="font-semibold text-[15px] tracking-tight text-foreground">Bunz</span>
+              <span className="font-semibold text-[15px] tracking-tight text-foreground">Cortal</span>
             )}
           </div>
           {!sidebarCollapsed && (
@@ -303,7 +303,7 @@ export default function AppLayout({ children, allowPublic = false }: { children:
             <div className="w-8" />
             <div className="flex items-center gap-2.5">
               <BunzLogo />
-              <span className="font-semibold text-[15px] tracking-tight text-foreground">Bunz</span>
+              <span className="font-semibold text-[15px] tracking-tight text-foreground">Cortal</span>
             </div>
             <div className="flex items-center">
               <NotificationBell />

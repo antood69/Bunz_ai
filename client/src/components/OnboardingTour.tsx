@@ -11,7 +11,7 @@ interface TourStep {
 
 const TOUR_STEPS: TourStep[] = [
   {
-    title: "Welcome to Bunz!",
+    title: "Welcome to Cortal!",
     description: "Your AI-powered automation platform. Build workflows, deploy bots, connect services, and make money with AI. Let's show you around.",
     targetSelector: "[data-testid='nav-dashboard']",
     icon: Sparkles,

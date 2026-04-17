@@ -212,7 +212,7 @@ export default function EditorPage() {
       if (!selFile) throw new Error("No file");
       if (mode === "github") {
         const [o, r] = selectedRepo.split("/");
-        await apiRequest("PUT", `/api/github/repos/${o}/${r}/file/${selFile}`, { content, message: `Update ${selFile} via Bunz` });
+        await apiRequest("PUT", `/api/github/repos/${o}/${r}/file/${selFile}`, { content, message: `Update ${selFile} via Cortal` });
       } else {
         const full = localRoot.replace(/\\/g, "/") + "/" + selFile;
         await apiRequest("PUT", "/api/local/file", { path: full, content });

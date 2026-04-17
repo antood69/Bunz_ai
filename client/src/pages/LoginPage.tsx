@@ -137,9 +137,9 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center mx-auto mb-4">
-            <span className="text-white font-bold text-2xl">B</span>
+            <span className="text-white font-bold text-2xl">C</span>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Welcome to Bunz</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Welcome to Cortal</h1>
           <p className="text-[15px] text-muted-foreground mt-1.5">Build cool stuff. Ship faster.</p>
         </div>
 

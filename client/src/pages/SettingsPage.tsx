@@ -1049,7 +1049,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string } = {
       {/* Page Header */}
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your Bunz preferences and account</p>
+        <p className="text-sm text-muted-foreground mt-1">Manage your Cortal preferences and account</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
