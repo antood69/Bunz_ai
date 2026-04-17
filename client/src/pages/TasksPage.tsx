@@ -53,12 +53,15 @@ function formatTokens(n: number | null): string {
   return String(n);
 }
 
-function timeAgo(ts: number): string {
-  const diff = Date.now() - ts;
+function timeAgo(ts: any): string {
+  if (!ts) return "—";
+  const n = typeof ts === "string" ? new Date(ts).getTime() : Number(ts);
+  if (isNaN(n)) return "—";
+  const diff = Date.now() - n;
   if (diff < 60000) return "just now";
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  return new Date(ts).toLocaleDateString();
+  return new Date(n).toLocaleDateString();
 }
 
 function parseTaskDescription(input: string | null): string {
@@ -154,10 +157,10 @@ function JobRow({ job, onStop, onDelete }: { job: AgentJob; onStop: (id: string)
 
           {/* Meta */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div><span className="text-muted-foreground">Job ID:</span> <span className="text-foreground font-mono">{job.id.slice(0, 8)}</span></div>
-            <div><span className="text-muted-foreground">Conv:</span> <span className="text-foreground font-mono">{job.conversationId.slice(0, 8)}</span></div>
-            <div><span className="text-muted-foreground">Created:</span> <span className="text-foreground">{new Date(job.createdAt).toLocaleString()}</span></div>
-            {job.completedAt && <div><span className="text-muted-foreground">Completed:</span> <span className="text-foreground">{new Date(job.completedAt).toLocaleString()}</span></div>}
+            <div><span className="text-muted-foreground">Job ID:</span> <span className="text-foreground font-mono">{job.id?.slice(0, 8) || "—"}</span></div>
+            <div><span className="text-muted-foreground">Conv:</span> <span className="text-foreground font-mono">{job.conversationId?.slice(0, 8) || "—"}</span></div>
+            <div><span className="text-muted-foreground">Created:</span> <span className="text-foreground">{job.createdAt ? new Date(typeof job.createdAt === "string" ? job.createdAt : Number(job.createdAt)).toLocaleString() : "—"}</span></div>
+            {job.completedAt && <div><span className="text-muted-foreground">Completed:</span> <span className="text-foreground">{new Date(typeof job.completedAt === "string" ? job.completedAt : Number(job.completedAt)).toLocaleString()}</span></div>}
           </div>
 
           {/* Output */}
