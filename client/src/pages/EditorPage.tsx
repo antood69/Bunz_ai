@@ -187,6 +187,11 @@ export default function EditorPage() {
         }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) {
+        setAiMsgs(p => [...p, { role: "assistant", content: `Error: ${data.error || `HTTP ${res.status}`}` }]);
+        setAiLoading(false); setAiStatus("");
+        return;
+      }
 
       if (data.isDelegating && data.jobId) {
         // Stream department results via SSE
@@ -260,7 +265,11 @@ export default function EditorPage() {
         setAiMsgs(p => [...p, { role: "assistant", content: data.reply || "No response", imageUrl: data.imageUrl }]);
         setAiLoading(false); setAiStatus("");
       }
-    } catch { setAiMsgs(p => [...p, { role: "assistant", content: "Error occurred." }]); setAiLoading(false); setAiStatus(""); }
+    } catch (e: any) {
+      const errMsg = e?.message || "Unknown error";
+      setAiMsgs(p => [...p, { role: "assistant", content: `Error: ${errMsg}. Check that your AI API keys are configured and you have tokens remaining.` }]);
+      setAiLoading(false); setAiStatus("");
+    }
     finally { setTimeout(() => aiRef.current?.scrollTo(0, aiRef.current.scrollHeight), 50); }
   };
 
