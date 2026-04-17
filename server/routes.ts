@@ -492,7 +492,13 @@ export async function registerRoutes(
     const source = req.query.source as string | undefined;
     let convs = await storage.getConversationsByUser(userId);
     if (source) {
-      convs = convs.filter((c: any) => (c.source || "boss") === source);
+      // "boss" matches null/undefined/boss (all legacy conversations)
+      // "editor" only matches explicitly tagged editor conversations
+      if (source === "boss") {
+        convs = convs.filter((c: any) => !c.source || c.source === "boss");
+      } else {
+        convs = convs.filter((c: any) => c.source === source);
+      }
     }
     res.json(convs);
   });

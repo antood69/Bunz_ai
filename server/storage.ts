@@ -3304,9 +3304,10 @@ export class DatabaseStorage implements IStorage {
 
   async createConversation(data: InsertConversation & { source?: string }): Promise<Conversation> {
     const conv = db.insert(conversations).values(data).returning().get();
-    if (data.source && data.source !== "boss") {
-      await dbRun("UPDATE conversations SET source = ? WHERE id = ?", data.source, data.id);
-    }
+    // Always set source (column added via ALTER, not in drizzle schema)
+    try {
+      await dbRun("UPDATE conversations SET source = ? WHERE id = ?", data.source || "boss", (data as any).id || conv.id);
+    } catch {}
     return conv;
   }
 
