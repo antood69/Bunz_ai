@@ -371,20 +371,23 @@ export default function BotsPage() {
       )}
 
       {/* Templates — show when empty */}
-      {bots.length === 0 && !isLoading && (
+      {!isLoading && (
         <div className="mb-4">
-          <div className="glass-card rounded-2xl p-5 mb-3">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Get Started with Templates</h2>
-                <p className="text-[10px] text-muted-foreground">Pick a pre-built bot or create your own from scratch</p>
+          {bots.length === 0 && (
+            <div className="glass-card rounded-2xl p-5 mb-3">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Get Started with Templates</h2>
+                  <p className="text-[10px] text-muted-foreground">Pick a pre-built bot or create your own from scratch</p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Templates</h3>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mb-4">
             {BOT_TEMPLATES.map((tpl) => {
               const Icon = tpl.icon;
@@ -410,10 +413,6 @@ export default function BotsPage() {
             })}
           </div>
 
-          <div className="text-center glass-card rounded-2xl py-8">
-            <Bot className="w-8 h-8 mx-auto mb-2 opacity-20 text-muted-foreground" />
-            <p className="text-xs text-muted-foreground">Pick a template above or create from scratch</p>
-          </div>
         </div>
       )}
 
