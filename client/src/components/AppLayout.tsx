@@ -284,7 +284,7 @@ export default function AppLayout({ children, allowPublic = false }: { children:
         {/* Desktop top bar */}
         {!isMobile && (
           <div
-            className={`h-12 flex items-center justify-end px-5 gap-3 shrink-0 ${
+            className={`h-12 flex items-center justify-end px-5 gap-3 shrink-0 relative z-[100] ${
               hasWallpaper
                 ? "bg-card/80 backdrop-blur-xl border-b border-border/50"
                 : "bg-card border-b border-border"

@@ -620,14 +620,14 @@ function AppearanceTab() {
         </div>
 
         {/* Glass preview panel */}
-        <div className="relative rounded-2xl overflow-hidden h-28 border border-border">
-          {/* Background image or gradient */}
+        <div className="relative rounded-2xl overflow-hidden h-36 border border-border">
+          {/* Background — always show something visible */}
           <div
             className="absolute inset-0 bg-cover bg-center"
             style={{
               backgroundImage: wallpaperUrl
                 ? `url(${wallpaperUrl})`
-                : "linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%)",
+                : "linear-gradient(135deg, #7c3aed 0%, #3b82f6 30%, #06b6d4 60%, #10b981 100%)",
             }}
           />
           {/* Tint overlay */}
@@ -637,14 +637,17 @@ function AppearanceTab() {
           />
           {/* Glass panel */}
           <div
-            className="absolute inset-4 rounded-xl border border-white/15 flex items-center justify-center shadow-lg"
+            className="absolute inset-4 rounded-xl border border-white/20 flex items-center justify-center shadow-xl"
             style={{
               backdropFilter: `blur(${glassBlur}px)`,
               WebkitBackdropFilter: `blur(${glassBlur}px)`,
-              background: `rgba(255,255,255,${glassOpacity})`,
+              background: `rgba(255,255,255,${Math.max(glassOpacity, 0.03)})`,
             }}
           >
-            <span className="text-sm font-medium text-white/90">Glass panel preview</span>
+            <div className="text-center">
+              <span className="text-sm font-medium text-white/90">Glass panel preview</span>
+              <p className="text-[10px] text-white/50 mt-1">Blur: {glassBlur}px · Opacity: {Math.round(glassOpacity * 100)}%</p>
+            </div>
           </div>
         </div>
       </section>
