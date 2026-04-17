@@ -15,25 +15,34 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSyncStatus } from "@/hooks/useSync";
 import { useEffect, useState } from "react";
+import { Sparkles } from "lucide-react";
+
+// Primary nav — clean, focused
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/", label: "Pulse", icon: Sparkles },
   { href: "/boss", label: "Chat", icon: MessageSquare },
-  { href: "/editor", label: "Editor", icon: Code },
-  { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/workflows", label: "Workflows", icon: GitBranch },
   { href: "/bots", label: "Bots", icon: Bot },
-  { href: "/wallet", label: "Wallet", icon: Wallet },
-  { href: "/workshop", label: "Workshop", icon: Store },
+];
+
+// Secondary nav — power user features
+const secondaryNavItems = [
+  { href: "/editor", label: "Editor", icon: Code },
   { href: "/plugins", label: "Plugins", icon: Puzzle },
   { href: "/gallery", label: "Gallery", icon: Layers },
   { href: "/traces", label: "Traces", icon: Activity },
+  { href: "/wallet", label: "Wallet", icon: Wallet },
+  { href: "/workshop", label: "Workshop", icon: Store },
+  { href: "/dashboard", label: "Analytics", icon: LayoutDashboard },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 function BunzLogo() {
   return (
-    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center flex-shrink-0">
+    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-500/20"
+      style={{ animation: "breathe 4s ease-in-out infinite" }}>
       <span className="text-white font-bold text-sm">B</span>
+      <style>{`@keyframes breathe { 0%,100% { transform: scale(1); box-shadow: 0 4px 12px rgba(59,130,246,0.15); } 50% { transform: scale(1.06); box-shadow: 0 6px 20px rgba(59,130,246,0.25); } }`}</style>
     </div>
   );
 }
@@ -181,6 +190,34 @@ export default function AppLayout({ children, allowPublic = false }: { children:
                   }`}
                 >
                   <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "" : ""}`} />
+                  {!sidebarCollapsed && item.label}
+                </div>
+              </Link>
+            );
+          })}
+
+          {/* Separator + secondary nav */}
+          {!sidebarCollapsed && (
+            <div className="pt-2 mt-2 border-t border-border/30">
+              <p className="px-3 py-1.5 text-[9px] text-muted-foreground/50 uppercase tracking-widest font-medium">More</p>
+            </div>
+          )}
+          {sidebarCollapsed && <div className="border-t border-border/30 my-2" />}
+          {secondaryNavItems.map((item) => {
+            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+            return (
+              <Link key={item.href} href={item.href}>
+                <div
+                  title={sidebarCollapsed ? item.label : undefined}
+                  className={`flex items-center rounded-xl cursor-pointer transition-all duration-150 ${
+                    sidebarCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2 text-xs"
+                  } ${
+                    isActive
+                      ? "bg-primary/12 text-primary font-medium"
+                      : "text-muted-foreground/70 hover:bg-white/[0.04] hover:text-foreground"
+                  }`}
+                >
+                  <item.icon className="w-4 h-4 flex-shrink-0" />
                   {!sidebarCollapsed && item.label}
                 </div>
               </Link>

@@ -32,6 +32,7 @@ import { createEvalsRouter } from "./evals";
 import { createWorkspacesRouter } from "./workspaces";
 import { createApiKeyRouter, createSdkRouter } from "./sdk";
 import { createCloneRouter } from "./clone";
+import { createPulseRouter } from "./pulse";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -66,6 +67,7 @@ export async function registerRoutes(
   app.use("/api/workspaces", createWorkspacesRouter());
   app.use("/api/keys", createApiKeyRouter());
   app.use("/api/clone", createCloneRouter());
+  app.use("/api/pulse", createPulseRouter());
 
   // ── Local File System Access (for Editor) ───────────────────────────────
   app.get("/api/local/tree", async (req, res) => {

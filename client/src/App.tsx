@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
+import PulsePage from "@/pages/PulsePage";
 import AgentsPage from "@/pages/AgentsPage";
 import AgentChatPage from "@/pages/AgentChatPage";
 import AuditPage from "@/pages/AuditPage";
@@ -44,7 +45,8 @@ function AppRouter() {
         <AppLayout>
           <ErrorBoundary>
           <Switch>
-            <Route path="/" component={Dashboard} />
+            <Route path="/" component={PulsePage} />
+            <Route path="/dashboard" component={Dashboard} />
             <Route path="/boss" component={BossPage} />
             {/* workflows removed */}
 
