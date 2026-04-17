@@ -141,31 +141,32 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function ConnectorIcon({ icon, provider }: { icon: string; provider: string }) {
-  const configs: Record<string, { bg: string; letter: string }> = {
-    openai: { bg: "bg-emerald-500/20 text-emerald-400", letter: "AI" },
-    anthropic: { bg: "bg-orange-500/20 text-orange-400", letter: "C" },
-    github: { bg: "bg-gray-400/20 text-gray-300", letter: "GH" },
-    slack: { bg: "bg-purple-500/20 text-purple-400", letter: "S" },
-    stripe: { bg: "bg-violet-500/20 text-violet-400", letter: "$" },
-    google: { bg: "bg-blue-500/20 text-blue-400", letter: "G" },
-    notion: { bg: "bg-gray-400/20 text-gray-200", letter: "N" },
-    hubspot: { bg: "bg-orange-600/20 text-orange-400", letter: "HS" },
-    discord: { bg: "bg-indigo-500/20 text-indigo-400", letter: "D" },
-    dropbox: { bg: "bg-blue-600/20 text-blue-400", letter: "DB" },
-    linkedin: { bg: "bg-sky-600/20 text-sky-400", letter: "in" },
-    shopify: { bg: "bg-green-500/20 text-green-400", letter: "Sh" },
-    gumroad: { bg: "bg-pink-500/20 text-pink-400", letter: "Gm" },
-    supabase: { bg: "bg-emerald-600/20 text-emerald-400", letter: "Sb" },
-    vercel: { bg: "bg-gray-400/20 text-gray-200", letter: "V" },
-    figma: { bg: "bg-purple-600/20 text-purple-400", letter: "Fi" },
-    custom_rest: { bg: "bg-cyan-500/20 text-cyan-400", letter: "API" },
-    custom_webhook: { bg: "bg-yellow-500/20 text-yellow-400", letter: "WH" },
-    custom_oauth2: { bg: "bg-pink-500/20 text-pink-400", letter: "O2" },
+  const colors: Record<string, string> = {
+    openai: "#10a37f", anthropic: "#d97706", github: "#e5e7eb", slack: "#4a154b",
+    stripe: "#635bff", google: "#4285f4", notion: "#e5e7eb", hubspot: "#ff7a59",
+    discord: "#5865f2", dropbox: "#0061ff", linkedin: "#0077b5", shopify: "#96bf48",
+    gumroad: "#ff90e8", supabase: "#3ecf8e", vercel: "#e5e7eb", figma: "#a259ff",
+    custom_rest: "#22d3ee", custom_webhook: "#fbbf24", custom_oauth2: "#ec4899",
   };
-  const cfg = configs[provider] || { bg: "bg-primary/20 text-primary", letter: icon };
+  const color = colors[provider] || "#6382ff";
+  // Inline SVG paths for popular brands
+  const paths: Record<string, string> = {
+    openai: "M22.28 14.37a6.4 6.4 0 0 0-.55-5.27 6.47 6.47 0 0 0-6.97-3.08A6.4 6.4 0 0 0 9.94 3a6.47 6.47 0 0 0-6.18 4.5 6.4 6.4 0 0 0-4.28 3.1 6.47 6.47 0 0 0 .8 7.58 6.4 6.4 0 0 0 .55 5.27 6.47 6.47 0 0 0 6.97 3.08A6.4 6.4 0 0 0 12.62 29a6.47 6.47 0 0 0 6.18-4.5 6.4 6.4 0 0 0 4.28-3.1 6.47 6.47 0 0 0-.8-7.03z",
+    github: "M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.1-.4-.6-1.6.1-3.2 0 0 1-.3 3.4 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.9.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.2.9 2.3v3.4c0 .3.2.7.8.6A12 12 0 0 0 12 .3",
+    slack: "M5.04 15.16a2.53 2.53 0 0 1-2.52 2.53A2.53 2.53 0 0 1 0 15.16a2.53 2.53 0 0 1 2.52-2.52h2.52zm1.27 0a2.53 2.53 0 0 1 2.52-2.52 2.53 2.53 0 0 1 2.52 2.52v6.32A2.53 2.53 0 0 1 8.83 24a2.53 2.53 0 0 1-2.52-2.52zM8.83 5.04a2.53 2.53 0 0 1-2.52-2.52A2.53 2.53 0 0 1 8.83 0a2.53 2.53 0 0 1 2.52 2.52v2.52zm0 1.27a2.53 2.53 0 0 1 2.52 2.52 2.53 2.53 0 0 1-2.52 2.52H2.52A2.53 2.53 0 0 1 0 8.83a2.53 2.53 0 0 1 2.52-2.52zM18.96 8.83a2.53 2.53 0 0 1 2.52-2.52A2.53 2.53 0 0 1 24 8.83a2.53 2.53 0 0 1-2.52 2.52h-2.52zm-1.27 0a2.53 2.53 0 0 1-2.52 2.52 2.53 2.53 0 0 1-2.52-2.52V2.52A2.53 2.53 0 0 1 15.17 0a2.53 2.53 0 0 1 2.52 2.52zM15.17 18.96a2.53 2.53 0 0 1 2.52 2.52A2.53 2.53 0 0 1 15.17 24a2.53 2.53 0 0 1-2.52-2.52v-2.52zm0-1.27a2.53 2.53 0 0 1-2.52-2.52 2.53 2.53 0 0 1 2.52-2.52h6.31A2.53 2.53 0 0 1 24 15.17a2.53 2.53 0 0 1-2.52 2.52z",
+    stripe: "M13.98 11.17c0-1.1.65-1.53 1.73-1.53 1.54 0 3.5.47 5.04 1.3V6.58c-1.69-.67-3.35-.93-5.04-.93-4.13 0-6.87 2.15-6.87 5.76 0 5.62 7.73 4.72 7.73 7.14 0 1.3-1.13 1.73-2.72 1.73-1.87 0-4.26-.77-6.15-1.8v4.4c2.09.9 4.2 1.3 6.15 1.3 4.23 0 7.14-2.1 7.14-5.74-.01-6.07-7.77-4.98-7.77-7.27z",
+    google: "M12.48 10.92v3.28h7.84c-.24 1.84-.87 3.19-1.84 4.15-1.18 1.18-3 2.47-5.99 2.47-4.78 0-8.52-3.86-8.52-8.64s3.74-8.63 8.52-8.63c2.58 0 4.47 1.01 5.86 2.32l2.32-2.32C18.36 1.45 15.76 0 12.48 0 5.76 0 .21 5.39.21 12.06s5.55 12.05 12.27 12.05c3.6 0 6.31-1.18 8.44-3.39 2.18-2.18 2.86-5.26 2.86-7.74 0-.77-.07-1.48-.18-2.06z",
+    discord: "M20.32 4.37a19.8 19.8 0 0 0-4.89-1.52.07.07 0 0 0-.08.04c-.21.38-.44.87-.61 1.26a18.27 18.27 0 0 0-5.49 0 12.64 12.64 0 0 0-.62-1.26.08.08 0 0 0-.08-.04 19.74 19.74 0 0 0-4.89 1.52.07.07 0 0 0-.03.03C.53 9.05-.32 13.58.1 18.06a.08.08 0 0 0 .03.06 19.9 19.9 0 0 0 5.99 3.03.08.08 0 0 0 .08-.03c.46-.63.87-1.3 1.22-2a.08.08 0 0 0-.04-.11 13.1 13.1 0 0 1-1.87-.9.08.08 0 0 1 0-.13c.13-.09.25-.19.37-.29a.08.08 0 0 1 .08-.01c3.93 1.79 8.18 1.79 12.07 0a.08.08 0 0 1 .08.01c.12.1.25.2.37.29a.08.08 0 0 1 0 .13c-.6.35-1.22.65-1.88.9a.08.08 0 0 0-.04.11c.36.7.77 1.37 1.22 2a.08.08 0 0 0 .08.03 19.83 19.83 0 0 0 6-3.03.08.08 0 0 0 .03-.05c.5-5.18-.84-9.68-3.55-13.66a.06.06 0 0 0-.03-.03zM8.02 15.33c-1.18 0-2.16-1.09-2.16-2.42s.96-2.42 2.16-2.42c1.21 0 2.18 1.1 2.16 2.42 0 1.33-.96 2.42-2.16 2.42zm7.97 0c-1.18 0-2.16-1.09-2.16-2.42s.96-2.42 2.16-2.42c1.21 0 2.18 1.1 2.16 2.42 0 1.33-.95 2.42-2.16 2.42z",
+  };
+
+  const svgPath = paths[provider];
   return (
-    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold ${cfg.bg}`}>
-      {cfg.letter}
+    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${color}20` }}>
+      {svgPath ? (
+        <svg viewBox="0 0 24 24" className="w-5 h-5" fill={color}><path d={svgPath} /></svg>
+      ) : (
+        <span className="text-xs font-bold" style={{ color }}>{icon}</span>
+      )}
     </div>
   );
 }
