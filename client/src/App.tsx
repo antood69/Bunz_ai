@@ -30,6 +30,7 @@ import TracesPage from "@/pages/TracesPage";
 import ArtifactGallery from "@/pages/ArtifactGallery";
 import AppLayout from "@/components/AppLayout";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import JarvisMode from "@/components/JarvisMode";
 import { ThemeProvider } from "./contexts/ThemeContext";
 
 function AppRouter() {
@@ -88,6 +89,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
+          <JarvisMode />
           <Router hook={useHashLocation}>
             <AppRouter />
           </Router>

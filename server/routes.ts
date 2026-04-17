@@ -406,12 +406,13 @@ export async function registerRoutes(
 
   // === BOSS CHAT (v2: intelligence levels + department dispatch) ===
   app.post("/api/boss/chat", requireCredits(), async (req, res) => {
-    const { message, conversationId, history, level, attachments } = req.body as {
+    const { message, conversationId, history, level, attachments, imageBase64 } = req.body as {
       message: string;
       conversationId?: string;
       history?: { role: "user" | "assistant"; content: string }[];
       level?: string;
       attachments?: Array<{ id: string; url: string; mimeType: string; name: string }>;
+      imageBase64?: string; // Direct base64 screenshot from Bun Bun mode
     };
     if (!message) return res.status(400).json({ error: "message required" });
 
@@ -422,6 +423,12 @@ export async function registerRoutes(
 
       // Build image content for vision models
       let imageContents: Array<{ type: "image_url"; image_url: { url: string } }> = [];
+
+      // Direct base64 screenshot (from Bun Bun screen viewer)
+      if (imageBase64 && imageBase64.startsWith("data:image/")) {
+        imageContents.push({ type: "image_url", image_url: { url: imageBase64 } });
+      }
+
       if (attachments?.length) {
         const fsModule = await import("fs");
         const pathModule = await import("path");
