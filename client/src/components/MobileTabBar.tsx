@@ -15,23 +15,29 @@ import {
   Puzzle,
   Code,
   ListChecks,
+  Sparkles,
+  Activity,
+  Layers,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
 
 const primaryTabs = [
-  { href: "/", label: "Home", icon: LayoutDashboard },
+  { href: "/", label: "Pulse", icon: Sparkles },
   { href: "/boss", label: "Chat", icon: MessageSquare },
   { href: "/workflows", label: "Flows", icon: GitBranch },
   { href: "/bots", label: "Bots", icon: Bot },
 ];
 
 const moreItems = [
-  { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/editor", label: "Editor", icon: Code },
-  { href: "/workshop", label: "Workshop", icon: Store },
-  { href: "/wallet", label: "Wallet", icon: Wallet },
   { href: "/plugins", label: "Plugins", icon: Puzzle },
+  { href: "/gallery", label: "Gallery", icon: Layers },
+  { href: "/traces", label: "Traces", icon: Activity },
+  { href: "/wallet", label: "Wallet", icon: Wallet },
+  { href: "/workshop", label: "Workshop", icon: Store },
+  { href: "/tasks", label: "Tasks", icon: ListChecks },
+  { href: "/dashboard", label: "Analytics", icon: LayoutDashboard },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

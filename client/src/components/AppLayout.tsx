@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, GitBranch, Bot, Zap, Settings, LogOut, ShieldAlert,
   MessageSquare, PanelLeftClose, PanelLeftOpen, ListChecks, Code, Store,
-  Wallet, Puzzle, Wifi, WifiOff, Monitor, Activity, Layers,
+  Wallet, Puzzle, Wifi, WifiOff, Monitor, Activity, Layers, Menu,
 } from "lucide-react";
 import TokenCounter from "./TokenCounter";
 import NotificationBell from "./NotificationBell";
@@ -63,6 +63,7 @@ export default function AppLayout({ children, allowPublic = false }: { children:
   const hasWallpaper = !!(wallpaperUrl && wallpaperType !== "none");
   const isMobile = useIsMobile();
   const sync = useSyncStatus();
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem("bunz-sidebar-collapsed") === "true"; } catch { return false; }
   });
@@ -196,33 +197,47 @@ export default function AppLayout({ children, allowPublic = false }: { children:
             );
           })}
 
-          {/* Separator + secondary nav */}
-          {!sidebarCollapsed && (
-            <div className="pt-2 mt-2 border-t border-border/30">
-              <p className="px-3 py-1.5 text-[9px] text-muted-foreground/50 uppercase tracking-widest font-medium">More</p>
-            </div>
-          )}
-          {sidebarCollapsed && <div className="border-t border-border/30 my-2" />}
-          {secondaryNavItems.map((item) => {
-            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
-            return (
-              <Link key={item.href} href={item.href}>
-                <div
-                  title={sidebarCollapsed ? item.label : undefined}
-                  className={`flex items-center rounded-xl cursor-pointer transition-all duration-150 ${
-                    sidebarCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2 text-xs"
-                  } ${
-                    isActive
-                      ? "bg-primary/12 text-primary font-medium"
-                      : "text-muted-foreground/70 hover:bg-white/[0.04] hover:text-foreground"
-                  }`}
-                >
-                  <item.icon className="w-4 h-4 flex-shrink-0" />
-                  {!sidebarCollapsed && item.label}
+          {/* Hamburger menu for secondary nav */}
+          <div className="relative">
+            <button
+              onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+              title={sidebarCollapsed ? "More" : undefined}
+              className={`flex items-center rounded-xl cursor-pointer transition-all duration-150 w-full ${
+                sidebarCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 text-sm"
+              } ${
+                moreMenuOpen || secondaryNavItems.some(i => location === i.href || (i.href !== "/" && location.startsWith(i.href)))
+                  ? "bg-white/[0.06] text-foreground"
+                  : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
+              }`}
+            >
+              <Menu className="w-[18px] h-[18px] flex-shrink-0" />
+              {!sidebarCollapsed && "More"}
+            </button>
+
+            {moreMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMoreMenuOpen(false)} />
+                <div className={`absolute z-50 ${sidebarCollapsed ? "left-full ml-2" : "left-0 right-0"} bottom-full mb-1 bg-card border border-border/50 rounded-xl shadow-xl shadow-black/30 py-1 max-h-[300px] overflow-y-auto`}>
+                  {secondaryNavItems.map((item) => {
+                    const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+                    return (
+                      <Link key={item.href} href={item.href}>
+                        <div
+                          onClick={() => setMoreMenuOpen(false)}
+                          className={`flex items-center gap-3 px-3 py-2 text-xs cursor-pointer transition-colors ${
+                            isActive ? "text-primary bg-primary/10" : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
+                          }`}
+                        >
+                          <item.icon className="w-4 h-4 flex-shrink-0" />
+                          {item.label}
+                        </div>
+                      </Link>
+                    );
+                  })}
                 </div>
-              </Link>
-            );
-          })}
+              </>
+            )}
+          </div>
 
           {/* Admin link — owner only */}
           {isOwner && (
