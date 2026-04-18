@@ -283,11 +283,35 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   if (designMode) {
     message = message.replace(/^\/design\s*/i, "").trim();
   }
+  // Auto-detect design requests
+  if (!designMode && !deepResearchMode && !chartMode && !message.trim().toLowerCase().startsWith("/")) {
+    const msg = message.toLowerCase();
+    if (/\b(design|redesign|mockup|wireframe|prototype|ui|ux|layout)\b/i.test(msg) &&
+        /\b(page|screen|component|section|form|modal|card|dashboard|interface|website)\b/i.test(msg) &&
+        /\b(create|make|build|generate|convert|turn into|code)\b/i.test(msg)) {
+      designMode = true;
+    }
+  }
 
   // Detect /swarm command — parallel agent swarm with live visualization
   let swarmMode = message.trim().toLowerCase().startsWith("/swarm");
   if (swarmMode) {
     message = message.replace(/^\/swarm\s*/i, "").trim();
+  }
+  // Auto-detect swarm — requests that clearly need multiple departments at once
+  if (!swarmMode && !deepResearchMode && !chartMode && !designMode && !message.trim().toLowerCase().startsWith("/")) {
+    const msg = message.toLowerCase();
+    const deptSignals = [
+      /\b(research|analyze|investigate|find out|look into)\b/i,
+      /\b(write|draft|compose|blog|article|copy|content|email)\b/i,
+      /\b(code|build|develop|program|implement|script|app)\b/i,
+      /\b(image|logo|design|illustration|visual|art|picture)\b/i,
+    ];
+    const deptMatches = deptSignals.filter(p => p.test(msg)).length;
+    // If 3+ different departments needed, use swarm for parallel execution
+    if (deptMatches >= 3) {
+      swarmMode = true;
+    }
   }
 
   // Detect /build command — Company in a Box
@@ -644,20 +668,36 @@ async function handleBuildProject(
   const { broadcastToUser } = await import("./ws");
 
   try {
-    // Broadcast start
     broadcastToUser(userId, "pipelines", "build_started", { conversationId, idea });
 
-    // Phase 1: Research — understand the market and requirements
-    broadcastToUser(userId, "pipelines", "build_phase", { conversationId, phase: "research", status: "running" });
+    // Phase 1: Research
+    eventBus.emit(conversationId, "progress", {
+      workerType: "research", subAgent: "Market Research", workerIndex: 0,
+      status: "running", message: "Researching market and competitors...",
+    });
     const research = await executeDepartment(
       conversationId,
       { department: "research", task: `Research this business idea thoroughly: "${idea}". Analyze: target market, competitors, pricing models, key features needed, tech stack recommendations. Be specific with data.` },
       level, estimateComplexity(idea),
     );
-    broadcastToUser(userId, "pipelines", "build_phase", { conversationId, phase: "research", status: "complete" });
+    eventBus.emit(conversationId, "step_complete", {
+      workerType: "research", subAgent: "Market Research", workerIndex: 0,
+      status: "complete", tokens: research.totalTokens,
+    });
 
-    // Phase 2: In parallel — Writer creates copy + Coder builds the landing page + Artist creates visuals
-    broadcastToUser(userId, "pipelines", "build_phase", { conversationId, phase: "create", status: "running" });
+    // Phase 2: In parallel — Writer + Coder + Artist
+    eventBus.emit(conversationId, "progress", {
+      workerType: "writer", subAgent: "Copywriter", workerIndex: 1,
+      status: "running", message: "Writing website copy...",
+    });
+    eventBus.emit(conversationId, "progress", {
+      workerType: "coder", subAgent: "Landing Page Builder", workerIndex: 2,
+      status: "running", message: "Building landing page...",
+    });
+    eventBus.emit(conversationId, "progress", {
+      workerType: "artist", subAgent: "Visual Designer", workerIndex: 3,
+      status: "running", message: "Creating brand visuals...",
+    });
 
     const [copyResult, codeResult, artResult] = await Promise.allSettled([
       executeDepartment(conversationId,
@@ -674,10 +714,16 @@ async function handleBuildProject(
       ),
     ]);
 
-    broadcastToUser(userId, "pipelines", "build_phase", { conversationId, phase: "create", status: "complete" });
+    // Mark parallel phase complete
+    eventBus.emit(conversationId, "step_complete", { workerType: "writer", subAgent: "Copywriter", workerIndex: 1, status: copyResult.status === "fulfilled" ? "complete" : "error" });
+    eventBus.emit(conversationId, "step_complete", { workerType: "coder", subAgent: "Landing Page Builder", workerIndex: 2, status: codeResult.status === "fulfilled" ? "complete" : "error" });
+    eventBus.emit(conversationId, "step_complete", { workerType: "artist", subAgent: "Visual Designer", workerIndex: 3, status: artResult.status === "fulfilled" ? "complete" : "error" });
 
-    // Phase 3: Synthesize everything into a deliverable package
-    broadcastToUser(userId, "pipelines", "build_phase", { conversationId, phase: "package", status: "running" });
+    // Phase 3: Synthesize
+    eventBus.emit(conversationId, "progress", {
+      workerType: "boss", subAgent: "Project Packager", workerIndex: 4,
+      status: "running", message: "Packaging final deliverable...",
+    });
 
     const copy = copyResult.status === "fulfilled" ? copyResult.value.finalOutput : "Copy generation failed";
     const code = codeResult.status === "fulfilled" ? codeResult.value.finalOutput : "Code generation failed";
@@ -754,6 +800,11 @@ async function handleSwarm(
 
   try {
     // Step 1: Boss decomposes the goal into parallel agent tasks
+    eventBus.emit(conversationId, "progress", {
+      workerType: "boss", subAgent: "Swarm Planner", workerIndex: 0,
+      status: "running", message: "Planning parallel agent tasks...",
+    });
+
     const planResult = await modelRouter.chat({
       model: tier.bossModel,
       messages: [{ role: "user", content: goal }],
@@ -778,6 +829,11 @@ Each task should be independent enough to run in parallel. Be specific in task d
 
     if (tasks.length === 0) tasks = [{ department: "research", task: goal, label: "Research" }];
 
+    eventBus.emit(conversationId, "step_complete", {
+      workerType: "boss", subAgent: "Swarm Planner", workerIndex: 0,
+      status: "complete", output: `Planned ${tasks.length} parallel agents`,
+    });
+
     // Broadcast swarm start to all user devices
     const { broadcastToUser } = await import("./ws");
     broadcastToUser(userId, "pipelines", "swarm_started", {
@@ -787,6 +843,10 @@ Each task should be independent enough to run in parallel. Be specific in task d
     // Step 2: Run ALL tasks in parallel
     const results = await Promise.allSettled(
       tasks.map(async (task, index) => {
+        eventBus.emit(conversationId, "progress", {
+          workerType: task.department, subAgent: task.label, workerIndex: index + 1,
+          status: "running", message: `${task.label} working...`,
+        });
         broadcastToUser(userId, "pipelines", "swarm_agent_update", {
           conversationId, index, department: task.department, label: task.label, status: "running",
         });
@@ -798,6 +858,11 @@ Each task should be independent enough to run in parallel. Be specific in task d
           estimateComplexity(task.task),
         );
 
+        eventBus.emit(conversationId, "step_complete", {
+          workerType: task.department, subAgent: task.label, workerIndex: index + 1,
+          status: "complete", output: result.finalOutput.slice(0, 200),
+          tokens: result.totalTokens,
+        });
         broadcastToUser(userId, "pipelines", "swarm_agent_update", {
           conversationId, index, department: task.department, label: task.label,
           status: "complete", tokens: result.totalTokens,
@@ -814,7 +879,12 @@ Each task should be independent enough to run in parallel. Be specific in task d
       return { ...tasks[i], output: `Failed: ${(r as any).reason?.message || "Unknown error"}`, tokens: 0 };
     });
 
-    // Step 3: Synthesize all outputs into a final cohesive response
+    // Step 3: Synthesize all outputs
+    eventBus.emit(conversationId, "progress", {
+      workerType: "boss", subAgent: "Synthesizer", workerIndex: tasks.length + 1,
+      status: "running", message: "Synthesizing all agent outputs...",
+    });
+
     const synthesisInput = completedTasks.map(t =>
       `### ${t.label} (${t.department})\n${t.output}`
     ).join("\n\n---\n\n");
@@ -862,6 +932,11 @@ async function handleDesignToCode(
   const conversationId = input.conversationId || uuidv4();
 
   try {
+    eventBus.emit(conversationId, "progress", {
+      workerType: "coder", subAgent: "UI Developer", workerIndex: 0,
+      status: "running", message: "Converting design to code...",
+    });
+
     // Use vision if screenshot attached, otherwise use description
     const imageContents = input.imageContents || [];
     const hasImage = imageContents.length > 0;
