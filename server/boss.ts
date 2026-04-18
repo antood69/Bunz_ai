@@ -384,10 +384,19 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
             status: "running", message: `${cmd.label} starting...`,
           });
 
-          const result = await cmd.handler(
+          let result = await cmd.handler(
             { ...input, conversationId: convId },
             message, level, abortController,
           );
+
+          // Apply humanizer if /human was used
+          if (humanizeMode && result.reply) {
+            eventBus.emit(jobId, "progress", {
+              workerType: "humanizer", subAgent: "Humanizer",
+              status: "running", message: "Humanizing output to pass AI detection...",
+            });
+            result.reply = await humanizeText(result.reply);
+          }
 
           forwardUnsub();
 
@@ -584,7 +593,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       } catch (e: any) { console.error("[Activity] Failed to log dispatch:", e.message); }
 
       // Execute departments asynchronously — results flow back via eventBus
-      executeDepartments(parentJobId, conversationId, userId, level, message, plan.departments, abortController.signal, userEmail)
+      executeDepartments(parentJobId, conversationId, userId, level, message, plan.departments, abortController.signal, userEmail, humanizeMode)
         .catch(err => {
           console.error("[Boss] Department dispatch error:", err.message);
           eventBus.emit(parentJobId, "error", { error: err.message });
@@ -1227,6 +1236,7 @@ async function executeDepartments(
   departments: Array<{ id: DepartmentId; task: string }>,
   signal?: AbortSignal,
   userEmail?: string,
+  humanize?: boolean,
 ) {
   const bossModel = INTELLIGENCE_TIERS[level].bossModel;
   const complexity = estimateComplexity(originalMessage);
@@ -1321,8 +1331,18 @@ PRESENTATION RULES:
       endpoint: "boss_synthesis",
     });
 
+    // Apply humanizer if /human was used on a department dispatch
+    let synthesisContent = synthesis.content;
+    if (humanize) {
+      eventBus.emit(parentJobId, "progress", {
+        workerType: "humanizer", subAgent: "Humanizer",
+        status: "running", message: "Humanizing output to pass AI detection...",
+      });
+      synthesisContent = await humanizeText(synthesisContent);
+    }
+
     // Stream synthesis to client
-    const chunks = chunkText(synthesis.content, 30);
+    const chunks = chunkText(synthesisContent, 30);
     for (const chunk of chunks) {
       eventBus.emit(parentJobId, "token", { workerType: "boss", text: chunk, isSynthesis: true });
     }
