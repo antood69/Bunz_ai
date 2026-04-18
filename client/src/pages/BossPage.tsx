@@ -774,30 +774,47 @@ export default function BossPage() {
     loadConversationsFromServer().then((serverConvs) => {
       if (serverConvs.length === 0) return;
       setConversations((prev) => {
-        // Merge: server conversations take precedence over local ones with same serverId
         const merged = [...serverConvs];
-        // Add local-only conversations (no serverId or serverId not in server list)
         const serverIds = new Set(serverConvs.map(c => c.serverId));
         for (const local of prev) {
           if (!local.serverId || !serverIds.has(local.serverId)) {
             merged.push(local);
           }
         }
-        // Sort by most recent first
         merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         saveConversations(merged);
+
+        // If activeId matches a server conversation, set serverConvId for brief/context
+        if (activeId) {
+          const match = merged.find(c => c.id === activeId || c.serverId === activeId);
+          if (match?.serverId) setServerConvId(match.serverId);
+          // If activeId IS a server convId (from workflow template), load its messages
+          if (!match && activeId.includes("-")) {
+            setServerConvId(activeId);
+            fetch(`/api/conversations/${activeId}/messages`, { credentials: "include" })
+              .then(r => r.ok ? r.json() : [])
+              .then((msgs: any[]) => {
+                if (msgs.length > 0) {
+                  setMessages(msgs.map((m: any) => ({
+                    id: m.id, role: m.role, content: m.content,
+                    timestamp: new Date(m.createdAt), tokenCount: m.tokenCount,
+                  })));
+                }
+              })
+              .catch(() => {});
+          }
+        }
         return merged;
       });
     });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pick up quick message from Pulse page
+  // Pick up quick message from Pulse page — remove IMMEDIATELY to prevent duplicates
   useEffect(() => {
     try {
       const quickMsg = sessionStorage.getItem("bunz-quick-message");
       if (quickMsg) {
-        sessionStorage.removeItem("bunz-quick-message");
-        // Small delay to ensure component is fully mounted
+        sessionStorage.removeItem("bunz-quick-message"); // Remove first, send second
         setTimeout(() => sendMessage(quickMsg), 300);
       }
     } catch {}
@@ -1509,12 +1526,23 @@ export default function BossPage() {
         </div>
       </div>
 
-      {/* ── Project Brief Panel (right sidebar) ── */}
-      {briefOpen && (
+      {/* ── Project Brief Panel (right sidebar, hidden on mobile) ── */}
+      {briefOpen && !isMobile && (
         <ProjectBrief
-          conversationId={serverConvId}
+          conversationId={serverConvId || activeId}
           onClose={() => setBriefOpen(false)}
         />
+      )}
+      {/* Mobile brief as modal overlay */}
+      {briefOpen && isMobile && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end">
+          <div className="w-full max-h-[80vh] bg-card rounded-t-2xl overflow-hidden">
+            <ProjectBrief
+              conversationId={serverConvId || activeId}
+              onClose={() => setBriefOpen(false)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

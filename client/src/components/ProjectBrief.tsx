@@ -116,7 +116,7 @@ export default function ProjectBrief({
   }
 
   return (
-    <div className="w-72 border-l border-border bg-card/50 flex flex-col overflow-hidden">
+    <div className="w-72 md:w-72 border-l border-border bg-card/50 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/50">
         <div className="flex items-center gap-2">
