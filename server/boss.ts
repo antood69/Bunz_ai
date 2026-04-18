@@ -20,18 +20,24 @@ import { storage } from "./storage";
  * Get the owner's Obsidian connector — all user outputs route to the owner's vault.
  * Tries owner email first, then falls back to any user with an Obsidian connector.
  */
-/** Returns a DB connector record, or a synthetic { id: "env" } object when env vars are set */
+/** Returns a DB connector record, or a synthetic { id: "env" } object when env vars are set.
+ *  Cached for 60s to avoid scanning all users on every chat message. */
+let obsidianCache: { result: any; ts: number } | null = null;
 async function getOwnerObsidianConnector(): Promise<any | null> {
+  if (obsidianCache && Date.now() - obsidianCache.ts < 60_000) return obsidianCache.result;
   try {
     const allUsers = await storage.getAllUsers();
     for (const u of allUsers) {
       const connectors = await storage.getConnectorsByUser(u.id);
       const obs = connectors.find((c: any) => c.provider === "obsidian" && c.status === "connected");
-      if (obs) return obs;
+      if (obs) { obsidianCache = { result: obs, ts: Date.now() }; return obs; }
     }
     if (process.env.OBSIDIAN_API_URL && process.env.OBSIDIAN_API_KEY) {
-      return { id: "env", provider: "obsidian", status: "connected" };
+      const env = { id: "env", provider: "obsidian", status: "connected" };
+      obsidianCache = { result: env, ts: Date.now() };
+      return env;
     }
+    obsidianCache = { result: null, ts: Date.now() };
     return null;
   } catch { return null; }
 }

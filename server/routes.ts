@@ -1,7 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import fs from "fs";
+import path from "path";
+import multer from "multer";
+import { v4 as uuidv4 } from "uuid";
 import { storage } from "./storage";
-import { dbRun, dbGet } from "./lib/db";
+import { dbRun, dbGet, dbAll } from "./lib/db";
 import { insertWorkflowSchema, insertAgentSchema, insertJobSchema, insertMessageSchema, insertAuditReviewSchema } from "@shared/schema";
 import { runAgentChat } from "./ai";
 import { registerStripeRoutes } from "./stripe";
@@ -33,6 +37,9 @@ import { createWorkspacesRouter } from "./workspaces";
 import { createApiKeyRouter, createSdkRouter } from "./sdk";
 import { createCloneRouter } from "./clone";
 import { createPulseRouter } from "./pulse";
+
+// In-memory cache for dashboard stats (60s TTL, avoids Redis dependency)
+const statsCache = new Map<string, { data: any; ts: number }>();
 
 export async function registerRoutes(
   httpServer: Server,
@@ -71,8 +78,6 @@ export async function registerRoutes(
 
   // ── Local File System Access (for Editor) ───────────────────────────────
   app.get("/api/local/tree", async (req, res) => {
-    const fs = await import("fs");
-    const path = await import("path");
     const rootPath = path.resolve((req.query.root as string) || process.cwd());
     if (!fs.existsSync(rootPath)) return res.status(404).json({ error: "Path not found" });
 
@@ -99,9 +104,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/local/file", async (req, res) => {
-    const fs = await import("fs");
-    const pathMod = await import("path");
-    const filePath = pathMod.resolve(req.query.path as string || "");
+    const filePath = path.resolve(req.query.path as string || "");
     if (!filePath) return res.status(400).json({ error: "path required" });
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: `Not found: ${filePath}` });
     try {
@@ -115,10 +118,8 @@ export async function registerRoutes(
   app.put("/api/local/file", async (req, res) => {
     const { path: rawPath, content } = req.body;
     if (!rawPath || content === undefined) return res.status(400).json({ error: "path and content required" });
-    const fs = await import("fs");
-    const pathMod = await import("path");
-    const filePath = pathMod.resolve(rawPath);
-    const dir = pathMod.dirname(filePath);
+    const filePath = path.resolve(rawPath);
+    const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(filePath, content, "utf-8");
     res.json({ ok: true, path: filePath });
@@ -378,22 +379,32 @@ export async function registerRoutes(
     res.status(201).json(r);
   });
 
-  // === STATS (Dashboard KPIs) ===
+  // === STATS (Dashboard KPIs) — uses COUNT aggregates instead of loading full tables ===
   app.get("/api/stats", async (_req, res) => {
-    const allWorkflows = await storage.getWorkflows();
-    const allAgents = await storage.getAgents();
-    const allJobs = await storage.getJobs();
-    const allReviews = await storage.getAuditReviews();
+    const [
+      totalWorkflows, activeWorkflows, totalAgents, workingAgents,
+      totalJobs, completedJobs, failedJobs, totalReviews, passedReviews,
+    ] = await Promise.all([
+      dbGet("SELECT COUNT(*) as c FROM workflows") as Promise<any>,
+      dbGet("SELECT COUNT(*) as c FROM workflows WHERE status = 'active'") as Promise<any>,
+      dbGet("SELECT COUNT(*) as c FROM agents") as Promise<any>,
+      dbGet("SELECT COUNT(*) as c FROM agents WHERE status = 'working'") as Promise<any>,
+      dbGet("SELECT COUNT(*) as c FROM jobs") as Promise<any>,
+      dbGet("SELECT COUNT(*) as c FROM jobs WHERE status = 'completed'") as Promise<any>,
+      dbGet("SELECT COUNT(*) as c FROM jobs WHERE status = 'failed'") as Promise<any>,
+      dbGet("SELECT COUNT(*) as c FROM audit_reviews") as Promise<any>,
+      dbGet("SELECT COUNT(*) as c FROM audit_reviews WHERE verdict = 'pass'") as Promise<any>,
+    ]);
     res.json({
-      totalWorkflows: allWorkflows.length,
-      activeWorkflows: allWorkflows.filter((w: any) => w.status === "active").length,
-      totalAgents: allAgents.length,
-      workingAgents: allAgents.filter((a: any) => a.status === "working").length,
-      totalJobs: allJobs.length,
-      completedJobs: allJobs.filter((j: any) => j.status === "completed").length,
-      failedJobs: allJobs.filter((j: any) => j.status === "failed").length,
-      totalReviews: allReviews.length,
-      passedReviews: allReviews.filter((r: any) => r.verdict === "pass").length,
+      totalWorkflows: totalWorkflows?.c || 0,
+      activeWorkflows: activeWorkflows?.c || 0,
+      totalAgents: totalAgents?.c || 0,
+      workingAgents: workingAgents?.c || 0,
+      totalJobs: totalJobs?.c || 0,
+      completedJobs: completedJobs?.c || 0,
+      failedJobs: failedJobs?.c || 0,
+      totalReviews: totalReviews?.c || 0,
+      passedReviews: passedReviews?.c || 0,
     });
   });
 
@@ -434,8 +445,6 @@ export async function registerRoutes(
       }
 
       if (attachments?.length) {
-        const fsModule = await import("fs");
-        const pathModule = await import("path");
         for (const att of attachments) {
           if (att.mimeType?.startsWith("image/")) {
             try {
@@ -443,9 +452,9 @@ export async function registerRoutes(
               const fileId = att.id || att.url?.split("/").pop();
               const row = await dbGet("SELECT storage_path, mime_type FROM uploaded_files WHERE id = ?", fileId) as any;
               if (row) {
-                const filePath = pathModule.default.resolve(process.cwd(), "uploads", row.storage_path);
-                if (fsModule.default.existsSync(filePath)) {
-                  const data = fsModule.default.readFileSync(filePath);
+                const filePath = path.resolve(process.cwd(), "uploads", row.storage_path);
+                if (fs.existsSync(filePath)) {
+                  const data = fs.readFileSync(filePath);
                   const b64 = `data:${row.mime_type};base64,${data.toString("base64")}`;
                   imageContents.push({ type: "image_url", image_url: { url: b64 } });
                 }
@@ -568,7 +577,6 @@ export async function registerRoutes(
     const userId = req.user?.id || 1;
     const { atMessageId } = req.body;
     const sourceId = req.params.id as string;
-    const { v4: uuidv4 } = await import("uuid");
 
     try {
       const sourceConv = await storage.getConversation(sourceId);
@@ -1073,25 +1081,31 @@ export async function registerRoutes(
     });
   });
 
-  // === AGENT JOBS SUMMARY ===
+  // === AGENT JOBS SUMMARY — single GROUP BY query instead of O(n²) filter ===
   app.get("/api/agent-jobs/summary", async (req, res) => {
     const userId = req.user?.id || 1;
     try {
-      const allJobs = await storage.getRunningJobsByUser(userId);
-      const types = ["researcher", "coder", "writer", "analyst", "reviewer", "artgen", "browser", "art", "reasoning", "boss"];
-      const summaries = types.map(type => {
-        const jobsOfType = allJobs.filter((j: any) => j.type === type);
-        const completed = jobsOfType.filter((j: any) => j.status === "complete");
-        const totalTokens = jobsOfType.reduce((sum: number, j: any) => sum + (j.tokenCount || 0), 0);
-        const totalDuration = completed.reduce((sum: number, j: any) => sum + (j.durationMs || 0), 0);
-        return {
-          type,
-          totalJobs: jobsOfType.length,
-          completedJobs: completed.length,
-          totalTokens,
-          avgDurationMs: completed.length ? Math.round(totalDuration / completed.length) : 0,
-        };
-      });
+      const rows = await dbAll(
+        `SELECT type, status, COUNT(*) as cnt,
+         COALESCE(SUM(token_count), 0) as total_tokens,
+         COALESCE(AVG(CASE WHEN status = 'complete' THEN duration_ms END), 0) as avg_duration
+         FROM agent_jobs WHERE user_id = ? GROUP BY type, status`,
+        userId
+      ) as any[];
+
+      // Aggregate into per-type summaries
+      const byType = new Map<string, { totalJobs: number; completedJobs: number; totalTokens: number; avgDurationMs: number }>();
+      for (const r of rows) {
+        const existing = byType.get(r.type) || { totalJobs: 0, completedJobs: 0, totalTokens: 0, avgDurationMs: 0 };
+        existing.totalJobs += r.cnt;
+        existing.totalTokens += r.total_tokens;
+        if (r.status === "complete") {
+          existing.completedJobs += r.cnt;
+          existing.avgDurationMs = Math.round(r.avg_duration || 0);
+        }
+        byType.set(r.type, existing);
+      }
+      const summaries = Array.from(byType.entries()).map(([type, data]) => ({ type, ...data }));
       res.json(summaries);
     } catch {
       res.json([]);
@@ -1103,21 +1117,13 @@ export async function registerRoutes(
     try {
       const userId = req.user?.id || 1;
 
-      // Try Redis cache first (60s TTL)
-      let cached: string | null = null;
-      try {
-        const { redis } = await import("./lib/redis");
-        cached = await redis.get(`dashboard:stats:${userId}`);
-        if (cached) return res.json(JSON.parse(cached));
-      } catch (_) { /* Redis unavailable, skip cache */ }
+      // Try in-memory cache first (60s TTL) — avoids Redis dependency
+      const cacheKey = `dashboard:stats:${userId}`;
+      const cached = statsCache.get(cacheKey);
+      if (cached && Date.now() - cached.ts < 60_000) return res.json(cached.data);
 
       const stats = await storage.getDashboardStats(userId);
-
-      // Cache in Redis for 60s
-      try {
-        const { redis } = await import("./lib/redis");
-        await redis.setex(`dashboard:stats:${userId}`, 60, JSON.stringify(stats));
-      } catch (_) {}
+      statsCache.set(cacheKey, { data: stats, ts: Date.now() });
 
       res.json(stats);
     } catch (err: any) {
@@ -1230,26 +1236,21 @@ export async function registerRoutes(
   });
 
   // === FILE UPLOAD/DOWNLOAD ===
-  const multer = await import("multer");
-  const path = await import("path");
-  const fs = await import("fs");
-  const { v4: uuidv4File } = await import("uuid");
-
   // Ensure uploads directory exists
-  const uploadsDir = path.default.resolve(process.cwd(), "uploads");
-  if (!fs.default.existsSync(uploadsDir)) {
-    fs.default.mkdirSync(uploadsDir, { recursive: true });
+  const uploadsDir = path.resolve(process.cwd(), "uploads");
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
   }
 
-  const uploadStorage = multer.default.diskStorage({
+  const uploadStorage = multer.diskStorage({
     destination: (_req: any, _file: any, cb: any) => cb(null, uploadsDir),
     filename: (_req: any, file: any, cb: any) => {
-      const ext = path.default.extname(file.originalname);
-      cb(null, `${uuidv4File()}${ext}`);
+      const ext = path.extname(file.originalname);
+      cb(null, `${uuidv4()}${ext}`);
     },
   });
 
-  const upload = multer.default({
+  const upload = multer({
     storage: uploadStorage,
     limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
   });
@@ -1259,7 +1260,7 @@ export async function registerRoutes(
     if (!userId) return res.status(401).json({ error: "Not authenticated" });
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-    const fileId = uuidv4File();
+    const fileId = uuidv4();
     const storagePath = req.file.filename;
     const conversationId = req.body?.conversationId || null;
 
@@ -1286,11 +1287,11 @@ export async function registerRoutes(
     try {
       const file = await dbGet("SELECT * FROM uploaded_files WHERE id = ?", req.params.id) as any;
       if (!file) return res.status(404).json({ error: "File not found" });
-      const filePath = path.default.join(uploadsDir, file.storage_path);
-      if (!fs.default.existsSync(filePath)) return res.status(404).json({ error: "File not found on disk" });
+      const filePath = path.join(uploadsDir, file.storage_path);
+      if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found on disk" });
       res.setHeader("Content-Type", file.mime_type);
       res.setHeader("Content-Disposition", `inline; filename="${file.original_name}"`);
-      fs.default.createReadStream(filePath).pipe(res);
+      fs.createReadStream(filePath).pipe(res);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1300,11 +1301,11 @@ export async function registerRoutes(
     try {
       const file = await dbGet("SELECT * FROM uploaded_files WHERE id = ?", req.params.id) as any;
       if (!file) return res.status(404).json({ error: "File not found" });
-      const filePath = path.default.join(uploadsDir, file.storage_path);
-      if (!fs.default.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
+      const filePath = path.join(uploadsDir, file.storage_path);
+      if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
       // For now, serve the original image as thumbnail (could add sharp/resize later)
       res.setHeader("Content-Type", file.mime_type);
-      fs.default.createReadStream(filePath).pipe(res);
+      fs.createReadStream(filePath).pipe(res);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

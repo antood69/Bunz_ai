@@ -1156,6 +1156,20 @@ export async function initDatabase() {
     await dbExec("CREATE INDEX IF NOT EXISTS idx_traces_parent ON agent_traces(parent_trace_id)");
   } catch (_) {}
 
+  // ── Performance indexes for frequently-queried tables ──
+  try {
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_token_usage_user_date ON token_usage(user_id, created_at)");
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_conversations_user_date ON conversations(user_id, created_at DESC)");
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_boss_messages_conv ON boss_messages(conversation_id, created_at)");
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_agent_jobs_user_status ON agent_jobs(user_id, status, created_at DESC)");
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_workflow_runs_user_date ON workflow_runs(user_id, created_at)");
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_workflow_exec_user_date ON workflow_executions(user_id, created_at DESC)");
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_pipeline_runs_user ON pipeline_runs(user_id, created_at DESC)");
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read)");
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_bot_logs_date ON bot_logs(created_at DESC)");
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_bots_user_status ON bots(user_id, status)");
+  } catch (_) {}
+
   // ── Auto-seed admin accounts (runs after all schema migrations) ──
   try {
     const seedAccounts = [
@@ -3664,24 +3678,35 @@ export class DatabaseStorage implements IStorage {
     startOfPrevMonth.setMonth(startOfPrevMonth.getMonth() - 1);
     const startOfPrevMonthTs = startOfPrevMonth.getTime();
 
-    // Active agents: count currently running OR recently completed (last 30s) so fast jobs are visible
+    // Run all 8 queries in parallel instead of sequentially
     const recentWindow = Date.now() - 30000;
-    const activeAgents = ((await dbGet("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND (status = 'running' OR (status = 'complete' AND completed_at > ?))", userId, recentWindow)) as any)?.c || 0;
-    const prevActiveAgents = ((await dbGet("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND status = 'complete' AND completed_at > ? AND completed_at <= ?", userId, fourteenDaysAgo, sevenDaysAgo)) as any)?.c || 0;
-
-    // Tokens used (7d) - from token_usage table (authoritative record for all AI calls)
     const sevenDaysAgoISO = new Date(sevenDaysAgo).toISOString();
     const fourteenDaysAgoISO = new Date(fourteenDaysAgo).toISOString();
-    const tokensUsed7d = ((await dbGet("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ?", userId, sevenDaysAgoISO)) as any)?.t || 0;
-    const tokensPrev7d = ((await dbGet("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ? AND created_at <= ?", userId, fourteenDaysAgoISO, sevenDaysAgoISO)) as any)?.t || 0;
 
-    // Tasks run (30d) - count agent_jobs (department tasks)
-    const workflowsRun30d = ((await dbGet("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND created_at > ?", userId, thirtyDaysAgo)) as any)?.c || 0;
-    const workflowsPrev30d = ((await dbGet("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND created_at > ? AND created_at <= ?", userId, sixtyDaysAgo, thirtyDaysAgo)) as any)?.c || 0;
+    const [
+      activeAgentsRow, prevActiveAgentsRow,
+      tokensRow, tokensPrevRow,
+      wfRow, wfPrevRow,
+      revRow, revPrevRow,
+    ] = await Promise.all([
+      dbGet("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND (status = 'running' OR (status = 'complete' AND completed_at > ?))", userId, recentWindow),
+      dbGet("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND status = 'complete' AND completed_at > ? AND completed_at <= ?", userId, fourteenDaysAgo, sevenDaysAgo),
+      dbGet("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ?", userId, sevenDaysAgoISO),
+      dbGet("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ? AND created_at <= ?", userId, fourteenDaysAgoISO, sevenDaysAgoISO),
+      dbGet("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND created_at > ?", userId, thirtyDaysAgo),
+      dbGet("SELECT COUNT(*) as c FROM agent_jobs WHERE user_id = ? AND created_at > ? AND created_at <= ?", userId, sixtyDaysAgo, thirtyDaysAgo),
+      dbGet("SELECT COUNT(*) as r FROM conversations WHERE user_id = ? AND created_at >= ?", userId, startOfMonthTs),
+      dbGet("SELECT COUNT(*) as r FROM conversations WHERE user_id = ? AND created_at >= ? AND created_at < ?", userId, startOfPrevMonthTs, startOfMonthTs),
+    ]);
 
-    // Boss conversations this month
-    const revenueThisMonth = ((await dbGet("SELECT COUNT(*) as r FROM conversations WHERE user_id = ? AND created_at >= ?", userId, startOfMonthTs)) as any)?.r || 0;
-    const revenuePrevMonth = ((await dbGet("SELECT COUNT(*) as r FROM conversations WHERE user_id = ? AND created_at >= ? AND created_at < ?", userId, startOfPrevMonthTs, startOfMonthTs)) as any)?.r || 0;
+    const activeAgents = (activeAgentsRow as any)?.c || 0;
+    const prevActiveAgents = (prevActiveAgentsRow as any)?.c || 0;
+    const tokensUsed7d = (tokensRow as any)?.t || 0;
+    const tokensPrev7d = (tokensPrevRow as any)?.t || 0;
+    const workflowsRun30d = (wfRow as any)?.c || 0;
+    const workflowsPrev30d = (wfPrevRow as any)?.c || 0;
+    const revenueThisMonth = (revRow as any)?.r || 0;
+    const revenuePrevMonth = (revPrevRow as any)?.r || 0;
 
     // Compute deltas as percentage
     const computeDelta = (curr: number, prev: number) => {
@@ -3707,16 +3732,22 @@ export class DatabaseStorage implements IStorage {
   // ── Phase 3 Dashboard: Token Usage Chart Data ─────────────────────────────
   async getTokenUsageByDay(userId: number, days: number = 7): Promise<{ date: string; tokens: number }[]> {
     const now = Date.now();
+    const startDate = new Date(now - days * 86400000).toISOString();
+
+    // Single GROUP BY query instead of N individual queries
+    const rows = await dbAll(
+      `SELECT SUBSTR(created_at, 1, 10) as day, COALESCE(SUM(total_tokens), 0) as t
+       FROM token_usage WHERE user_id = ? AND created_at > ?
+       GROUP BY SUBSTR(created_at, 1, 10) ORDER BY day`,
+      userId, startDate
+    ) as any[];
+
+    // Fill in missing days with 0
+    const byDay = new Map(rows.map((r: any) => [r.day, r.t || 0]));
     const result: { date: string; tokens: number }[] = [];
     for (let i = days - 1; i >= 0; i--) {
-      const dayStart = now - (i + 1) * 86400000;
-      const dayEnd = now - i * 86400000;
-      // Query token_usage table (the authoritative record for all AI calls)
-      const dateStart = new Date(dayStart).toISOString();
-      const dateEnd = new Date(dayEnd).toISOString();
-      const row = await dbGet("SELECT COALESCE(SUM(total_tokens), 0) as t FROM token_usage WHERE user_id = ? AND created_at > ? AND created_at <= ?", userId, dateStart, dateEnd) as any;
-      const date = new Date(dayEnd).toISOString().slice(0, 10);
-      result.push({ date, tokens: row?.t || 0 });
+      const date = new Date(now - i * 86400000).toISOString().slice(0, 10);
+      result.push({ date, tokens: byDay.get(date) || 0 });
     }
     return result;
   }
@@ -3724,16 +3755,31 @@ export class DatabaseStorage implements IStorage {
   // ── Phase 3 Dashboard: Workflow Run Chart Data ────────────────────────────
   async getWorkflowRunsByDay(userId: number, days: number = 30): Promise<{ date: string; runs: number }[]> {
     const now = Date.now();
+    const startTs = now - days * 86400000;
+    const startDate = new Date(startTs).toISOString();
+
+    // Single GROUP BY queries instead of 2*N individual queries
+    const [wfRows, execRows] = await Promise.all([
+      dbAll(
+        `SELECT SUBSTR(created_at, 1, 10) as day, COUNT(*) as c
+         FROM workflow_runs WHERE user_id = ? AND created_at > ?
+         GROUP BY SUBSTR(created_at, 1, 10)`,
+        userId, startDate
+      ) as Promise<any[]>,
+      dbAll(
+        `SELECT DATE(created_at / 1000, 'unixepoch') as day, COUNT(*) as c
+         FROM workflow_executions WHERE user_id = ? AND created_at > ?
+         GROUP BY DATE(created_at / 1000, 'unixepoch')`,
+        userId, startTs
+      ) as Promise<any[]>,
+    ]);
+
+    const wfByDay = new Map((wfRows || []).map((r: any) => [r.day, r.c || 0]));
+    const execByDay = new Map((execRows || []).map((r: any) => [r.day, r.c || 0]));
     const result: { date: string; runs: number }[] = [];
     for (let i = days - 1; i >= 0; i--) {
-      const dayStart = now - (i + 1) * 86400000;
-      const dayEnd = now - i * 86400000;
-      const dateStr = new Date(dayEnd).toISOString().slice(0, 10);
-      const fromStr = new Date(dayStart).toISOString();
-      const toStr = new Date(dayEnd).toISOString();
-      const wfRuns = ((await dbGet("SELECT COUNT(*) as c FROM workflow_runs WHERE user_id = ? AND created_at > ? AND created_at <= ?", userId, fromStr, toStr)) as any)?.c || 0;
-      const wfExec = ((await dbGet("SELECT COUNT(*) as c FROM workflow_executions WHERE user_id = ? AND created_at > ? AND created_at <= ?", userId, dayStart, dayEnd)) as any)?.c || 0;
-      result.push({ date: dateStr, runs: wfRuns + wfExec });
+      const date = new Date(now - i * 86400000).toISOString().slice(0, 10);
+      result.push({ date, runs: (wfByDay.get(date) || 0) + (execByDay.get(date) || 0) });
     }
     return result;
   }

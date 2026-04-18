@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, memo, useMemo } from "react";
 import {
   Bot, Send, Plus, MessageSquare, Copy, Check, ChevronLeft, ChevronRight,
   Search, Code2, FileText, BarChart3, ShieldCheck, Palette, Globe,
@@ -81,7 +81,7 @@ const WORKER_LABELS: Record<string, string> = {
 
 // ─── AgentStatusCard ──────────────────────────────────────────────────────────
 
-function AgentStatusCard({ worker }: { worker: WorkerStatus }) {
+const AgentStatusCard = memo(function AgentStatusCard({ worker }: { worker: WorkerStatus }) {
   const Icon = WORKER_ICONS[worker.type] || Bot;
   const label = WORKER_LABELS[worker.type] || worker.type;
 
@@ -114,11 +114,11 @@ function AgentStatusCard({ worker }: { worker: WorkerStatus }) {
       ) : null}
     </div>
   );
-}
+});
 
 // ─── WorkflowProgress ─────────────────────────────────────────────────────────
 
-function WorkflowProgress({
+const WorkflowProgress = memo(function WorkflowProgress({
   workers,
   isSynthesizing,
   agentImages,
@@ -183,7 +183,7 @@ function WorkflowProgress({
       )}
     </div>
   );
-}
+});
 
 // ─── Streaming status bar ─────────────────────────────────────────────────────
 
@@ -468,7 +468,7 @@ function TypingDots() {
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
 
-function MessageBubble({
+const MessageBubble = memo(function MessageBubble({
   msg,
   streamState,
 }: {
@@ -612,7 +612,7 @@ function MessageBubble({
       )}
     </div>
   );
-}
+});
 
 // ─── Suggestion chips ─────────────────────────────────────────────────────────
 
