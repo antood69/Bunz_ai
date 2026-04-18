@@ -18,6 +18,7 @@ import {
   Sparkles,
   Activity,
   Layers,
+  BookTemplate,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -30,6 +31,7 @@ const primaryTabs = [
 ];
 
 const moreItems = [
+  { href: "/templates", label: "Templates", icon: BookTemplate },
   { href: "/editor", label: "Editor", icon: Code },
   { href: "/plugins", label: "Plugins", icon: Puzzle },
   { href: "/gallery", label: "Gallery", icon: Layers },

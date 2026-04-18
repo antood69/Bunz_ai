@@ -25,6 +25,7 @@ import PluginsPage from "@/pages/PluginsPage";
 import WalletPage from "@/pages/WalletPage";
 import TracesPage from "@/pages/TracesPage";
 import ArtifactGallery from "@/pages/ArtifactGallery";
+import TemplatesPage from "@/pages/TemplatesPage";
 import AppLayout from "@/components/AppLayout";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import JarvisMode from "@/components/JarvisMode";
@@ -59,6 +60,7 @@ function AppRouter() {
             <Route path="/wallet" component={WalletPage} />
             <Route path="/traces" component={TracesPage} />
             <Route path="/gallery" component={ArtifactGallery} />
+            <Route path="/templates" component={TemplatesPage} />
 
 
             {/* Redirects */}

@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, GitBranch, Bot, Zap, Settings, LogOut, ShieldAlert,
   MessageSquare, PanelLeftClose, PanelLeftOpen, Code, Store,
-  Wallet, Puzzle, Wifi, Monitor, Activity, Layers, Sparkles,
+  Wallet, Puzzle, Wifi, Monitor, Activity, Layers, Sparkles, BookTemplate,
 } from "lucide-react";
 import TokenCounter from "./TokenCounter";
 import NotificationBell from "./NotificationBell";
@@ -26,6 +26,7 @@ const navItems = [
 
 // Secondary nav — power user features
 const secondaryNavItems = [
+  { href: "/templates", label: "Templates", icon: BookTemplate },
   { href: "/editor", label: "Editor", icon: Code },
   { href: "/plugins", label: "Plugins", icon: Puzzle },
   { href: "/gallery", label: "Gallery", icon: Layers },
