@@ -319,5 +319,36 @@ export function createMemoryRouter() {
     res.json({ total: total?.count || 0, breakdown: stats });
   });
 
+  // ── Project Context — pinned context per conversation ──────────────────
+  // Stored as conversation-scoped memories that auto-inject into every message
+
+  router.post("/project-context", async (req: Request, res: Response) => {
+    const userId = req.user?.id || 1;
+    const { conversationId, content, label } = req.body;
+    if (!conversationId || !content) return res.status(400).json({ error: "conversationId and content required" });
+
+    const id = uuidv4();
+    await dbRun(
+      `INSERT INTO agent_memory (id, user_id, tier, category, department, content, source, source_id, relevance, access_count, created_at, updated_at)
+       VALUES (?, ?, 'knowledge', 'project_context', NULL, ?, 'project', ?, 10, 0, ?, ?)`,
+      id, userId, `[PROJECT:${label || "context"}] ${content}`, conversationId, Date.now(), Date.now()
+    );
+    res.json({ id });
+  });
+
+  router.get("/project-context/:conversationId", async (req: Request, res: Response) => {
+    const userId = req.user?.id || 1;
+    const rows = await dbAll(
+      "SELECT id, content, created_at FROM agent_memory WHERE user_id = ? AND category = 'project_context' AND source_id = ? ORDER BY created_at DESC",
+      userId, req.params.conversationId
+    );
+    res.json(rows);
+  });
+
+  router.delete("/project-context/:id", async (req: Request, res: Response) => {
+    await dbRun("DELETE FROM agent_memory WHERE id = ? AND category = 'project_context'", req.params.id);
+    res.json({ ok: true });
+  });
+
   return router;
 }

@@ -1156,6 +1156,23 @@ export async function initDatabase() {
     await dbExec("CREATE INDEX IF NOT EXISTS idx_traces_parent ON agent_traces(parent_trace_id)");
   } catch (_) {}
 
+  // ── Task Templates ──
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS task_templates (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        category TEXT DEFAULT 'general',
+        icon TEXT DEFAULT 'zap',
+        is_public INTEGER DEFAULT 0,
+        use_count INTEGER DEFAULT 0,
+        created_at INTEGER NOT NULL
+      )
+    `);
+  } catch (_) {}
+
   // ── Performance indexes for frequently-queried tables ──
   try {
     await dbExec("CREATE INDEX IF NOT EXISTS idx_token_usage_user_date ON token_usage(user_id, created_at)");
@@ -1168,6 +1185,29 @@ export async function initDatabase() {
     await dbExec("CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read)");
     await dbExec("CREATE INDEX IF NOT EXISTS idx_bot_logs_date ON bot_logs(created_at DESC)");
     await dbExec("CREATE INDEX IF NOT EXISTS idx_bots_user_status ON bots(user_id, status)");
+  } catch (_) {}
+
+  // ── Seed default task templates ──
+  try {
+    const existing = await dbGet("SELECT COUNT(*) as c FROM task_templates WHERE is_public = 1") as any;
+    if (!existing || existing.c === 0) {
+      const templates = [
+        { name: "Deep Research", prompt: "Do a comprehensive research report on: ", category: "research", icon: "search" },
+        { name: "Blog Post", prompt: "Write a detailed blog post about: ", category: "writing", icon: "file-text" },
+        { name: "Code Review", prompt: "Review this code for bugs, security issues, and improvements: ", category: "coding", icon: "code" },
+        { name: "Landing Page", prompt: "Build a modern, responsive landing page for: ", category: "design", icon: "layout" },
+        { name: "Competitor Analysis", prompt: "Research and compare these competitors: ", category: "research", icon: "bar-chart" },
+        { name: "Email Draft", prompt: "Write a professional email about: ", category: "writing", icon: "mail" },
+        { name: "Social Media Pack", prompt: "Create a social media content pack with posts for Twitter, LinkedIn, and Instagram about: ", category: "writing", icon: "share" },
+        { name: "Document Analysis", prompt: "Read and analyze this document. Summarize key points, identify issues, and provide recommendations: ", category: "reading", icon: "book-open" },
+      ];
+      for (const t of templates) {
+        await dbRun(
+          "INSERT OR IGNORE INTO task_templates (id, user_id, name, prompt, category, icon, is_public, use_count, created_at) VALUES (?, 1, ?, ?, ?, ?, 1, 0, ?)",
+          `template-${t.category}-${t.name.toLowerCase().replace(/\s+/g, "-")}`, t.name, t.prompt, t.category, t.icon, Date.now()
+        );
+      }
+    }
   } catch (_) {}
 
   // ── Auto-seed admin accounts (runs after all schema migrations) ──

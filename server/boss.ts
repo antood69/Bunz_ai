@@ -15,6 +15,7 @@ import { v4 as uuidv4 } from "uuid";
 import { modelRouter } from "./ai";
 import { eventBus } from "./lib/eventBus";
 import { storage } from "./storage";
+import { dbAll } from "./lib/db";
 import { logJob, logAI, logError } from "./lib/logger";
 
 /**
@@ -496,7 +497,22 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
         } catch { return ""; }
       })();
 
-      [vaultContext, memoryContext] = await Promise.all([vaultPromise, memoryPromise]);
+      // Project context — pinned notes for this specific conversation
+      const projectPromise = (async () => {
+        if (!conversationId) return "";
+        try {
+          const rows = await dbAll(
+            "SELECT content FROM agent_memory WHERE user_id = ? AND category = 'project_context' AND source_id = ? ORDER BY created_at DESC LIMIT 5",
+            userId, conversationId
+          ) as any[];
+          if (rows.length === 0) return "";
+          return `\n\n--- PROJECT CONTEXT (pinned for this conversation) ---\n${rows.map((r: any) => r.content).join("\n")}\n--- END PROJECT CONTEXT ---\n`;
+        } catch { return ""; }
+      })();
+
+      const [vc, mc, pc] = await Promise.all([vaultPromise, memoryPromise, projectPromise]);
+      vaultContext = vc;
+      memoryContext = mc + pc;
     }
 
     // ── Call Boss AI to decide: direct answer or dispatch ─────────────────

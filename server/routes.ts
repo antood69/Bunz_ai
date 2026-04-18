@@ -566,6 +566,40 @@ export async function registerRoutes(
     res.json({ status: job.status, output: job.output, tokenCount: job.token_count });
   });
 
+  // === TASK TEMPLATES — reusable saved prompts ===
+  app.get("/api/task-templates", asyncHandler(async (req, res) => {
+    const userId = req.user?.id || 1;
+    const rows = await dbAll(
+      "SELECT * FROM task_templates WHERE user_id = ? OR is_public = 1 ORDER BY use_count DESC, created_at DESC LIMIT 50",
+      userId
+    );
+    res.json(rows);
+  }));
+
+  app.post("/api/task-templates", asyncHandler(async (req, res) => {
+    const userId = req.user?.id || 1;
+    const { name, prompt, category, icon } = req.body;
+    if (!name || !prompt) return res.status(400).json({ error: "name and prompt required" });
+    const id = uuidv4();
+    await dbRun(
+      "INSERT INTO task_templates (id, user_id, name, prompt, category, icon, is_public, use_count, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?)",
+      id, userId, name, prompt, category || "general", icon || "zap", Date.now()
+    );
+    res.json({ id });
+  }));
+
+  app.post("/api/task-templates/:id/use", asyncHandler(async (req, res) => {
+    await dbRun("UPDATE task_templates SET use_count = use_count + 1 WHERE id = ?", req.params.id);
+    const template = await dbGet("SELECT * FROM task_templates WHERE id = ?", req.params.id) as any;
+    res.json(template);
+  }));
+
+  app.delete("/api/task-templates/:id", asyncHandler(async (req, res) => {
+    const userId = req.user?.id || 1;
+    await dbRun("DELETE FROM task_templates WHERE id = ? AND user_id = ?", req.params.id, userId);
+    res.json({ ok: true });
+  }));
+
   // === CONVERSATIONS ===
   app.get("/api/conversations", async (req, res) => {
     const userId = req.user?.id || 1;
