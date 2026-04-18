@@ -242,33 +242,67 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     message = message.replace(/^\/human\s*/i, "").trim();
   }
   // Detect /research command — deep multi-source research with citations
-  const deepResearchMode = message.trim().toLowerCase().startsWith("/research");
+  let deepResearchMode = message.trim().toLowerCase().startsWith("/research");
   if (deepResearchMode) {
     message = message.replace(/^\/research\s*/i, "").trim();
   }
 
+  // Auto-detect deep research — if the message is complex enough, auto-trigger
+  if (!deepResearchMode && !message.trim().toLowerCase().startsWith("/")) {
+    const msg = message.toLowerCase();
+    const wordCount = message.split(/\s+/).length;
+    const researchSignals = [
+      /\b(research|investigate|analyze|study|examine|explore|deep dive|comprehensive|thorough)\b/i,
+      /\b(compare|comparison|pros and cons|advantages|disadvantages|vs\.?|versus)\b/i,
+      /\b(report|findings|analysis|overview|landscape|market|industry|trends)\b/i,
+      /\b(everything about|all about|full|complete|detailed|in-depth)\b/i,
+    ];
+    const matchCount = researchSignals.filter(p => p.test(msg)).length;
+    // Auto-trigger if: 2+ research signals, or 1 signal + long message (50+ words)
+    if (matchCount >= 2 || (matchCount >= 1 && wordCount > 50)) {
+      deepResearchMode = true;
+    }
+  }
+
   // Detect /chart command — generate data visualizations as artifacts
-  const chartMode = message.trim().toLowerCase().startsWith("/chart");
+  let chartMode = message.trim().toLowerCase().startsWith("/chart");
   if (chartMode) {
     message = message.replace(/^\/chart\s*/i, "").trim();
   }
+  // Auto-detect chart requests
+  if (!chartMode && !deepResearchMode && !message.trim().toLowerCase().startsWith("/")) {
+    const msg = message.toLowerCase();
+    if (/\b(chart|graph|plot|visuali[zs]e|pie chart|bar chart|line chart|histogram|dashboard)\b/i.test(msg) &&
+        /\b(show|create|make|generate|build|draw|display)\b/i.test(msg)) {
+      chartMode = true;
+    }
+  }
 
   // Detect /design command — screenshot/description → React+Tailwind code
-  const designMode = message.trim().toLowerCase().startsWith("/design");
+  let designMode = message.trim().toLowerCase().startsWith("/design");
   if (designMode) {
     message = message.replace(/^\/design\s*/i, "").trim();
   }
 
   // Detect /swarm command — parallel agent swarm with live visualization
-  const swarmMode = message.trim().toLowerCase().startsWith("/swarm");
+  let swarmMode = message.trim().toLowerCase().startsWith("/swarm");
   if (swarmMode) {
     message = message.replace(/^\/swarm\s*/i, "").trim();
   }
 
   // Detect /build command — Company in a Box
-  const buildMode = message.trim().toLowerCase().startsWith("/build");
+  let buildMode = message.trim().toLowerCase().startsWith("/build");
   if (buildMode) {
     message = message.replace(/^\/build\s*/i, "").trim();
+  }
+  // Auto-detect build/launch requests
+  if (!buildMode && !deepResearchMode && !chartMode && !message.trim().toLowerCase().startsWith("/")) {
+    const msg = message.toLowerCase();
+    if (/\b(build|launch|create|start|set up|make)\b/i.test(msg) &&
+        /\b(business|startup|company|saas|app|website|store|shop|product|landing page|platform)\b/i.test(msg) &&
+        /\b(for|that|which|to sell|selling|about)\b/i.test(msg)) {
+      buildMode = true;
+    }
   }
 
   const tier = INTELLIGENCE_TIERS[level];
