@@ -478,7 +478,10 @@ export async function registerRoutes(
       attachments?: Array<{ id: string; url: string; mimeType: string; name: string }>;
       imageBase64?: string; // Direct base64 screenshot from Bun Bun mode
     };
-    if (!message) return res.status(400).json({ error: "message required" });
+    // Allow empty message if there are attachments
+    if (!message && !attachments?.length && !imageBase64) {
+      return res.status(400).json({ error: "message or attachment required" });
+    }
 
     try {
       const userId = req.user?.id || 1;
@@ -487,6 +490,8 @@ export async function registerRoutes(
 
       // Build image content for vision models
       let imageContents: Array<{ type: "image_url"; image_url: { url: string } }> = [];
+      // Text file contents to append to the message
+      let textFileContents = "";
 
       // Direct base64 screenshot (from Bun Bun screen viewer)
       if (imageBase64 && imageBase64.startsWith("data:image/")) {
@@ -495,27 +500,42 @@ export async function registerRoutes(
 
       if (attachments?.length) {
         for (const att of attachments) {
-          if (att.mimeType?.startsWith("image/")) {
-            try {
-              // Read file from uploads dir and convert to base64
-              const fileId = att.id || att.url?.split("/").pop();
-              const row = await dbGet("SELECT storage_path, mime_type FROM uploaded_files WHERE id = ?", fileId) as any;
-              if (row) {
-                const filePath = path.resolve(process.cwd(), "uploads", row.storage_path);
-                if (fs.existsSync(filePath)) {
-                  const data = fs.readFileSync(filePath);
-                  const b64 = `data:${row.mime_type};base64,${data.toString("base64")}`;
-                  imageContents.push({ type: "image_url", image_url: { url: b64 } });
-                }
+          try {
+            const fileId = att.id || att.url?.split("/").pop();
+            const row = await dbGet("SELECT storage_path, mime_type, original_name FROM uploaded_files WHERE id = ?", fileId) as any;
+            if (!row) continue;
+            const filePath = path.resolve(process.cwd(), "uploads", row.storage_path);
+            if (!fs.existsSync(filePath)) continue;
+
+            if (att.mimeType?.startsWith("image/")) {
+              // Images: convert to base64 for vision models
+              const data = fs.readFileSync(filePath);
+              const b64 = `data:${row.mime_type};base64,${data.toString("base64")}`;
+              imageContents.push({ type: "image_url", image_url: { url: b64 } });
+            } else {
+              // Text files: read as UTF-8 and inline into the message
+              const isTextFile = /\.(ts|tsx|js|jsx|json|md|py|html|css|txt|csv|yaml|yml|toml|ini|xml|sh|sql|go|rs|java|cpp|c|h|hpp|rb|php|swift|kt|scala|vue|svelte|env\.example)$/i.test(row.original_name || att.name || "");
+              if (isTextFile) {
+                const content = fs.readFileSync(filePath, "utf-8");
+                // Cap each file at 8000 chars to manage token budget
+                const trimmed = content.length > 8000
+                  ? content.slice(0, 8000) + `\n\n[...truncated at 8000 chars, original size: ${content.length}]`
+                  : content;
+                textFileContents += `\n\n--- FILE: ${row.original_name || att.name} ---\n${trimmed}`;
               }
-            } catch {}
-          }
+            }
+          } catch {}
         }
       }
 
+      // Append text file contents to the message so the AI can see them
+      const effectiveMessage = textFileContents
+        ? (message || "Please review the attached files.") + textFileContents
+        : message;
+
       const result = await handleBossChat({
         conversationId,
-        message,
+        message: effectiveMessage,
         level: intelligenceLevel,
         userId,
         userEmail: req.user?.email,

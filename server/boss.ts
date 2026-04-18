@@ -246,9 +246,11 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   const noSlash = !msg.startsWith("/");
 
   // Check if owner is asking to read files — skip all auto-routing if so
+  // Matches: typed paths (server/boss.ts), root files (PLATFORM.md), or injected file markers (--- FILE: ... ---)
   const hasFilePaths = !!(
     message.match(/(?:server|client|shared|workflows|tools)\/[\w./\-]+\.(?:ts|tsx|js|json|md|py)/i) ||
-    message.match(/(?:PLATFORM|CLAUDE|README|package)\.(?:md|json)/i)
+    message.match(/(?:PLATFORM|CLAUDE|README|package)\.(?:md|json)/i) ||
+    message.match(/--- FILE: /)
   );
   const isOwnerUser = !!(userEmail && (await storage.getUserByEmail(userEmail))?.role === "owner");
   const ownerFileMode = hasFilePaths && isOwnerUser;
