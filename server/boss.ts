@@ -15,6 +15,7 @@ import { v4 as uuidv4 } from "uuid";
 import { modelRouter } from "./ai";
 import { eventBus } from "./lib/eventBus";
 import { storage } from "./storage";
+import { logJob, logAI, logError } from "./lib/logger";
 
 /**
  * Get the owner's Obsidian connector — all user outputs route to the owner's vault.
@@ -334,6 +335,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
 
       // Create a job and return immediately
       const jobId = uuidv4();
+      logJob(jobId, "created", { command: cmd.label, level });
       await storage.createAgentJob({
         id: jobId, conversationId: convId, userId,
         type: "boss" as any, status: "running",
@@ -384,6 +386,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
           });
 
           // Update job
+          logJob(jobId, "complete", { tokens: result.tokenCount });
           await storage.updateAgentJob(jobId, {
             status: "complete",
             output: result.reply?.slice(0, 5000),
@@ -391,6 +394,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
             completedAt: Date.now(),
           });
         } catch (err: any) {
+          logJob(jobId, "failed", { error: err.message });
           eventBus.emit(jobId, "error", { error: err.message });
           await storage.updateAgentJob(jobId, {
             status: "failed", output: err.message, completedAt: Date.now(),
@@ -507,6 +511,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     });
 
     const bossTokens = bossResult.usage.totalTokens;
+    logAI(bossModel, bossResult.latencyMs || 0, bossTokens, "boss_routing");
 
     // Record Boss token usage
     await storage.recordTokenUsage({
@@ -527,6 +532,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       });
 
       const parentJobId = uuidv4();
+      logJob(parentJobId, "dispatch", { departments: plan.departments.map((d: any) => d.id), level });
       await storage.createAgentJob({
         id: parentJobId, conversationId, userId, type: "boss" as any,
         status: "running",
@@ -589,7 +595,8 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       // Execute departments asynchronously — results flow back via eventBus
       executeDepartments(parentJobId, conversationId, userId, level, message, plan.departments, abortController.signal, userEmail, humanizeMode)
         .catch(err => {
-          console.error("[Boss] Department dispatch error:", err.message);
+          logJob(parentJobId, "failed", { error: err.message });
+          logError("department-dispatch", err);
           eventBus.emit(parentJobId, "error", { error: err.message });
         })
         .finally(() => activeAbortControllers.delete(conversationId));
@@ -640,8 +647,9 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     if (finalContent.length > 200 && message.split(/\s+/).length > 5) {
       try {
         const { extractMemories } = await import("./memory");
-        extractMemories(userId, "boss", message, finalContent, input.source || "boss", conversationId).catch(() => {});
-      } catch {}
+        extractMemories(userId, "boss", message, finalContent, input.source || "boss", conversationId)
+          .catch((e: any) => logError("memory-extract", e));
+      } catch (e: any) { logError("memory-import", e); }
     }
 
     return {

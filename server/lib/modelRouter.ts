@@ -64,6 +64,8 @@ export interface ChatResult {
   json?: any;
   /** Whether JSON validation passed (null if jsonMode not used) */
   jsonValid?: boolean;
+  /** Latency in milliseconds for the AI call */
+  latencyMs?: number;
   /** For image generation models — contains the base64 data URL or image URL */
   imageUrl?: string;
   /** Response type: "text" (default) or "image" */
@@ -599,7 +601,9 @@ export const modelRouter = {
           throw new DOMException("Aborted", "AbortError");
         }
 
+        const callStart = Date.now();
         const result = await callProvider({ ...opts, model: currentModel });
+        result.latencyMs = Date.now() - callStart;
 
         if (i > 0) {
           result.fallbackUsed = currentModel;

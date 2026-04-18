@@ -15,6 +15,7 @@ import {
   DEPARTMENTS, getModel, getActiveSubAgents,
 } from "./types";
 import { startTrace, type TraceInput } from "../traces";
+import { logAI, logError } from "../lib/logger";
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -182,6 +183,7 @@ async function runStandardDept(
       });
 
       const durationMs = Date.now() - agentStart;
+      logAI(model, result.latencyMs || durationMs, result.usage.totalTokens, `${task.department}:${agent.id}`);
       const agentResult: SubAgentResult = {
         agentId: agent.id, label: agent.label,
         content: result.content, tokens: result.usage.totalTokens, durationMs,
