@@ -128,7 +128,11 @@ DISPATCH FORMAT (raw JSON only, no markdown):
 
 When dispatching, REWRITE vague requests into precise, detailed prompts. Add structure, length, tone, and format requirements the user implied.
 
-ARTIFACTS: Only for visual/interactive content (HTML pages, charts, SVG). Text responses use markdown.` + bossInstructions;
+ARTIFACTS — STRICT RULES:
+- Only use <artifact> for content the user explicitly asked to be visual/interactive (landing pages, charts, UI mockups)
+- NEVER generate HTML artifacts for reports, analysis, reviews, or text content — use markdown instead
+- If you DO create an artifact, it MUST be fully functional — all tabs, sections, and interactive elements must work with real content. Empty shells, placeholder sections, or non-functional UI elements are not acceptable. If the content is too large for a complete artifact, use markdown instead.
+- Default to plain markdown. Only reach for artifacts when visual rendering adds clear value.` + bossInstructions;
 
 // ── Parse Boss dispatch decision ────────────────────────────────────────────
 
@@ -579,7 +583,8 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       : message;
 
     const bossResult = await modelRouter.chat({
-      model: bossModel,
+      model: hasInjectedFiles ? "gpt-5.4" : bossModel, // Use stronger model for file analysis
+      maxTokens: hasInjectedFiles ? 16384 : 4096, // More output space for code review
       messages: [
         // Only last 4 messages for routing context — Boss just needs recent context, not full history
         ...history.slice(-4).map(m => ({ role: m.role as "user" | "assistant", content: typeof m.content === "string" ? m.content.slice(0, 500) : m.content })),
@@ -1424,13 +1429,13 @@ DEPARTMENT RESULTS:
 ${outputSummaries}
 
 PRESENTATION RULES:
-- For complete HTML pages, landing pages, or web components: wrap in <artifact type="html" title="descriptive title">...full html...</artifact>
-- For SVG graphics or diagrams: wrap in <artifact type="svg" title="descriptive title">...svg...</artifact>
-- For long-form documents (reports, articles): wrap in <artifact type="document" title="descriptive title">...content...</artifact>
-- For standalone code files: wrap in <artifact type="code" title="filename.ext">...code...</artifact>
+- Default to clean markdown for ALL text content (reports, analysis, summaries, articles, emails)
+- Only use <artifact type="html"> when the user explicitly asked for a webpage, landing page, or interactive UI
+- Only use <artifact type="svg"> when the user asked for a diagram or graphic
+- Only use <artifact type="code"> for standalone code files the user asked to be built
+- If you DO create an artifact, it must be FULLY FUNCTIONAL with all sections complete — no empty tabs, no placeholder content, no broken navigation. If you can't finish it completely, use markdown instead.
 - For images that were generated: mention they were created
-- Write a brief summary before each artifact explaining what it is
-- Be concise in your explanatory text — let the artifacts speak for themselves`;
+- Be concise — let the content speak for itself`;
 
     const synthesis = await modelRouter.chat({
       model: bossModel,
