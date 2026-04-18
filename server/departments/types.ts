@@ -18,10 +18,11 @@ const DEPT_INSTRUCTIONS: Record<string, string> = {
   coder: loadInstructions("coder"),
   writer: loadInstructions("writer"),
   artist: loadInstructions("artist"),
+  reader: loadInstructions("reader"),
 };
 
 export type IntelligenceLevel = "entry" | "medium" | "max";
-export type DepartmentId = "research" | "coder" | "artist" | "writer";
+export type DepartmentId = "research" | "coder" | "artist" | "writer" | "reader";
 export type TaskComplexity = "simple" | "moderate" | "complex";
 
 // ── Intelligence Levels ─────────────────────────────────────────────────────
@@ -36,17 +37,17 @@ export const INTELLIGENCE_TIERS: Record<IntelligenceLevel, {
   entry: {
     label: "Entry", description: "Fast responses, lower cost",
     bossModel: "gpt-5.4-mini", costMultiplier: 1,
-    models: { research: "gemma-4-31b", coder: "gpt-5.4-mini", artist: "gpt-image-1", writer: "gpt-5.4-mini" },
+    models: { research: "gemma-4-31b", coder: "gpt-5.4-mini", artist: "gpt-image-1", writer: "gpt-5.4-mini", reader: "gpt-5.4-mini" },
   },
   medium: {
     label: "Medium", description: "Balanced speed and quality",
     bossModel: "gpt-5.4", costMultiplier: 3,
-    models: { research: "sonar-pro", coder: "claude-sonnet-4-6", artist: "gpt-image-1", writer: "gpt-5.4" },
+    models: { research: "sonar-pro", coder: "claude-sonnet-4-6", artist: "gpt-image-1", writer: "gpt-5.4", reader: "gpt-5.4" },
   },
   max: {
     label: "Max", description: "Highest quality output",
     bossModel: "claude-opus-4-6", costMultiplier: 8,
-    models: { research: "sonar-pro", coder: "claude-opus-4-6", artist: "gpt-image-1", writer: "claude-opus-4-6" },
+    models: { research: "sonar-pro", coder: "claude-opus-4-6", artist: "gpt-image-1", writer: "claude-opus-4-6", reader: "claude-opus-4-6" },
   },
 };
 
@@ -361,6 +362,90 @@ Same message, different voice. Match the audience perfectly.`,
 - Return polished version with brief changelog
 
 You are the last pair of eyes. Nothing leaves without your approval.`,
+      },
+    ],
+  },
+
+  reader: {
+    id: "reader", label: "Reader", icon: "BookOpen",
+    description: "Document analysis, reading comprehension, summarization, critical review",
+    triggers: [
+      /\b(read|review|analyze|summarize|break ?down|explain|interpret|parse|extract)\b.*\b(document|paper|article|pdf|report|text|contract|agreement|legal|terms|policy|book|chapter|essay|thesis|whitepaper|memo|brief)\b/i,
+      /\b(document|paper|article|pdf|report|contract|agreement|terms|policy)\b.*\b(read|review|analyze|summarize|break ?down|explain|key points|main ideas|tl;?dr)\b/i,
+      /\b(what does|what is|explain|summarize|tl;?dr|key points|main takeaways|break ?down)\b.*\b(this|the|that)\b.*\b(say|mean|document|paper|article|text)\b/i,
+    ],
+    subAgents: [
+      {
+        id: "lead_reader", label: "Lead Reader", required: true,
+        systemPrompt: `You are the Lead Reader for Cortal. Your job is to thoroughly read and comprehend documents.
+
+- Read the entire document carefully and extract the core message
+- Identify the document type (legal, technical, academic, business, etc.)
+- Create a structured summary with sections matching the original
+- Extract key facts, figures, dates, names, and obligations
+- Highlight anything unusual, important, or requiring attention
+- Use clear headers and bullet points for scannable output
+
+Be thorough. Miss nothing. Structure everything.`,
+      },
+      {
+        id: "section_reader_1", label: "Section Reader A", required: false,
+        modelOverride: { medium: "gpt-5.4-mini", max: "gpt-5.4" },
+        systemPrompt: `You are Section Reader A for Cortal. You focus on the FIRST HALF of the document.
+
+- Read and analyze the first 50% of the content in detail
+- Extract key points, arguments, data, and conclusions from your section
+- Note any cross-references to other parts of the document
+- Flag terms, conditions, or claims that need verification
+- Identify the document's thesis/purpose from the opening sections
+
+Focus on depth, not breadth. Your partner handles the second half.`,
+      },
+      {
+        id: "section_reader_2", label: "Section Reader B", required: false,
+        modelOverride: { medium: "gpt-5.4-mini", max: "gpt-5.4" },
+        systemPrompt: `You are Section Reader B for Cortal. You focus on the SECOND HALF of the document.
+
+- Read and analyze the last 50% of the content in detail
+- Extract key points, conclusions, recommendations, and action items
+- Note any references back to earlier sections
+- Pay special attention to conclusions, disclaimers, fine print
+- Identify any commitments, deadlines, or obligations
+
+Focus on depth, not breadth. Your partner handles the first half.`,
+      },
+      {
+        id: "reviewer", label: "Reviewer", required: false,
+        modelOverride: { medium: "gpt-5.4", max: "claude-opus-4-6" },
+        systemPrompt: `You are the Document Reviewer for Cortal. You review the readers' analysis for completeness and accuracy.
+
+- Cross-check findings from Lead Reader and Section Readers
+- Identify any gaps — sections that were missed or underanalyzed
+- Verify key claims and figures are correctly extracted
+- Ensure the summary accurately represents the original document
+- Add any missing context or implications
+- Rate confidence: HIGH / MEDIUM / LOW for each major finding
+
+Be the quality gate. If something was missed, catch it here.`,
+      },
+      {
+        id: "disputer", label: "Disputer", required: false,
+        modelOverride: { medium: "gpt-5.4", max: "claude-opus-4-6" },
+        systemPrompt: `You are the Disputer for Cortal. Your job is to challenge and stress-test the document analysis.
+
+- Play devil's advocate on every major finding
+- Question assumptions made by the other readers
+- Identify logical fallacies, weak arguments, or unsupported claims in the document
+- Point out what the document DOESN'T say (important omissions)
+- Highlight potential risks, hidden costs, or unfavorable terms
+- Challenge the document's conclusions — are they justified by the evidence?
+- Note any bias, spin, or misleading framing
+
+If the document is a contract: find every clause that could hurt the reader.
+If it's research: find every methodological weakness.
+If it's a proposal: find every unrealistic promise.
+
+Be ruthlessly skeptical. Your job is to protect the user.`,
       },
     ],
   },

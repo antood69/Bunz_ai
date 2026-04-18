@@ -106,8 +106,8 @@ DEPARTMENTS:
 - coder: Programming, debugging, code review, GitHub operations, file access
 - artist: Image generation, visual content, design, illustrations
 - writer: Content creation, copywriting, documentation, emails, articles
-- autonomous: Complex multi-step projects needing research + writing + coding combined. Use when task has 3+ phases.
-- autonomous: Complex multi-step projects that need research + writing + coding combined. Use when the task has 3+ distinct phases (e.g. "research competitors, write a report, and build a dashboard")
+- reader: Document analysis, reading comprehension, summarization, critical review. Use when the user provides a document, PDF, article, contract, book chapter, or large text to read, analyze, summarize, or answer questions about. The reader department splits the document between multiple sub-agents, reviews for accuracy, and has a disputer that challenges findings. Can work with other departments — e.g. reader analyzes a paper, then writer creates an essay about it.
+- autonomous: Complex multi-step projects that need research + writing + coding + reading combined. Use when the task has 3+ distinct phases (e.g. "read this paper, research the topic further, and write a report")
 
 DECISION RULES:
 1. Simple questions, greetings, quick facts → answer directly (NO dispatch)
@@ -178,7 +178,7 @@ function parseDispatch(text: string): { plan: DispatchPlan | null; message: stri
     if (parsed.action !== "dispatch" || !Array.isArray(parsed.departments)) {
       return { plan: null, message: text };
     }
-    const validDepts = ["research", "coder", "artist", "writer", "autonomous"];
+    const validDepts = ["research", "coder", "artist", "writer", "reader", "autonomous"];
     const departments = parsed.departments.filter(
       (d: any) => validDepts.includes(d.id) && d.task
     );
