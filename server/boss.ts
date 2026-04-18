@@ -897,7 +897,7 @@ ALWAYS respond with an <artifact type="html" title="Chart: [description]"> tag c
 - Chart.js loaded via CDN: <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 - A <canvas> element for the chart
 - A <script> block that creates the chart with proper data, colors, and labels
-- Clean, modern dark styling (dark background #1a1a2e, white text)
+- Clean, modern styling with white background (#ffffff), dark text
 - Responsive sizing
 
 If the user provides CSV data, parse it and visualize it.
@@ -1022,9 +1022,18 @@ Write a professional report with:
 4. Conclusions & Recommendations
 5. Sources (list all sources mentioned in the findings)
 
-Use clear headings, bullet points, and data where available. If you can wrap the report in <artifact type="html" title="Research Report: ${topic.slice(0, 40)}"> tags, do so with professional styling.`,
+Use clear headings, bullet points, and data where available.
+
+Wrap the report in <artifact type="html" title="Research Report: ${topic.slice(0, 40)}"> tags with CLEAN, READABLE styling:
+- White/light background (#ffffff), dark text (#1a1a2a)
+- Clean sans-serif font (system-ui or Inter)
+- Generous padding (40px) and max-width (800px) centered
+- Headings in a brand color (#4f46e5)
+- Clean tables with light borders
+- Subtle section dividers
+- Print-friendly, easy to read — NOT dark theme`,
       }],
-      systemPrompt: "You are a senior research analyst. Write comprehensive, well-cited reports. Use <artifact> tags for rich HTML output.",
+      systemPrompt: "You are a senior research analyst. Write comprehensive, well-cited reports. Use <artifact> tags for rich HTML output. Always use a clean light/white background for readability.",
       signal: abortController.signal,
     });
 

@@ -128,12 +128,14 @@ export function useAgentStream(jobId: string | null): StreamState {
         const data = JSON.parse(e.data);
         setState((prev) => {
           const workers = [...prev.workers];
-          const idx = workers.findIndex((w) => w.type === data.workerType);
+          // Use subAgent name as unique key when available, fall back to workerType
+          const workerKey = data.subAgent ? `${data.workerType}:${data.subAgent}` : data.workerType;
+          const idx = workers.findIndex((w) => w.type === workerKey);
           if (idx >= 0) {
             workers[idx] = { ...workers[idx], status: data.status === "synthesizing" ? "running" : data.status };
           } else if (data.workerType && data.workerType !== "boss") {
             workers.push({
-              type: data.workerType,
+              type: workerKey,
               index: data.workerIndex ?? workers.length,
               status: "running",
               streamedText: "",
@@ -154,7 +156,8 @@ export function useAgentStream(jobId: string | null): StreamState {
         const data = JSON.parse(e.data);
         setState((prev) => {
           const workers = [...prev.workers];
-          const idx = workers.findIndex((w) => w.type === data.workerType);
+          const workerKey = data.subAgent ? `${data.workerType}:${data.subAgent}` : data.workerType;
+          const idx = workers.findIndex((w) => w.type === workerKey);
           if (idx >= 0) {
             workers[idx] = {
               ...workers[idx],
