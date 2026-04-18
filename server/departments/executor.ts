@@ -108,6 +108,18 @@ export async function executeDepartment(
   }
 }
 
+/** Get a fallback model when the primary model fails */
+function getFallbackModel(model: string): string | null {
+  const fallbacks: Record<string, string> = {
+    "claude-opus-4-6": "claude-sonnet-4-6",
+    "claude-sonnet-4-6": "gpt-5.4",
+    "gpt-5.4": "gpt-5.4-mini",
+    "sonar-pro": "sonar",
+    "gemini-2.5-pro": "gemini-2.5-flash",
+  };
+  return fallbacks[model] || (model.includes("mini") ? null : "gpt-5.4-mini");
+}
+
 function detectProvider(model: string): string {
   if (model.includes("claude")) return "anthropic";
   if (model.includes("gpt") || model.includes("o1") || model.includes("o3") || model.includes("o4")) return "openai";
@@ -195,6 +207,40 @@ async function runStandardDept(
 
     } catch (err: any) {
       if (err?.name === "AbortError") throw err;
+
+      // Retry once with a cheaper/different model before giving up
+      const fallbackModel = getFallbackModel(model);
+      if (fallbackModel && agent.required) {
+        console.warn(`[Dept:${task.department}] ${agent.label} failed with ${model}, retrying with ${fallbackModel}...`);
+        eventBus.emit(parentJobId, "progress", {
+          workerType: task.department, subAgent: agent.label, workerIndex: i,
+          status: "running", message: `${agent.label} retrying with fallback model...`,
+        });
+        try {
+          const prompt = previousOutput
+            ? `ORIGINAL TASK:\n${task.task}\n\nPREVIOUS OUTPUT:\n${previousOutput.slice(0, 1500)}\n\nYour job: Review, refine, or extend the above according to your role.`
+            : (task.context ? `${task.task}\n\nContext:\n${task.context}` : task.task);
+          const retryResult = await modelRouter.chat({
+            model: fallbackModel,
+            messages: [{ role: "user", content: prompt }],
+            systemPrompt: agent.systemPrompt,
+            signal,
+          });
+          const durationMs = Date.now() - agentStart;
+          results.push({ agentId: agent.id, label: agent.label, content: retryResult.content, tokens: retryResult.usage.totalTokens, durationMs });
+          totalTokens += retryResult.usage.totalTokens;
+          previousOutput = retryResult.content;
+          eventBus.emit(parentJobId, "step_complete", {
+            workerType: task.department, subAgent: agent.label, workerIndex: i,
+            output: retryResult.content.slice(0, 500), tokens: retryResult.usage.totalTokens,
+            durationMs, model: fallbackModel,
+          });
+          continue; // Retry succeeded — move to next agent
+        } catch (retryErr: any) {
+          console.error(`[Dept:${task.department}] ${agent.label} retry also failed: ${retryErr.message}`);
+        }
+      }
+
       eventBus.emit(parentJobId, "step_complete", {
         workerType: task.department, subAgent: agent.label, workerIndex: i,
         status: "error", error: err.message, durationMs: Date.now() - agentStart,

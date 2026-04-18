@@ -50,6 +50,8 @@ export interface ChatOptions {
   providerHint?: string;
   /** Max tokens for response */
   maxTokens?: number;
+  /** Force JSON output — adds response_format: json_object for supported providers */
+  jsonMode?: boolean;
 }
 
 export interface ChatResult {
@@ -283,7 +285,9 @@ async function callOpenRouterImage(opts: ChatOptions, apiKey?: string): Promise<
 
 async function callAnthropic(opts: ChatOptions, apiKey?: string): Promise<ChatResult> {
   const client = anthropicClient(apiKey);
-  const system = opts.systemPrompt?.trim() || SYSTEM_DEFAULT;
+  let system = opts.systemPrompt?.trim() || SYSTEM_DEFAULT;
+  // Anthropic doesn't have response_format — use system prompt to enforce JSON
+  if (opts.jsonMode) system += "\n\nIMPORTANT: You MUST respond with valid JSON only. No other text, no markdown, no code fences.";
 
   // Convert messages — handle multimodal content for Anthropic's format
   const msgs = opts.messages.map((m) => {
@@ -339,6 +343,7 @@ async function callOpenAI(opts: ChatOptions, apiKey?: string): Promise<ChatResul
   const response = await client.chat.completions.create({
     model: opts.model,
     ...tokenParam,
+    ...(opts.jsonMode ? { response_format: { type: "json_object" as const } } : {}),
     messages: [
       { role: "system", content: system },
       ...opts.messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content as any })),

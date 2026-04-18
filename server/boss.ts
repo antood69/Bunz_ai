@@ -1254,20 +1254,61 @@ async function executeDepartments(
       } catch {}
     }
 
-    // Execute all departments in parallel
-    const results = await Promise.all(
-      departments.map(dept =>
-        executeDepartment(parentJobId, { department: dept.id, task: dept.task }, level, complexity, signal,
-          dept.id === "coder" ? github : undefined)
-          .catch(err => {
-            console.error(`[Boss] ${dept.id} department failed:`, err.message);
-            return {
+    // Detect if departments have dependencies (research/reader → writer/coder)
+    // If so, run producers first, then consumers with shared context
+    const producers = departments.filter(d => d.id === "research" || d.id === "reader");
+    const consumers = departments.filter(d => d.id !== "research" && d.id !== "reader");
+    const hasChain = producers.length > 0 && consumers.length > 0;
+
+    let results: DepartmentResult[];
+
+    if (hasChain) {
+      // Phase 1: Run producers (research/reader) in parallel
+      const producerResults = await Promise.all(
+        producers.map(dept =>
+          executeDepartment(parentJobId, { department: dept.id, task: dept.task }, level, complexity, signal)
+            .catch(err => ({
               department: dept.id, finalOutput: `[${dept.id} department error: ${err.message}]`,
               subAgentResults: [], totalTokens: 0, totalDurationMs: 0,
-            } as DepartmentResult;
-          })
-      )
-    );
+            } as DepartmentResult))
+        )
+      );
+
+      // Build shared context from producer outputs
+      const sharedContext = producerResults
+        .filter(r => !r.finalOutput.startsWith("["))
+        .map(r => `--- ${r.department.toUpperCase()} FINDINGS ---\n${r.finalOutput.slice(0, 2000)}`)
+        .join("\n\n");
+
+      // Phase 2: Run consumers with shared context from producers
+      const consumerResults = await Promise.all(
+        consumers.map(dept => {
+          const enrichedTask = sharedContext
+            ? `${dept.task}\n\nCONTEXT FROM OTHER DEPARTMENTS:\n${sharedContext}`
+            : dept.task;
+          return executeDepartment(parentJobId, { department: dept.id, task: enrichedTask }, level, complexity, signal,
+            dept.id === "coder" ? github : undefined)
+            .catch(err => ({
+              department: dept.id, finalOutput: `[${dept.id} department error: ${err.message}]`,
+              subAgentResults: [], totalTokens: 0, totalDurationMs: 0,
+            } as DepartmentResult));
+        })
+      );
+
+      results = [...producerResults, ...consumerResults];
+    } else {
+      // No dependencies — run all departments in parallel (original behavior)
+      results = await Promise.all(
+        departments.map(dept =>
+          executeDepartment(parentJobId, { department: dept.id, task: dept.task }, level, complexity, signal,
+            dept.id === "coder" ? github : undefined)
+            .catch(err => ({
+              department: dept.id, finalOutput: `[${dept.id} department error: ${err.message}]`,
+              subAgentResults: [], totalTokens: 0, totalDurationMs: 0,
+            } as DepartmentResult))
+        )
+      );
+    }
 
     for (const r of results) {
       deptResults.push(r);
