@@ -239,97 +239,82 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   let { message, userId, userEmail, history = [] } = input;
   const level: IntelligenceLevel = input.level || "medium";
 
-  // Detect /human command — humanize the output to pass AI detectors
-  const humanizeMode = message.trim().toLowerCase().startsWith("/human");
-  if (humanizeMode) {
-    message = message.replace(/^\/human\s*/i, "").trim();
-  }
-  // Detect /research command — deep multi-source research with citations
-  let deepResearchMode = message.trim().toLowerCase().startsWith("/research");
-  if (deepResearchMode) {
-    message = message.replace(/^\/research\s*/i, "").trim();
-  }
+  // ── Command Detection + Auto-Routing ─────────────────────────────────
+  // Slash commands are explicit overrides. Auto-detection handles everything
+  // else so users never need to remember a command — just type naturally.
 
-  // Auto-detect deep research — if the message is complex enough, auto-trigger
-  if (!deepResearchMode && !message.trim().toLowerCase().startsWith("/")) {
-    const msg = message.toLowerCase();
-    const wordCount = message.split(/\s+/).length;
-    const researchSignals = [
+  const msg = message.trim().toLowerCase();
+  const wordCount = message.split(/\s+/).length;
+  const noSlash = !msg.startsWith("/");
+
+  // /human — humanize output to pass AI detectors (modifier, works with any flow)
+  const humanizeMode = msg.startsWith("/human");
+  if (humanizeMode) message = message.replace(/^\/human\s*/i, "").trim();
+
+  // /research — deep multi-source research with citations
+  let deepResearchMode = msg.startsWith("/research");
+  if (deepResearchMode) message = message.replace(/^\/research\s*/i, "").trim();
+  // Auto: 2+ research signals, or 1 signal + long message
+  if (!deepResearchMode && noSlash) {
+    const signals = [
       /\b(research|investigate|analyze|study|examine|explore|deep dive|comprehensive|thorough)\b/i,
       /\b(compare|comparison|pros and cons|advantages|disadvantages|vs\.?|versus)\b/i,
       /\b(report|findings|analysis|overview|landscape|market|industry|trends)\b/i,
       /\b(everything about|all about|full|complete|detailed|in-depth)\b/i,
     ];
-    const matchCount = researchSignals.filter(p => p.test(msg)).length;
-    // Auto-trigger if: 2+ research signals, or 1 signal + long message (50+ words)
-    if (matchCount >= 2 || (matchCount >= 1 && wordCount > 50)) {
-      deepResearchMode = true;
-    }
+    const hits = signals.filter(p => p.test(msg)).length;
+    if (hits >= 2 || (hits >= 1 && wordCount > 50)) deepResearchMode = true;
   }
 
-  // Detect /chart command — generate data visualizations as artifacts
-  let chartMode = message.trim().toLowerCase().startsWith("/chart");
-  if (chartMode) {
-    message = message.replace(/^\/chart\s*/i, "").trim();
-  }
-  // Auto-detect chart requests
-  if (!chartMode && !deepResearchMode && !message.trim().toLowerCase().startsWith("/")) {
-    const msg = message.toLowerCase();
-    if (/\b(chart|graph|plot|visuali[zs]e|pie chart|bar chart|line chart|histogram|dashboard)\b/i.test(msg) &&
-        /\b(show|create|make|generate|build|draw|display)\b/i.test(msg)) {
+  // /chart — interactive data visualizations
+  let chartMode = msg.startsWith("/chart");
+  if (chartMode) message = message.replace(/^\/chart\s*/i, "").trim();
+  // Auto: chart/graph/visualize + create/show/make
+  if (!chartMode && !deepResearchMode && noSlash) {
+    if (/\b(chart|graph|plot|visuali[zs]e|pie chart|bar chart|line chart|histogram|dashboard|data viz)\b/i.test(msg) &&
+        /\b(show|create|make|generate|build|draw|display|of|for)\b/i.test(msg)) {
       chartMode = true;
     }
   }
 
-  // Detect /design command — screenshot/description → React+Tailwind code
-  let designMode = message.trim().toLowerCase().startsWith("/design");
-  if (designMode) {
-    message = message.replace(/^\/design\s*/i, "").trim();
-  }
-  // Auto-detect design requests
-  if (!designMode && !deepResearchMode && !chartMode && !message.trim().toLowerCase().startsWith("/")) {
-    const msg = message.toLowerCase();
+  // /design — screenshot/description → code
+  let designMode = msg.startsWith("/design");
+  if (designMode) message = message.replace(/^\/design\s*/i, "").trim();
+  // Auto: design/mockup/wireframe + page/component + create/build
+  if (!designMode && !deepResearchMode && !chartMode && noSlash) {
     if (/\b(design|redesign|mockup|wireframe|prototype|ui|ux|layout)\b/i.test(msg) &&
-        /\b(page|screen|component|section|form|modal|card|dashboard|interface|website)\b/i.test(msg) &&
-        /\b(create|make|build|generate|convert|turn into|code)\b/i.test(msg)) {
+        /\b(page|screen|component|section|form|modal|card|dashboard|interface|website|homepage)\b/i.test(msg) &&
+        /\b(create|make|build|generate|convert|turn into|code|look like)\b/i.test(msg)) {
       designMode = true;
     }
   }
 
-  // Detect /swarm command — parallel agent swarm with live visualization
-  let swarmMode = message.trim().toLowerCase().startsWith("/swarm");
-  if (swarmMode) {
-    message = message.replace(/^\/swarm\s*/i, "").trim();
-  }
-  // Auto-detect swarm — requests that clearly need multiple departments at once
-  if (!swarmMode && !deepResearchMode && !chartMode && !designMode && !message.trim().toLowerCase().startsWith("/")) {
-    const msg = message.toLowerCase();
-    const deptSignals = [
-      /\b(research|analyze|investigate|find out|look into)\b/i,
-      /\b(write|draft|compose|blog|article|copy|content|email)\b/i,
-      /\b(code|build|develop|program|implement|script|app)\b/i,
-      /\b(image|logo|design|illustration|visual|art|picture)\b/i,
-    ];
-    const deptMatches = deptSignals.filter(p => p.test(msg)).length;
-    // If 3+ different departments needed, use swarm for parallel execution
-    if (deptMatches >= 3) {
-      swarmMode = true;
+  // /build — Company in a Box (full project from one sentence)
+  let buildMode = msg.startsWith("/build");
+  if (buildMode) message = message.replace(/^\/build\s*/i, "").trim();
+  // Auto: build/launch + business/startup/app/website + context
+  if (!buildMode && !deepResearchMode && !chartMode && !designMode && noSlash) {
+    if (/\b(build|launch|create|start|set up|make|spin up)\b/i.test(msg) &&
+        /\b(business|startup|company|saas|app|website|store|shop|product|landing page|platform|service)\b/i.test(msg) &&
+        /\b(for|that|which|to sell|selling|about|called|named)\b/i.test(msg)) {
+      buildMode = true;
     }
   }
 
-  // Detect /build command — Company in a Box
-  let buildMode = message.trim().toLowerCase().startsWith("/build");
-  if (buildMode) {
-    message = message.replace(/^\/build\s*/i, "").trim();
-  }
-  // Auto-detect build/launch requests
-  if (!buildMode && !deepResearchMode && !chartMode && !message.trim().toLowerCase().startsWith("/")) {
-    const msg = message.toLowerCase();
-    if (/\b(build|launch|create|start|set up|make)\b/i.test(msg) &&
-        /\b(business|startup|company|saas|app|website|store|shop|product|landing page|platform)\b/i.test(msg) &&
-        /\b(for|that|which|to sell|selling|about)\b/i.test(msg)) {
-      buildMode = true;
-    }
+  // /swarm — parallel agent swarm (multiple departments simultaneously)
+  let swarmMode = msg.startsWith("/swarm");
+  if (swarmMode) message = message.replace(/^\/swarm\s*/i, "").trim();
+  // Auto: 3+ different department types detected in one message
+  if (!swarmMode && !deepResearchMode && !chartMode && !designMode && !buildMode && noSlash) {
+    const deptSignals = [
+      /\b(research|analyze|investigate|find out|look into|study)\b/i,
+      /\b(write|draft|compose|blog|article|copy|content|email|essay)\b/i,
+      /\b(code|build|develop|program|implement|script|app|function)\b/i,
+      /\b(image|logo|illustration|visual|art|picture|photo|draw)\b/i,
+      /\b(read|review|summarize|document|paper|contract|pdf|book)\b/i,
+    ];
+    const deptMatches = deptSignals.filter(p => p.test(msg)).length;
+    if (deptMatches >= 3) swarmMode = true;
   }
 
   const tier = INTELLIGENCE_TIERS[level];
