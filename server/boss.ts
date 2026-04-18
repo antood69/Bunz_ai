@@ -193,15 +193,6 @@ DISPATCH FORMAT (raw JSON only, no markdown):
 
 When dispatching, REWRITE vague requests into precise, detailed prompts. Add structure, length, tone, and format requirements the user implied.
 
-FILE READING (owner only):
-You have the read_file tool available to read Cortal's actual code. Use it whenever the user asks about implementation, architecture, behavior, or asks you to audit/review/analyze the platform. Do not answer code questions from memory — always read the relevant files first.
-
-Key starting points for audits: PLATFORM.md, server/boss.ts, server/departments/types.ts, server/departments/executor.ts, server/memory.ts, server/pipelines.ts, server/bots.ts, client/src/pages/BossPage.tsx, client/src/App.tsx.
-
-You can pass a directory path (like "server" or "client/src/pages") to list its contents first. Read broadly, then answer with specific file paths, function names, and line references.
-
-Skip reading only for abstract questions or ones fully covered by the architecture summary above.
-
 ARTIFACTS — STRICT RULES:
 - Only use <artifact> for content the user explicitly asked to be visual/interactive (landing pages, charts, UI mockups)
 - NEVER generate HTML artifacts for reports, analysis, reviews, or text content — use markdown instead
@@ -331,14 +322,14 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       message.match(/(?:PLATFORM|CLAUDE|README|package)\.(?:md|json)/i) ||
       message.match(/--- FILE: /)
     );
-    // Trigger 2: unambiguous self-referential code intent
-    const hasCodeIntent = !!(
-      /\b(audit|review|analyze|inspect|examine|debug)\b.{0,40}\b(cortal|codebase|your (own |)(code|files|routing|implementation)|the platform|this app)\b/i.test(message) ||
-      /\b(read|check|open|view|see|show|access)\b.{0,40}\b(your (own |)(code|files?|source|internal)|internal files|server\/|client\/src)\b/i.test(message) ||
-      /\bwhat (files|code) (does|do you)\b/i.test(message) ||
-      /\bwhat (are|am i|youre) (made|built|being) (off|of|from)\b/i.test(message) ||
-      /\bbrutally honest (assessment|audit|review)\b/i.test(message)
-    );
+    // Trigger 2: separate signals combined — typo-resistant for the owner
+    // hasAuditVerb OR hasSelfReference is enough when combined with ANY hint about Cortal/code
+    const hasAuditVerb = /\b(audit|review|analy[sz]e|inspect|examine|debug|cleanup|clean up|refactor|optimi[sz]e|improve|fix)\b/i.test(message);
+    const hasCortalNoun = /\b(cortal|codebase|dispatch|dispatching|distpatch|router|routing|boss ai|boss routing|boss logic|department|executor|pipeline|orchestrat|sub[ -]?agent|workflow engine|token waste|(tokens?|token) (being )?(wasted|eated|ewated|eaten|burn|burning)|delay (is )?happening|wh?ere delay|find out wh?ere)\b/i.test(message);
+    const hasSelfReference = /\b(your (own )?(code|files?|source|internal|implementation|system|routing|logic|network)|internal files|server\/|client\/src|what (are|am i|youre|you are) (made|built)|brutally honest|what (files|code) (does|do you))\b/i.test(message);
+    const hasBugWord = /\b(delay|slow|waste|wasting|wasted|eated|ewated|stuck|broken|wrong|issue|problem|bug)\b/i.test(message);
+    // Owner mode triggers if: clear self-reference, OR (audit verb + any code/bug hint)
+    const hasCodeIntent = hasSelfReference || (hasAuditVerb && (hasCortalNoun || hasBugWord));
     ownerFileMode = hasFilePaths || hasCodeIntent;
   }
 
@@ -673,21 +664,26 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     ];
 
     // ── Native tool-use for owner file reading ──
-    // Uses OpenAI function calling — model decides when to read files
+    // Only mention the tool in the system prompt when tools are actually passed
+    // Otherwise the model invents text-based XML tool-call syntax (hallucination)
     const tools = ownerFileMode ? [READ_FILE_TOOL] : undefined;
     const useToolModel = (hasInjectedFiles || ownerFileMode);
 
+    const toolInstructions = ownerFileMode
+      ? "\n\nFILE READING: You have a read_file tool. CALL IT AS A NATIVE TOOL — do NOT output <tool_call> or <read_file> tags as text in your response. If you want to read a file, invoke the read_file function with the path parameter. The system handles the rest.\n\nRead Cortal's actual source files before answering — do NOT answer from memory. Useful starting files: PLATFORM.md, server/boss.ts, server/departments/types.ts, server/departments/executor.ts, server/memory.ts, server/pipelines.ts, server/bots.ts. Pass a directory path (e.g. 'server') to list its contents. NEVER fabricate file contents — if you can't read a file, say so."
+      : "\n\nYou do NOT have file access for this message. Do not output <tool_call> or <tool_response> tags — answer based on the architecture summary above, or ask the user to rephrase with a clearer self-reference (like 'audit Cortal's routing').";
+
     let bossResult = await modelRouter.chat({
-      model: useToolModel ? "claude-sonnet-4-6" : bossModel, // Sonnet is best-in-class for agentic tool use
+      model: useToolModel ? "claude-sonnet-4-6" : bossModel,
       maxTokens: useToolModel ? 16384 : 4096,
       messages: baseMessages,
-      systemPrompt: systemPrompt + vaultContext + memoryContext,
+      systemPrompt: systemPrompt + vaultContext + memoryContext + toolInstructions,
       tools,
       signal: abortController.signal,
     });
 
     let bossTokens = bossResult.usage.totalTokens;
-    logAI(useToolModel ? "gpt-5.4" : bossModel, bossResult.latencyMs || 0, bossTokens, "boss_routing");
+    logAI(useToolModel ? "claude-sonnet-4-6" : bossModel, bossResult.latencyMs || 0, bossTokens, "boss_routing");
 
     // Native tool-use loop: if model requested tools, execute them and call again
     if (ownerFileMode && bossResult.toolCalls && bossResult.toolCalls.length > 0) {
@@ -746,6 +742,22 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       outputTokens: bossResult.usage.completionTokens,
       totalTokens: bossTokens, endpoint: "boss_routing",
     });
+
+    // ── Strip hallucinated tool-call text (some models fake tool use in plain text) ──
+    // If the model output <tool_call>/<tool_response>/<read_file> tags as raw text
+    // (instead of using native tool_use), it means it tried to hallucinate file access.
+    // Strip those tags and tell the user the audit wasn't actually performed.
+    if (/<(tool_call|tool_response|read_file)[\s>]/i.test(bossResult.content)) {
+      // Remove the fake tool-use transcript entirely
+      bossResult.content = bossResult.content
+        .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+        .replace(/<tool_response>[\s\S]*?<\/tool_response>/gi, "")
+        .replace(/<read_file[^>]*\/?>/gi, "")
+        .trim();
+      if (!bossResult.content || bossResult.content.length < 30) {
+        bossResult.content = "I tried to use tool calls but they didn't fire — try asking again with a clearer self-referential phrase like 'audit Cortal's routing' or paste a file path directly.";
+      }
+    }
 
     // ── Try to parse dispatch ────────────────────────────────────────────
     const { plan, message: bossMessage } = parseDispatch(bossResult.content);
