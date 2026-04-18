@@ -278,10 +278,10 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   }
 
   // /chart — interactive data visualizations
-  let chartMode = msg.startsWith("/chart");
+  let chartMode = !ownerFileMode && msg.startsWith("/chart");
   if (chartMode) message = message.replace(/^\/chart\s*/i, "").trim();
   // Auto: chart/graph/visualize + create/show/make
-  if (!chartMode && !deepResearchMode && noSlash) {
+  if (!chartMode && !deepResearchMode && noSlash && !ownerFileMode) {
     if (/\b(chart|graph|plot|visuali[zs]e|pie chart|bar chart|line chart|histogram|dashboard|data viz)\b/i.test(msg) &&
         /\b(show|create|make|generate|build|draw|display|of|for)\b/i.test(msg)) {
       chartMode = true;
@@ -289,10 +289,10 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   }
 
   // /design — screenshot/description → code
-  let designMode = msg.startsWith("/design");
+  let designMode = !ownerFileMode && msg.startsWith("/design");
   if (designMode) message = message.replace(/^\/design\s*/i, "").trim();
   // Auto: design/mockup/wireframe + page/component + create/build
-  if (!designMode && !deepResearchMode && !chartMode && noSlash) {
+  if (!designMode && !deepResearchMode && !chartMode && noSlash && !ownerFileMode) {
     if (/\b(design|redesign|mockup|wireframe|prototype|ui|ux|layout)\b/i.test(msg) &&
         /\b(page|screen|component|section|form|modal|card|dashboard|interface|website|homepage)\b/i.test(msg) &&
         /\b(create|make|build|generate|convert|turn into|code|look like)\b/i.test(msg)) {
@@ -301,7 +301,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   }
 
   // /build — Company in a Box (full project from one sentence)
-  let buildMode = msg.startsWith("/build");
+  let buildMode = !ownerFileMode && msg.startsWith("/build");
   if (buildMode) message = message.replace(/^\/build\s*/i, "").trim();
   // Auto: build/launch + business/startup/app/website + context
   // BUT NOT when user is just asking for a plan, ideas, or brainstorming
@@ -316,7 +316,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   }
 
   // /swarm — parallel agent swarm (multiple departments simultaneously)
-  let swarmMode = msg.startsWith("/swarm");
+  let swarmMode = !ownerFileMode && msg.startsWith("/swarm");
   if (swarmMode) message = message.replace(/^\/swarm\s*/i, "").trim();
   // Auto: 3+ different department types detected in one message
   // Strip negated phrases first so "not making images" doesn't count as an artist signal
