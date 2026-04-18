@@ -419,10 +419,10 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   }
 
   const tier = INTELLIGENCE_TIERS[level];
-  // Entry tier uses mini (cheap routing). Medium/Max use tier's full model since
-  // Boss also generates the direct answer when not dispatching — mini produces
-  // worse answers and sometimes malformed dispatch JSON.
-  const bossModel = level === "entry" ? "gpt-5.4-mini" : tier.bossModel;
+  // All tiers use their tier's bossModel now (Claude family across the board).
+  // Sonnet 4.6 for medium is significantly better at agentic tool use and dispatch
+  // JSON than the old gpt-5.4, which produced routing errors.
+  const bossModel = tier.bossModel;
   const abortController = new AbortController();
 
   // ── Long-running command handler (returns immediately, streams via SSE) ──
@@ -679,7 +679,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     const useToolModel = (hasInjectedFiles || ownerFileMode);
 
     let bossResult = await modelRouter.chat({
-      model: useToolModel ? "gpt-5.4" : bossModel,
+      model: useToolModel ? "claude-sonnet-4-6" : bossModel, // Sonnet is best-in-class for agentic tool use
       maxTokens: useToolModel ? 16384 : 4096,
       messages: baseMessages,
       systemPrompt: systemPrompt + vaultContext + memoryContext,
@@ -727,7 +727,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
         // Call model again with tool results
         const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
         bossResult = await modelRouter.chat({
-          model: "gpt-5.4",
+          model: "claude-sonnet-4-6",
           maxTokens: 32768,
           messages: toolMessages,
           systemPrompt: systemPrompt + vaultContext + memoryContext +
@@ -736,7 +736,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
           signal: abortController.signal,
         });
         bossTokens += bossResult.usage.totalTokens;
-        logAI("gpt-5.4", bossResult.latencyMs || 0, bossResult.usage.totalTokens, `boss_tool_r${round + 1}`);
+        logAI("claude-sonnet-4-6", bossResult.latencyMs || 0, bossResult.usage.totalTokens, `boss_tool_r${round + 1}`);
       }
     }
 

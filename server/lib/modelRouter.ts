@@ -317,13 +317,31 @@ async function callAnthropic(opts: ChatOptions, apiKey?: string): Promise<ChatRe
   const client = anthropicClient(apiKey);
   let system = opts.systemPrompt?.trim() || SYSTEM_DEFAULT;
   // Anthropic doesn't have response_format — use system prompt to enforce JSON
-  if (opts.jsonMode) system += "\n\nIMPORTANT: You MUST respond with valid JSON only. No other text, no markdown, no code fences.";
+  if (opts.jsonMode && !opts.tools) system += "\n\nIMPORTANT: You MUST respond with valid JSON only. No other text, no markdown, no code fences.";
 
-  // Convert messages — handle multimodal content for Anthropic's format
-  const msgs = opts.messages.map((m) => {
+  // Convert messages — handle multimodal content + tool use for Anthropic's format
+  const msgs = opts.messages.map((m: any) => {
+    // Pass through tool-use message turns in Anthropic format
+    if (m.role === "tool") {
+      return {
+        role: "user" as const,
+        content: [{ type: "tool_result", tool_use_id: m.tool_call_id, content: m.content || "" }],
+      };
+    }
+    if (m.tool_calls) {
+      // OpenAI-style assistant message with tool_calls → convert to Anthropic tool_use blocks
+      const blocks: any[] = [];
+      if (m.content) blocks.push({ type: "text", text: m.content });
+      for (const tc of m.tool_calls) {
+        let input: any = {};
+        try { input = typeof tc.function?.arguments === "string" ? JSON.parse(tc.function.arguments) : tc.function?.arguments || {}; } catch {}
+        blocks.push({ type: "tool_use", id: tc.id, name: tc.function?.name, input });
+      }
+      return { role: "assistant" as const, content: blocks };
+    }
     if (typeof m.content === "string") return { role: m.role, content: m.content };
     // Convert array content to Anthropic format
-    const parts: any[] = m.content.map((part: any) => {
+    const parts: any[] = (m.content as any[]).map((part: any) => {
       if (part.type === "text") return { type: "text", text: part.text };
       if (part.type === "image_url" && part.image_url?.url) {
         const url = part.image_url.url;
@@ -338,18 +356,38 @@ async function callAnthropic(opts: ChatOptions, apiKey?: string): Promise<ChatRe
     return { role: m.role, content: parts };
   });
 
+  // Build Anthropic tools param
+  const toolsParam = opts.tools && opts.tools.length > 0
+    ? {
+        tools: opts.tools.map(t => ({
+          name: t.name,
+          description: t.description,
+          input_schema: t.parameters,
+        })),
+      }
+    : {};
+
   const response = await client.messages.create({
     model: opts.model,
     max_tokens: opts.maxTokens || 4096,
     system,
     messages: msgs,
+    ...toolsParam,
   });
 
-  const block = response.content[0];
-  const content = block.type === "text" ? block.text : "[No response]";
+  // Extract text and tool calls from content blocks
+  let content = "";
+  const toolCalls: ToolCall[] = [];
+  for (const block of response.content) {
+    if (block.type === "text") content += block.text;
+    else if (block.type === "tool_use") {
+      toolCalls.push({ id: block.id, name: block.name, arguments: block.input as any });
+    }
+  }
 
   return {
-    content,
+    content: content || "",
+    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     usage: {
       promptTokens: response.usage.input_tokens,
       completionTokens: response.usage.output_tokens,

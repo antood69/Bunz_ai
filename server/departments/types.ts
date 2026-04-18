@@ -36,18 +36,36 @@ export const INTELLIGENCE_TIERS: Record<IntelligenceLevel, {
 }> = {
   entry: {
     label: "Entry", description: "Fast responses, lower cost",
-    bossModel: "gpt-5.4-mini", costMultiplier: 1,
-    models: { research: "gemma-4-31b", coder: "gpt-5.4-mini", artist: "gpt-image-1", writer: "gpt-5.4-mini", reader: "gpt-5.4-mini" },
+    bossModel: "claude-haiku-4-5", costMultiplier: 1,
+    models: {
+      research: "sonar",              // Perplexity with built-in web search (was gemma-4-31b, a chat model w/o search)
+      coder: "claude-haiku-4-5",      // Much better at code than gpt-5.4-mini (was gpt-5.4-mini)
+      artist: "gpt-image-1",          // Only practical image model at this tier
+      writer: "claude-haiku-4-5",     // Claude writes better than gpt-mini (was gpt-5.4-mini)
+      reader: "claude-haiku-4-5",     // 200K context + great comprehension (was gpt-5.4-mini)
+    },
   },
   medium: {
     label: "Medium", description: "Balanced speed and quality",
-    bossModel: "gpt-5.4", costMultiplier: 3,
-    models: { research: "sonar-pro", coder: "claude-sonnet-4-6", artist: "gpt-image-1", writer: "gpt-5.4", reader: "gpt-5.4" },
+    bossModel: "claude-sonnet-4-6", costMultiplier: 3,
+    models: {
+      research: "sonar-pro",          // Perplexity's best web search model (unchanged)
+      coder: "claude-sonnet-4-6",     // Unchanged — already the best at this tier
+      artist: "gpt-image-1",          // Unchanged
+      writer: "claude-sonnet-4-6",    // Better writing than gpt-5.4 (was gpt-5.4)
+      reader: "claude-sonnet-4-6",    // 200K context, best for doc analysis (was gpt-5.4)
+    },
   },
   max: {
     label: "Max", description: "Highest quality output",
     bossModel: "claude-opus-4-6", costMultiplier: 8,
-    models: { research: "sonar-pro", coder: "claude-opus-4-6", artist: "gpt-image-1", writer: "claude-opus-4-6", reader: "claude-opus-4-6" },
+    models: {
+      research: "sonar-pro",          // No "opus" research model — sonar-pro is the best at web search
+      coder: "claude-opus-4-6",
+      artist: "gpt-image-1",
+      writer: "claude-opus-4-6",
+      reader: "claude-opus-4-6",
+    },
   },
 };
 
