@@ -869,6 +869,14 @@ export async function initDatabase() {
   await safeAlter("ALTER TABLE boss_messages ADD COLUMN type TEXT DEFAULT 'text'");
   await safeAlter("ALTER TABLE boss_messages ADD COLUMN image_url TEXT");
 
+  // Bot safety controls
+  await safeAlter("ALTER TABLE bots ADD COLUMN max_runs_per_day INTEGER DEFAULT 0");
+  await safeAlter("ALTER TABLE bots ADD COLUMN max_tokens_per_day INTEGER DEFAULT 0");
+  await safeAlter("ALTER TABLE bots ADD COLUMN require_approval INTEGER DEFAULT 0");
+  await safeAlter("ALTER TABLE bots ADD COLUMN runs_today INTEGER DEFAULT 0");
+  await safeAlter("ALTER TABLE bots ADD COLUMN tokens_today INTEGER DEFAULT 0");
+  await safeAlter("ALTER TABLE bots ADD COLUMN last_run_date TEXT DEFAULT ''");
+
   // Default repo for Coder self-improvement loop
   await safeAlter("ALTER TABLE user_preferences ADD COLUMN default_repo TEXT");
 

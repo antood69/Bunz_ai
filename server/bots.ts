@@ -24,6 +24,30 @@ async function runBotCycle(botId: string): Promise<void> {
     return;
   }
 
+  // ── Safety: enforce daily caps ──
+  const today = new Date().toISOString().slice(0, 10);
+  const lastRunDate = (bot as any).last_run_date || "";
+  // Reset counters if new day
+  if (lastRunDate !== today) {
+    await storage.updateBot(botId, { runs_today: 0, tokens_today: 0, last_run_date: today } as any);
+    (bot as any).runs_today = 0;
+    (bot as any).tokens_today = 0;
+  }
+
+  const maxRunsPerDay = (bot as any).max_runs_per_day || 0;
+  const maxTokensPerDay = (bot as any).max_tokens_per_day || 0;
+  const runsToday = (bot as any).runs_today || 0;
+  const tokensToday = (bot as any).tokens_today || 0;
+
+  if (maxRunsPerDay > 0 && runsToday >= maxRunsPerDay) {
+    await storage.addBotLog(botId, "blocked", `Daily run cap reached (${runsToday}/${maxRunsPerDay}) — bot paused until tomorrow`);
+    return;
+  }
+  if (maxTokensPerDay > 0 && tokensToday >= maxTokensPerDay) {
+    await storage.addBotLog(botId, "blocked", `Daily token cap reached (${tokensToday.toLocaleString()}/${maxTokensPerDay.toLocaleString()}) — bot paused until tomorrow`);
+    return;
+  }
+
   try {
     await storage.addBotLog(botId, "cycle", "Bot cycle started");
 
@@ -109,7 +133,9 @@ If nothing needs to be done right now, use action "none".`;
       totalTokens: (bot.total_tokens || 0) + tokens,
       totalRuns: (bot.total_runs || 0) + 1,
       lastActiveAt: Date.now(),
-    });
+      runs_today: runsToday + 1,
+      tokens_today: tokensToday + tokens,
+    } as any);
 
     // Parse decision
     let decision: any;
