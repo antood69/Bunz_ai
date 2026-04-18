@@ -172,7 +172,9 @@ export function createTracesRouter() {
       dbAll(`
         SELECT department, COUNT(*) as count, SUM(total_tokens) as tokens,
                CAST(SUM(CAST(cost_usd AS REAL)) AS TEXT) as cost,
-               AVG(duration_ms) as avgDuration
+               AVG(duration_ms) as avgDuration,
+               SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as errors,
+               ROUND(100.0 * SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END) / COUNT(*), 1) as successRate
         FROM agent_traces WHERE user_id = ? AND created_at >= ? AND department IS NOT NULL
         GROUP BY department ORDER BY count DESC
       `, userId, since),

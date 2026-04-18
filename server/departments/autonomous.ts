@@ -11,6 +11,11 @@ import {
   type DepartmentId, type IntelligenceLevel,
   INTELLIGENCE_TIERS, estimateComplexity,
 } from "./types";
+import { logJob, logError } from "../lib/logger";
+
+const MAX_STEPS = 8;          // Never execute more than 8 steps
+const MAX_FAILURES = 3;       // Abort if 3+ steps fail
+const STEP_TIMEOUT_MS = 120_000; // 2 min per step max
 
 export interface AutonomousStep {
   stepNumber: number;
@@ -35,7 +40,7 @@ export interface AutonomousPlan {
 
 const OPS_PLAN_PROMPT = `You are the Ops Manager. Break complex goals into executable steps.
 
-DEPARTMENTS: research (web research/data), coder (programming), artist (images), writer (content/docs)
+DEPARTMENTS: research (web research/data), coder (programming), artist (images), writer (content/docs), reader (document analysis/summarization)
 
 Respond with ONLY valid JSON — no other text:
 {"steps":[{"department":"research","task":"Detailed task"},{"department":"writer","task":"Detailed task"}]}
@@ -74,15 +79,17 @@ export async function runAutonomous(
       throw new Error("Ops Manager failed to create a valid plan");
     }
 
-    const validDepts: DepartmentId[] = ["research", "coder", "artist", "writer"];
+    const validDepts: DepartmentId[] = ["research", "coder", "artist", "writer", "reader"];
     plan.steps = planJson.steps
       .filter((s: any) => validDepts.includes(s.department) && s.task)
+      .slice(0, MAX_STEPS) // Enforce maximum step count
       .map((s: any, i: number) => ({
         stepNumber: i + 1, department: s.department as DepartmentId,
         task: s.task, status: "pending" as const,
       }));
 
     if (plan.steps.length === 0) throw new Error("Ops Manager created an empty plan");
+    logJob(parentJobId, "autonomous-plan", { steps: plan.steps.length, departments: plan.steps.map(s => s.department) });
 
     // Emit plan summary as a token so user sees it
     const planSummary = plan.steps.map(s =>
@@ -92,12 +99,26 @@ export async function runAutonomous(
       workerType: "boss", text: `\n📋 **Execution Plan** (${plan.steps.length} steps):\n${planSummary}\n\n---\n`,
     });
 
-    // Phase 2: Execute each step sequentially
+    // Phase 2: Execute each step sequentially with guardrails
     plan.status = "executing";
     let previousOutput = "";
+    let failureCount = 0;
 
     for (let i = 0; i < plan.steps.length; i++) {
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+      // Abort if too many steps failed — something is fundamentally wrong
+      if (failureCount >= MAX_FAILURES) {
+        logJob(parentJobId, "autonomous-abort", { reason: `${failureCount} steps failed`, stepsCompleted: i });
+        eventBus.emit(parentJobId, "token", {
+          workerType: "boss",
+          text: `\n⚠️ **Aborting: ${failureCount} consecutive failures.** Compiling partial results...\n`,
+        });
+        // Mark remaining steps as skipped
+        for (let j = i; j < plan.steps.length; j++) plan.steps[j].status = "skipped";
+        break;
+      }
+
       const step = plan.steps[i];
       plan.currentStep = i + 1;
       step.status = "running";
@@ -137,6 +158,7 @@ export async function runAutonomous(
         step.imageUrl = result.imageUrl;
         plan.totalTokens += result.totalTokens;
         previousOutput = result.finalOutput;
+        failureCount = 0; // Reset on success
 
         // Emit step_complete that the CLIENT understands
         eventBus.emit(parentJobId, "step_complete", {
@@ -154,7 +176,8 @@ export async function runAutonomous(
         step.error = err.message;
         step.durationMs = Date.now() - stepStart;
 
-        console.error(`[Autonomous] Step ${step.stepNumber} FAILED: ${err.message}`);
+        failureCount++;
+        logError(`autonomous-step-${step.stepNumber}`, err);
 
         // Emit the error so client sees it
         eventBus.emit(parentJobId, "step_complete", {
