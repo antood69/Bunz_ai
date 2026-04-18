@@ -1209,6 +1209,117 @@ export async function initDatabase() {
     `);
   } catch (_) {}
 
+  // ── Workflow Templates (multi-step reusable flows) ──
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS workflow_templates (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        icon TEXT DEFAULT 'git-branch',
+        category TEXT DEFAULT 'general',
+        variables TEXT DEFAULT '[]',
+        steps TEXT NOT NULL,
+        is_public INTEGER DEFAULT 0,
+        use_count INTEGER DEFAULT 0,
+        avg_tokens INTEGER DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+  } catch (_) {}
+
+  // Seed starter workflow templates
+  try {
+    const existing = await dbGet("SELECT COUNT(*) as c FROM workflow_templates WHERE is_public = 1") as any;
+    if (!existing || existing.c === 0) {
+      const starters = [
+        {
+          id: "wft-research-report",
+          name: "Research Report",
+          description: "Deep research a topic, analyze findings, write a structured report with recommendations",
+          icon: "search",
+          category: "research",
+          variables: JSON.stringify([{ key: "topic", label: "Research Topic", placeholder: "e.g. AI agent frameworks in 2026" }]),
+          steps: JSON.stringify([
+            { department: "research", prompt: "Conduct comprehensive research on: {{topic}}. Find key trends, major players, recent developments, data points, and expert opinions. Cite sources.", label: "Research" },
+            { department: "research", prompt: "Analyze the research findings. Identify patterns, contradictions, gaps in the data, and actionable insights. Compare competing approaches.", label: "Analysis" },
+            { department: "writer", prompt: "Write a structured report with: executive summary, key findings (5-7 sections), analysis, and 3-5 prioritized recommendations. Professional tone, clear formatting.", label: "Report" },
+          ]),
+        },
+        {
+          id: "wft-content-pipeline",
+          name: "Content Pipeline",
+          description: "Research a topic, create an outline, write a polished article",
+          icon: "file-text",
+          category: "writing",
+          variables: JSON.stringify([
+            { key: "topic", label: "Article Topic", placeholder: "e.g. How to build AI agents" },
+            { key: "audience", label: "Target Audience", placeholder: "e.g. Technical founders" },
+          ]),
+          steps: JSON.stringify([
+            { department: "research", prompt: "Research {{topic}} for an article targeting {{audience}}. Find key angles, supporting data, expert quotes, and competitor content.", label: "Research" },
+            { department: "writer", prompt: "Create a detailed outline for a 1500-word article on {{topic}} for {{audience}}. Include: hook, 5-7 sections with key points, conclusion with CTA.", label: "Outline" },
+            { department: "writer", prompt: "Write the full article following the outline. Engaging tone for {{audience}}. Include data points from research. Add subheadings, bullet points where appropriate.", label: "Draft" },
+          ]),
+        },
+        {
+          id: "wft-competitor-analysis",
+          name: "Competitor Analysis",
+          description: "Research competitors, compare features, generate strategic recommendations",
+          icon: "bar-chart",
+          category: "research",
+          variables: JSON.stringify([
+            { key: "company", label: "Your Company/Product", placeholder: "e.g. Cortal" },
+            { key: "competitors", label: "Competitors", placeholder: "e.g. CrewAI, Dify, n8n, Lindy" },
+          ]),
+          steps: JSON.stringify([
+            { department: "research", prompt: "Research {{competitors}} as competitors to {{company}}. For each: pricing, key features, target market, strengths, weaknesses, recent funding/news.", label: "Research" },
+            { department: "research", prompt: "Create a detailed feature comparison matrix between {{company}} and {{competitors}}. Score each on: ease of use, pricing, integrations, scalability, AI capabilities.", label: "Compare" },
+            { department: "writer", prompt: "Write a strategic competitive analysis for {{company}} vs {{competitors}}. Include: market positioning map, SWOT analysis, differentiation opportunities, and 5 strategic recommendations.", label: "Strategy" },
+          ]),
+        },
+        {
+          id: "wft-landing-page",
+          name: "Landing Page Builder",
+          description: "Research the market, write copy, build a responsive landing page",
+          icon: "layout",
+          category: "design",
+          variables: JSON.stringify([
+            { key: "product", label: "Product/Service", placeholder: "e.g. AI writing assistant" },
+            { key: "audience", label: "Target Audience", placeholder: "e.g. Content marketers" },
+          ]),
+          steps: JSON.stringify([
+            { department: "research", prompt: "Research landing page best practices for {{product}} targeting {{audience}}. Find: top converting layouts, essential sections, effective CTAs, social proof strategies.", label: "Research" },
+            { department: "writer", prompt: "Write all landing page copy for {{product}}: headline, subheadline, 3-4 feature sections with benefits, testimonial placeholders, pricing section, FAQ (5 items), final CTA. Persuasive tone for {{audience}}.", label: "Copy" },
+            { department: "coder", prompt: "Build a complete, responsive landing page using the copy provided. Modern design with Tailwind CSS, smooth scroll, mobile-first. Include: hero, features, social proof, pricing, FAQ, footer. Output as a single HTML file.", label: "Build" },
+          ]),
+        },
+        {
+          id: "wft-meeting-to-actions",
+          name: "Meeting Notes to Actions",
+          description: "Analyze meeting notes, extract action items, draft follow-up emails",
+          icon: "check-square",
+          category: "productivity",
+          variables: JSON.stringify([{ key: "notes", label: "Meeting Notes", placeholder: "Paste your meeting notes here..." }]),
+          steps: JSON.stringify([
+            { department: "reader", prompt: "Analyze these meeting notes. Extract: key decisions, discussion points, unresolved questions, and all action items with owners and deadlines.\n\nNotes:\n{{notes}}", label: "Analyze" },
+            { department: "writer", prompt: "Based on the meeting analysis, draft a professional follow-up email. Include: meeting summary (3-4 bullets), action items table (owner, task, deadline), next steps, and any open questions that need resolution.", label: "Follow-up Email" },
+          ]),
+        },
+      ];
+
+      for (const t of starters) {
+        await dbRun(
+          `INSERT OR IGNORE INTO workflow_templates (id, user_id, name, description, icon, category, variables, steps, is_public, use_count, created_at, updated_at)
+           VALUES (?, 1, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
+          t.id, t.name, t.description, t.icon, t.category, t.variables, t.steps, Date.now(), Date.now()
+        );
+      }
+    }
+  } catch (_) {}
+
   // ── Performance indexes for frequently-queried tables ──
   try {
     await dbExec("CREATE INDEX IF NOT EXISTS idx_token_usage_user_date ON token_usage(user_id, created_at)");

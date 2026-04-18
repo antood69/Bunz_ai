@@ -19,6 +19,7 @@ import githubRouter from "./routes/github";
 import cookieParser from "cookie-parser";
 import { handleBossChat, cancelConversation } from "./boss";
 import { handleSSEStream } from "./sse";
+import { eventBus } from "./lib/eventBus";
 import { encrypt, decrypt, maskKey } from "./lib/crypto";
 import { MODEL_DEFAULTS, FALLBACK_CHAINS } from "./lib/modelDefaults";
 import { CODER_SYSTEM_PROMPT } from "./agents/coder";
@@ -626,6 +627,178 @@ export async function registerRoutes(
       brief.id
     );
     res.json(versions);
+  }));
+
+  // === WORKFLOW TEMPLATES — multi-step reusable flows ===
+  app.get("/api/workflow-templates", asyncHandler(async (req, res) => {
+    const userId = req.user?.id || 1;
+    const rows = await dbAll(
+      "SELECT * FROM workflow_templates WHERE user_id = ? OR is_public = 1 ORDER BY use_count DESC, created_at DESC LIMIT 50",
+      userId
+    );
+    res.json(rows.map((r: any) => ({
+      ...r,
+      variables: JSON.parse(r.variables || "[]"),
+      steps: JSON.parse(r.steps || "[]"),
+    })));
+  }));
+
+  app.post("/api/workflow-templates", asyncHandler(async (req, res) => {
+    const userId = req.user?.id || 1;
+    const { name, description, icon, category, variables, steps } = req.body;
+    if (!name || !steps?.length) return res.status(400).json({ error: "name and steps required" });
+    const id = uuidv4();
+    await dbRun(
+      `INSERT INTO workflow_templates (id, user_id, name, description, icon, category, variables, steps, is_public, use_count, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+      id, userId, name, description || "", icon || "git-branch", category || "general",
+      JSON.stringify(variables || []), JSON.stringify(steps), Date.now(), Date.now()
+    );
+    res.json({ id });
+  }));
+
+  app.delete("/api/workflow-templates/:id", asyncHandler(async (req, res) => {
+    const userId = req.user?.id || 1;
+    await dbRun("DELETE FROM workflow_templates WHERE id = ? AND user_id = ?", req.params.id, userId);
+    res.json({ ok: true });
+  }));
+
+  // Execute a workflow template — runs steps sequentially via Boss
+  app.post("/api/workflow-templates/:id/run", requireCredits(), asyncHandler(async (req, res) => {
+    const userId = req.user?.id || 1;
+    const userEmail = req.user?.email;
+    const template = await dbGet("SELECT * FROM workflow_templates WHERE id = ?", req.params.id) as any;
+    if (!template) return res.status(404).json({ error: "Template not found" });
+
+    const variables = req.body.variables || {};
+    const steps = JSON.parse(template.steps || "[]");
+    const level = req.body.level || "medium";
+
+    // Substitute variables in step prompts
+    const resolvedSteps = steps.map((s: any) => {
+      let prompt = s.prompt;
+      for (const [key, value] of Object.entries(variables)) {
+        prompt = prompt.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value as string);
+      }
+      return { ...s, prompt };
+    });
+
+    // Create conversation and job
+    const convId = uuidv4();
+    await storage.createConversation({
+      id: convId, userId, title: `${template.name}: ${Object.values(variables)[0] || ""}`.slice(0, 80),
+      model: "gpt-5.4-mini", createdAt: Date.now(), updatedAt: Date.now(), source: "boss",
+    });
+
+    const jobId = uuidv4();
+    await storage.createAgentJob({
+      id: jobId, conversationId: convId, userId,
+      type: "boss" as any, status: "running",
+      input: JSON.stringify({ template: template.name, variables, steps: resolvedSteps.length }),
+      createdAt: Date.now(),
+    });
+
+    // Store user message
+    await storage.createBossMessage({
+      id: uuidv4(), conversationId: convId, role: "user",
+      content: `Running workflow: ${template.name}\n\n${Object.entries(variables).map(([k, v]) => `**${k}**: ${v}`).join("\n")}`,
+      tokenCount: 0, model: null, createdAt: Date.now(),
+    });
+
+    // Increment use count
+    await dbRun("UPDATE workflow_templates SET use_count = use_count + 1 WHERE id = ?", template.id);
+
+    // Execute steps sequentially in background
+    const { executeDepartment } = await import("./departments/executor");
+    const { estimateComplexity } = await import("./departments/types");
+    const { chunkText } = await import("./lib/utils");
+
+    (async () => {
+      let previousOutput = "";
+      let totalTokens = 0;
+
+      try {
+        for (let i = 0; i < resolvedSteps.length; i++) {
+          const step = resolvedSteps[i];
+
+          eventBus.emit(jobId, "progress", {
+            workerType: step.department,
+            subAgent: step.label || `Step ${i + 1}`,
+            workerIndex: i,
+            status: "running",
+            message: `Step ${i + 1}/${resolvedSteps.length}: ${step.label || step.department}...`,
+          });
+
+          // Inject previous step output as context
+          const taskWithContext = previousOutput
+            ? `${step.prompt}\n\nPrevious step output:\n${previousOutput.slice(0, 3000)}`
+            : step.prompt;
+
+          const complexity = estimateComplexity(taskWithContext);
+          const result = await executeDepartment(
+            jobId,
+            { department: step.department, task: taskWithContext },
+            level as any,
+            complexity,
+          );
+
+          totalTokens += result.totalTokens;
+          previousOutput = result.finalOutput;
+
+          // Stream output
+          const chunks = chunkText(result.finalOutput, 40);
+          for (const chunk of chunks) {
+            eventBus.emit(jobId, "token", {
+              workerType: step.department, subAgent: step.label, text: chunk,
+            });
+          }
+
+          eventBus.emit(jobId, "step_complete", {
+            workerType: step.department,
+            subAgent: step.label || `Step ${i + 1}`,
+            workerIndex: i,
+            output: result.finalOutput.slice(0, 500),
+            tokens: result.totalTokens,
+            durationMs: result.totalDurationMs,
+          });
+        }
+
+        // Save final output
+        await storage.createBossMessage({
+          id: uuidv4(), conversationId: convId, role: "assistant",
+          content: previousOutput,
+          tokenCount: totalTokens, model: null, createdAt: Date.now(),
+        });
+
+        await storage.updateAgentJob(jobId, {
+          status: "complete", output: previousOutput.slice(0, 5000),
+          tokenCount: totalTokens, completedAt: Date.now(),
+        });
+
+        // Update avg tokens
+        await dbRun(
+          "UPDATE workflow_templates SET avg_tokens = CASE WHEN use_count > 0 THEN (avg_tokens * (use_count - 1) + ?) / use_count ELSE ? END WHERE id = ?",
+          totalTokens, totalTokens, template.id
+        );
+
+        eventBus.emit(jobId, "complete", {
+          synthesis: previousOutput, totalTokens,
+        });
+      } catch (err: any) {
+        eventBus.emit(jobId, "error", { error: err.message });
+        await storage.updateAgentJob(jobId, {
+          status: "failed", output: err.message, completedAt: Date.now(),
+        });
+      }
+    })();
+
+    res.json({
+      conversationId: convId,
+      jobId,
+      reply: `Running ${template.name} (${resolvedSteps.length} steps)...`,
+      isDelegating: true,
+      tokenCount: 0,
+    });
   }));
 
   // === TASK TEMPLATES — reusable saved prompts ===
