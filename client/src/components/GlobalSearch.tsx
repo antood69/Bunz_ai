@@ -51,7 +51,11 @@ export default function GlobalSearch() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 50); }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => inputRef.current?.focus(), 50);
+    return () => clearTimeout(t);
+  }, [open]);
 
   // Search
   const search = useCallback(async (q: string) => {

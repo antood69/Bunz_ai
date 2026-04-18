@@ -259,8 +259,10 @@ export default function ConnectorsPage() {
       const data = await res.json();
       if (data.url) {
         const w = 600, h = 700;
-        const left = window.screenX + (window.outerWidth - w) / 2;
-        const top = window.screenY + (window.outerHeight - h) / 2;
+        const screenX = window.screenX ?? window.screenLeft ?? 0;
+        const screenY = window.screenY ?? window.screenTop ?? 0;
+        const left = screenX + (window.outerWidth - w) / 2;
+        const top = screenY + (window.outerHeight - h) / 2;
         window.open(data.url, "oauth_popup", `width=${w},height=${h},left=${left},top=${top},popup=1`);
       } else {
         toast({ title: "OAuth not available", description: data.error || "Could not start OAuth flow", variant: "destructive" });

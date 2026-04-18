@@ -44,6 +44,23 @@ async function getOwnerObsidianConnector(): Promise<any | null> {
   } catch { return null; }
 }
 
+/** Resolve GitHub context for coder tasks — extracts repo from message or falls back to user's default */
+async function resolveGithubContext(userId: number, message: string): Promise<{ token: string; repo: string } | undefined> {
+  try {
+    const ghToken = await storage.getGitHubToken(userId);
+    if (!ghToken) return undefined;
+    const repoMatch = message.match(/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/)?.[1];
+    let repo = repoMatch?.includes("/") ? repoMatch : null;
+    if (!repo) {
+      const prefs = await storage.getUserPreferences(userId);
+      repo = prefs.defaultRepo || null;
+    }
+    return repo ? { token: ghToken, repo } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Humanize AI text to pass AI detection tools like ZeroGPT */
 async function humanizeText(text: string): Promise<string> {
   const result = await modelRouter.chat({
@@ -738,19 +755,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
         // Restore the autonomous task from original dispatch
         plan.departments = [{ id: "autonomous" as any, task: bossMessage || message }];
         // Resolve GitHub context for autonomous coder steps
-        let autoGithub: { token: string; repo: string } | undefined;
-        try {
-          const ghToken = await storage.getGitHubToken(userId);
-          if (ghToken) {
-            const repoMatch = message.match(/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/)?.[1];
-            let repo = repoMatch?.includes("/") ? repoMatch : null;
-            if (!repo) {
-              const prefs = await storage.getUserPreferences(userId);
-              repo = prefs.defaultRepo || null;
-            }
-            if (repo) autoGithub = { token: ghToken, repo };
-          }
-        } catch {}
+        const autoGithub = await resolveGithubContext(userId, message);
         const autoTask = plan.departments.find((d: any) => d.id === "autonomous");
         runAutonomous(parentJobId, autoTask?.task || message, level, abortController.signal, autoGithub)
           .then(async (autoPlan) => {
@@ -1431,24 +1436,9 @@ async function executeDepartments(
 
   try {
     // Get GitHub token for coder department
-    let github: { token: string; repo: string } | undefined;
-    if (departments.some(d => d.id === "coder")) {
-      try {
-        const ghToken = await storage.getGitHubToken(userId);
-        if (ghToken) {
-          // Try explicit repo from message first, then fall back to user's default repo
-          const repoMatch = originalMessage.match(/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/)?.[1];
-          let repo = repoMatch?.includes("/") ? repoMatch : null;
-          if (!repo) {
-            const prefs = await storage.getUserPreferences(userId);
-            repo = prefs.defaultRepo || null;
-          }
-          if (repo) {
-            github = { token: ghToken, repo };
-          }
-        }
-      } catch {}
-    }
+    const github = departments.some(d => d.id === "coder")
+      ? await resolveGithubContext(userId, originalMessage)
+      : undefined;
 
     // Detect if departments have dependencies (research/reader → writer/coder)
     // If so, run producers first, then consumers with shared context

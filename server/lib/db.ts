@@ -20,7 +20,9 @@ let _sqlite: InstanceType<typeof Database> | null = null;
 function turso(): Client {
   if (!_turso) {
     _turso = createClient({ url: getTursoUrl()!, authToken: getTursoToken()! });
-    console.log(`[db] Connected to Turso: ${getTursoUrl()}`);
+    const url = getTursoUrl()!;
+    const masked = url.replace(/\/\/([^@]+)@/, "//***@");
+    console.log(`[db] Connected to Turso: ${masked}`);
   }
   return _turso;
 }
