@@ -30,9 +30,9 @@ class JobEventBus {
 
     this.emitter.emit(`job:${jobId}`, event, data);
 
-    // Clean up buffer 15s after terminal events — don't let old jobs linger
+    // Clean up buffer 2 minutes after terminal events — enough for user to navigate back
     if (event === "complete" || event === "cancelled" || event === "error") {
-      setTimeout(() => this.jobBuffers.delete(jobId), 15_000);
+      setTimeout(() => this.jobBuffers.delete(jobId), 120_000);
     }
   }
 

@@ -728,7 +728,10 @@ export default function BossPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<IntelligenceLevel>("medium");
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  // Persist activeJobId across page navigations so jobs survive if user leaves and comes back
+  const [activeJobId, setActiveJobId] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("cortal-active-job") || null; } catch { return null; }
+  });
   const [serverConvId, setServerConvId] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<{ id: string; name: string; url: string; thumbnailUrl: string | null; mimeType: string }[]>([]);
 
@@ -743,6 +746,14 @@ export default function BossPage() {
       else sessionStorage.removeItem("bunz-active-conv");
     } catch {}
   }, [activeId]);
+
+  // Persist active job ID so it survives navigation away and back
+  useEffect(() => {
+    try {
+      if (activeJobId) sessionStorage.setItem("cortal-active-job", activeJobId);
+      else sessionStorage.removeItem("cortal-active-job");
+    } catch {}
+  }, [activeJobId]);
 
   // Restore active conversation messages on mount
   useEffect(() => {
@@ -790,7 +801,12 @@ export default function BossPage() {
     } catch {}
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Agent stream hook
+  // If we remounted with an active job (user navigated away and back), resume loading state
+  useEffect(() => {
+    if (activeJobId) setIsLoading(true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Agent stream hook — reconnects automatically if activeJobId persisted across navigation
   const streamState = useAgentStream(activeJobId);
 
   // When stream completes, add synthesis as a message and re-sync from server
@@ -835,11 +851,40 @@ export default function BossPage() {
     }
   }, [streamState.isComplete, streamState.synthesisText, activeJobId, streamState.totalTokens, serverConvId]);
 
-  // Handle stream errors
+  // Handle stream errors — if stream lost connection, check server for completed job
   useEffect(() => {
     if (streamState.error && activeJobId) {
-      setError(streamState.error);
-      setIsLoading(false);
+      // Stream might have disconnected because user navigated away.
+      // Check the server for the job status — it might have completed while we were gone.
+      fetch(`/api/agent/job/${activeJobId}/status`)
+        .then(r => r.ok ? r.json() : null)
+        .then(job => {
+          if (job?.status === "complete" && job.output) {
+            // Job finished while user was away — show the result
+            const resultMsg: Message = {
+              id: genId(),
+              role: "assistant",
+              content: job.output,
+              timestamp: new Date(),
+              tokenCount: job.tokenCount || 0,
+            };
+            setMessages(prev => [...prev, resultMsg]);
+            setActiveJobId(null);
+            setIsLoading(false);
+          } else if (job?.status === "running") {
+            // Job still running but stream disconnected — it will auto-reconnect via useAgentStream
+            setError(null);
+          } else {
+            // Truly failed
+            setError(streamState.error);
+            setActiveJobId(null);
+            setIsLoading(false);
+          }
+        })
+        .catch(() => {
+          setError(streamState.error);
+          setIsLoading(false);
+        });
     }
   }, [streamState.error, activeJobId]);
 

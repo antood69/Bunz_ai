@@ -559,6 +559,13 @@ export async function registerRoutes(
   // === SSE STREAMING ===
   app.get("/api/agent/stream/:jobId", handleSSEStream);
 
+  // Check if a job is still running (for reconnection after navigation)
+  app.get("/api/agent/job/:jobId/status", async (req, res) => {
+    const job = await dbGet("SELECT id, status, output, token_count FROM agent_jobs WHERE id = ?", req.params.jobId) as any;
+    if (!job) return res.json({ status: "not_found" });
+    res.json({ status: job.status, output: job.output, tokenCount: job.token_count });
+  });
+
   // === CONVERSATIONS ===
   app.get("/api/conversations", async (req, res) => {
     const userId = req.user?.id || 1;
