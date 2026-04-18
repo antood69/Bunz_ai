@@ -4,9 +4,33 @@ import { v4 as uuidv4 } from "uuid";
 import { storage } from "./storage";
 import { sendVerificationEmail, sendLoginAlertEmail, sendWelcomeEmail } from "./email";
 
-const OWNER_EMAIL = "reederb46@gmail.com";
+const OWNER_EMAIL = process.env.OWNER_EMAIL || "reederb46@gmail.com";
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const COOKIE_NAME = "bunz_session";
+
+// ── Simple rate limiter for auth endpoints (brute force protection) ──────────
+const authAttempts = new Map<string, { count: number; resetAt: number }>();
+const AUTH_RATE_LIMIT = 10; // max attempts per window
+const AUTH_RATE_WINDOW = 15 * 60 * 1000; // 15 minute window
+
+function checkAuthRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = authAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    authAttempts.set(ip, { count: 1, resetAt: now + AUTH_RATE_WINDOW });
+    return true;
+  }
+  entry.count++;
+  return entry.count <= AUTH_RATE_LIMIT;
+}
+
+// Clean up old entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of Array.from(authAttempts.entries())) {
+    if (now > entry.resetAt) authAttempts.delete(ip);
+  }
+}, 5 * 60 * 1000);
 
 // ── Extend Express Request with user context ─────────────────────────────────
 declare global {
@@ -192,6 +216,10 @@ export function createAuthRouter(): Router {
 
   // Register with email + password
   router.post("/register", async (req: Request, res: Response) => {
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    if (!checkAuthRateLimit(ip)) {
+      return res.status(429).json({ error: "Too many attempts. Please try again later." });
+    }
     const { email, password, displayName } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required" });
@@ -267,6 +295,10 @@ export function createAuthRouter(): Router {
 
   // Login with email + password
   router.post("/login", async (req: Request, res: Response) => {
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    if (!checkAuthRateLimit(ip)) {
+      return res.status(429).json({ error: "Too many login attempts. Please try again in 15 minutes." });
+    }
     const { email, password } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required" });

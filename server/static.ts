@@ -25,8 +25,19 @@ export function serveStatic(app: Express) {
       `Could not find the build directory: ${distPath}, make sure to build the client first`,
     );
   }
-  app.use(express.static(distPath));
+  // Cache hashed assets (JS/CSS) for 1 year, HTML for 0 (always revalidate)
+  app.use(express.static(distPath, {
+    maxAge: "1y",
+    immutable: true,
+    setHeaders: (res, filePath) => {
+      // HTML files should not be cached — they reference hashed assets
+      if (filePath.endsWith(".html")) {
+        res.setHeader("Cache-Control", "no-cache");
+      }
+    },
+  }));
   app.use("/{*path}", (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache");
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }

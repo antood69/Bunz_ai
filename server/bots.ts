@@ -214,6 +214,14 @@ async function stopBot(botId: string): Promise<void> {
   if (bot) broadcastToUser(bot.user_id, "bots", "stopped", { botId, name: bot.name });
 }
 
+/** Stop all running bots — called on graceful shutdown */
+export function stopAllBots(): void {
+  for (const [botId, timer] of Array.from(activeBots.entries())) {
+    clearInterval(timer);
+    activeBots.delete(botId);
+  }
+}
+
 /**
  * Bot API routes
  */

@@ -133,6 +133,17 @@ export function getConnectedUserIds(): number[] {
   return Array.from(userDevices.keys());
 }
 
+/** Close all WebSocket connections — called on graceful shutdown */
+export function shutdownWebSockets(): void {
+  for (const [, conn] of Array.from(connections.entries())) {
+    try {
+      conn.ws.close(1001, "Server shutting down");
+    } catch {}
+  }
+  connections.clear();
+  userDevices.clear();
+}
+
 // ── Session Extraction ───────────────────────────────────────────────────
 
 async function extractUserFromRequest(req: IncomingMessage, sessionStore: any): Promise<number | null> {

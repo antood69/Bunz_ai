@@ -41,14 +41,34 @@ import { createPulseRouter } from "./pulse";
 // In-memory cache for dashboard stats (60s TTL, avoids Redis dependency)
 const statsCache = new Map<string, { data: any; ts: number }>();
 
+/** Wrap async route handlers to catch unhandled errors and forward to Express error handler */
+type AsyncHandler = (req: any, res: any, next?: any) => Promise<any>;
+function asyncHandler(fn: AsyncHandler) {
+  return (req: any, res: any, next: any) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
-  // === HEALTH (no auth) ===
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", timestamp: Date.now(), version: "2.0.0" });
+  // === HEALTH (no auth) — verifies DB connectivity ===
+  app.get("/api/health", async (_req, res) => {
+    let dbOk = false;
+    try {
+      await dbGet("SELECT 1");
+      dbOk = true;
+    } catch {}
+    const status = dbOk ? "ok" : "degraded";
+    res.status(dbOk ? 200 : 503).json({
+      status,
+      timestamp: Date.now(),
+      version: "2.0.0",
+      database: dbOk ? "connected" : "error",
+      uptime: Math.round(process.uptime()),
+    });
   });
 
   // === SDK API (own auth via API keys, before session auth) ===
@@ -77,8 +97,20 @@ export async function registerRoutes(
   app.use("/api/pulse", createPulseRouter());
 
   // ── Local File System Access (for Editor) ───────────────────────────────
+  // Only available in development — disabled in production to prevent path traversal
+  const LOCAL_FS_ENABLED = process.env.NODE_ENV !== "production";
+  const ALLOWED_ROOT = path.resolve(process.cwd());
+
+  /** Validate a file path is within the allowed root directory */
+  function isPathSafe(filePath: string): boolean {
+    const resolved = path.resolve(filePath);
+    return resolved.startsWith(ALLOWED_ROOT) && !resolved.includes(".env");
+  }
+
   app.get("/api/local/tree", async (req, res) => {
+    if (!LOCAL_FS_ENABLED) return res.status(403).json({ error: "Local file access disabled in production" });
     const rootPath = path.resolve((req.query.root as string) || process.cwd());
+    if (!isPathSafe(rootPath)) return res.status(403).json({ error: "Path not allowed" });
     if (!fs.existsSync(rootPath)) return res.status(404).json({ error: "Path not found" });
 
     const ignored = new Set(["node_modules", ".git", "dist", ".tmp", ".next", "__pycache__", ".venv", "venv"]);
@@ -104,8 +136,9 @@ export async function registerRoutes(
   });
 
   app.get("/api/local/file", async (req, res) => {
+    if (!LOCAL_FS_ENABLED) return res.status(403).json({ error: "Local file access disabled in production" });
     const filePath = path.resolve(req.query.path as string || "");
-    if (!filePath) return res.status(400).json({ error: "path required" });
+    if (!isPathSafe(filePath)) return res.status(403).json({ error: "Path not allowed" });
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: `Not found: ${filePath}` });
     try {
       const content = fs.readFileSync(filePath, "utf-8");
@@ -116,9 +149,11 @@ export async function registerRoutes(
   });
 
   app.put("/api/local/file", async (req, res) => {
+    if (!LOCAL_FS_ENABLED) return res.status(403).json({ error: "Local file access disabled in production" });
     const { path: rawPath, content } = req.body;
     if (!rawPath || content === undefined) return res.status(400).json({ error: "path and content required" });
     const filePath = path.resolve(rawPath);
+    if (!isPathSafe(filePath)) return res.status(403).json({ error: "Path not allowed" });
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(filePath, content, "utf-8");
@@ -126,34 +161,34 @@ export async function registerRoutes(
   });
 
   // === WORKFLOWS ===
-  app.get("/api/workflows", async (_req, res) => {
+  app.get("/api/workflows", asyncHandler(async (_req, res) => {
     const data = await storage.getWorkflows();
     res.json(data);
-  });
+  }));
 
-  app.get("/api/workflows/:id", async (req, res) => {
+  app.get("/api/workflows/:id", asyncHandler(async (req, res) => {
     const w = await storage.getWorkflow(Number(req.params.id));
     if (!w) return res.status(404).json({ error: "Not found" });
     res.json(w);
-  });
+  }));
 
-  app.post("/api/workflows", async (req, res) => {
+  app.post("/api/workflows", asyncHandler(async (req, res) => {
     const parsed = insertWorkflowSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
     const w = await storage.createWorkflow(parsed.data);
     res.status(201).json(w);
-  });
+  }));
 
-  app.patch("/api/workflows/:id", async (req, res) => {
+  app.patch("/api/workflows/:id", asyncHandler(async (req, res) => {
     const w = await storage.updateWorkflow(Number(req.params.id), req.body);
     if (!w) return res.status(404).json({ error: "Not found" });
     res.json(w);
-  });
+  }));
 
-  app.delete("/api/workflows/:id", async (req, res) => {
+  app.delete("/api/workflows/:id", asyncHandler(async (req, res) => {
     await storage.deleteWorkflow(Number(req.params.id));
     res.status(204).end();
-  });
+  }));
 
   // === CANVAS STATE ===
   app.get("/api/workflows/:id/canvas", async (req, res) => {
