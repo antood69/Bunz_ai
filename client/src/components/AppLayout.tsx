@@ -335,13 +335,10 @@ export default function AppLayout({ children, allowPublic = false }: { children:
                 : "bg-card border-b border-border"
             }`}
           >
-            {/* Live sync indicator */}
+            {/* Live sync indicator — only show when connected */}
+            {sync.isConnected && (
             <div className="flex items-center gap-1.5 mr-2" title={sync.statusText}>
-              {sync.isConnected ? (
-                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-              ) : (
-                <WifiOff className="w-3.5 h-3.5 text-red-400 animate-pulse" />
-              )}
+              <Wifi className="w-3.5 h-3.5 text-emerald-400" />
               {sync.connectedDevices > 1 && (
                 <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
                   <Monitor className="w-3 h-3" />
@@ -349,6 +346,7 @@ export default function AppLayout({ children, allowPublic = false }: { children:
                 </span>
               )}
             </div>
+            )}
             <NotificationBell />
             <UserAvatar name={user?.displayName} email={user?.email} />
           </div>
