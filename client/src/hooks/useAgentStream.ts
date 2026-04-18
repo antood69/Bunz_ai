@@ -106,12 +106,39 @@ export function useAgentStream(jobId: string | null): StreamState {
 
     const es = new EventSource(`/api/agent/stream/${jobId}`);
     eventSourceRef.current = es;
+    let gotEvents = false;
+
+    // If no events arrive within 8 seconds, check server for job status
+    // This handles the case where the user was away and the eventBus buffer expired
+    const staleTimer = setTimeout(async () => {
+      if (gotEvents) return;
+      try {
+        const r = await fetch(`/api/agent/job/${jobId}/status`);
+        if (!r.ok) return;
+        const job = await r.json();
+        if (job.status === "complete") {
+          setState((prev) => ({
+            ...prev, isStreaming: false, isComplete: true,
+            synthesisText: job.output || "Task completed.",
+            currentStep: "Complete", totalTokens: job.tokenCount || 0,
+          }));
+          es.close();
+        } else if (job.status === "failed" || job.status === "not_found") {
+          setState((prev) => ({
+            ...prev, isStreaming: false, error: job.status === "not_found" ? "Job not found" : "Job failed",
+          }));
+          es.close();
+        }
+        // If still "running", keep waiting for events
+      } catch {}
+    }, 8000);
 
     es.addEventListener("connected", () => {
       setState((prev) => ({ ...prev, isStreaming: true, currentStep: "Connected" }));
     });
 
     es.addEventListener("token", (e) => {
+      gotEvents = true;
       try {
         const data = JSON.parse(e.data);
         if (data.isSynthesis) {
@@ -124,6 +151,7 @@ export function useAgentStream(jobId: string | null): StreamState {
     });
 
     es.addEventListener("progress", (e) => {
+      gotEvents = true;
       try {
         const data = JSON.parse(e.data);
         setState((prev) => {
@@ -259,6 +287,7 @@ export function useAgentStream(jobId: string | null): StreamState {
 
     return () => {
       es.close();
+      clearTimeout(staleTimer);
       if (renderTimerRef.current) clearTimeout(renderTimerRef.current);
     };
   }, [jobId, scheduleRender, flushTokenBuffer]);

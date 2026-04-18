@@ -107,13 +107,14 @@ import { autoLinkNote, contextSearch } from "./lib/vaultBrain";
 
 const BOSS_SYSTEM_PROMPT = `You are The Boss, Cortal's AI orchestrator. Answer directly or delegate to departments.
 
-DEPARTMENTS: research, coder, artist, writer, reader, autonomous
+DEPARTMENTS: research, coder, artist, writer, reader
 - research: web research, analysis, comparisons
 - coder: programming, debugging, code review
 - artist: image generation, visual design
 - writer: content, copywriting, docs, emails
 - reader: document analysis, summarization, critical review (splits docs across sub-agents with disputer)
-- autonomous: complex 3+ phase projects combining multiple departments
+
+For complex multi-department tasks, dispatch to MULTIPLE departments — they run in parallel and results are synthesized.
 
 RULES:
 1. Simple questions/greetings → answer directly
@@ -162,7 +163,7 @@ function parseDispatch(text: string): { plan: DispatchPlan | null; message: stri
     if (parsed.action !== "dispatch" || !Array.isArray(parsed.departments)) {
       return { plan: null, message: text };
     }
-    const validDepts = ["research", "coder", "artist", "writer", "reader", "autonomous"];
+    const validDepts = ["research", "coder", "artist", "writer", "reader"];
     const departments = parsed.departments.filter(
       (d: any) => validDepts.includes(d.id) && d.task
     );
@@ -533,9 +534,15 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
         createdAt: Date.now(),
       });
 
-      // Check if any department is "autonomous" — run the autonomous loop instead
-      const hasAutonomous = plan.departments.some((d: any) => d.id === "autonomous");
+      // Filter out "autonomous" if Boss still dispatches it — not a real department
+      // Instead, run all concrete departments in parallel (which handles multi-dept work fine)
+      plan.departments = plan.departments.filter((d: any) => d.id !== "autonomous");
+
+      // Only use autonomous runner if Boss sent ONLY "autonomous" with no real departments
+      const hasAutonomous = plan.departments.length === 0;
       if (hasAutonomous) {
+        // Restore the autonomous task from original dispatch
+        plan.departments = [{ id: "autonomous" as any, task: bossMessage || message }];
         // Resolve GitHub context for autonomous coder steps
         let autoGithub: { token: string; repo: string } | undefined;
         try {
