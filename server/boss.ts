@@ -135,13 +135,16 @@ GOOD task: "Write a 1200-word blog post about current AI trends in 2026. Structu
 Always enhance vague requests into detailed, actionable prompts.
 
 ARTIFACTS:
-When generating HTML, interactive content, documents, or visual outputs, wrap them in artifact tags:
-<artifact type="html" title="My Page">...html content...</artifact>
+ARTIFACTS — USE SPARINGLY:
+Only use <artifact> tags for content that NEEDS to be visually rendered:
+YES artifacts: landing pages, interactive HTML, charts/graphs, SVG diagrams, UI mockups, code demos, styled documents meant to be exported
+NO artifacts: research reports, summaries, analysis, answers to questions, essays, emails, any text-based response
+
+When you DO use artifacts:
+<artifact type="html" title="My Page">...full HTML with styling...</artifact>
 <artifact type="svg" title="Diagram">...svg content...</artifact>
-<artifact type="document" title="Report">...markdown document...</artifact>
-<artifact type="code" title="Script">...code content...</artifact>
-Use artifacts for: landing pages, charts, diagrams, forms, interactive demos, styled documents, data visualizations.
-Do NOT use artifacts for simple text responses — only for rich, renderable content.` + bossInstructions;
+
+Default to plain markdown text. Only reach for artifacts when the user explicitly wants something visual or interactive.` + bossInstructions;
 
 // ── Parse Boss dispatch decision ────────────────────────────────────────────
 
@@ -901,7 +904,7 @@ Each task should be independent enough to run in parallel. Be specific in task d
     const synthesis = await modelRouter.chat({
       model: tier.bossModel,
       messages: [{ role: "user", content: `The following work was done by ${completedTasks.length} agents working in parallel on the goal: "${goal}"\n\n${synthesisInput}\n\nSynthesize all outputs into a cohesive final deliverable. If appropriate, use <artifact> tags for rich HTML output.` }],
-      systemPrompt: "You are The Boss — synthesize department outputs into polished responses. Use <artifact> tags for renderable content like HTML, SVG, documents, and code files.",
+      systemPrompt: "You are The Boss — synthesize department outputs into polished responses. Use clean markdown for text content. Only use <artifact> tags for visual/interactive content (landing pages, charts, UI mockups, code demos) — NOT for reports, summaries, or text answers.",
       signal: abortController.signal,
     });
 
@@ -1140,18 +1143,11 @@ Write a professional report with:
 4. Conclusions & Recommendations
 5. Sources (list all sources mentioned in the findings)
 
-Use clear headings, bullet points, and data where available.
-
-Wrap the report in <artifact type="html" title="Research Report: ${topic.slice(0, 40)}"> tags with CLEAN, READABLE styling:
-- White/light background (#ffffff), dark text (#1a1a2a)
-- Clean sans-serif font (system-ui or Inter)
-- Generous padding (40px) and max-width (800px) centered
-- Headings in a brand color (#4f46e5)
-- Clean tables with light borders
-- Subtle section dividers
-- Print-friendly, easy to read — NOT dark theme`,
+Use clear markdown headings (##), bullet points, and data where available.
+Do NOT use <artifact> tags — write the report as clean markdown text directly in the chat.
+Only use artifacts for visual/interactive content like charts, landing pages, or code demos — NOT for text reports.`,
       }],
-      systemPrompt: "You are a senior research analyst. Write comprehensive, well-cited reports. Use <artifact> tags for rich HTML output. Always use a clean light/white background for readability.",
+      systemPrompt: "You are a senior research analyst. Write comprehensive, well-cited reports in clean markdown. Do NOT use <artifact> tags for text reports — just write directly.",
       signal: abortController.signal,
     });
 
@@ -1317,7 +1313,7 @@ PRESENTATION RULES:
     const synthesis = await modelRouter.chat({
       model: bossModel,
       messages: [{ role: "user", content: synthesisPrompt }],
-      systemPrompt: "You are The Boss — synthesize department outputs into polished responses. Use <artifact> tags for renderable content like HTML, SVG, documents, and code files.",
+      systemPrompt: "You are The Boss — synthesize department outputs into polished responses. Use clean markdown for text content. Only use <artifact> tags for visual/interactive content (landing pages, charts, UI mockups, code demos) — NOT for reports, summaries, or text answers.",
       signal,
     });
     totalTokens += synthesis.usage.totalTokens;
