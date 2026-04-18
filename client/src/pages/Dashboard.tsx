@@ -134,7 +134,10 @@ export default function Dashboard() {
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-muted-foreground text-xs">No token data yet</div>
+              <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-1">
+                <p className="text-xs">No token data yet</p>
+                <p className="text-[10px] opacity-60">Use Chat or run a workflow to see usage</p>
+              </div>
             )}
           </div>
         </div>

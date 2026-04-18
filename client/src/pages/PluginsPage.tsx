@@ -37,19 +37,22 @@ export default function PluginsPage() {
   // Skills directory
   const { data: directory = [], isLoading: dirLoading } = useQuery<any[]>({
     queryKey: ["/api/plugins/directory"],
-    queryFn: async () => { const r = await fetch("/api/plugins/directory", { credentials: "include" }); return r.ok ? r.json() : []; },
+    queryFn: async () => { const r = await fetch("/api/plugins/directory", { credentials: "include" }); if (!r.ok) return []; return r.json(); },
+    retry: 1,
   });
 
   // Installed plugins
   const { data: installed = [] } = useQuery<any[]>({
     queryKey: ["/api/plugins/installed"],
-    queryFn: async () => { const r = await fetch("/api/plugins/installed", { credentials: "include" }); return r.ok ? r.json() : []; },
+    queryFn: async () => { const r = await fetch("/api/plugins/installed", { credentials: "include" }); if (!r.ok) return []; return r.json(); },
+    retry: 1,
   });
 
   // Connected services
   const { data: connectors = [], isLoading: connLoading } = useQuery<any[]>({
     queryKey: ["/api/connectors"],
-    queryFn: async () => { const r = await fetch("/api/connectors", { credentials: "include" }); return r.ok ? r.json() : []; },
+    queryFn: async () => { const r = await fetch("/api/connectors", { credentials: "include" }); if (!r.ok) return []; return r.json(); },
+    retry: 1,
   });
 
   const installedSlugs = new Set(installed.map((p: any) => p.slug));

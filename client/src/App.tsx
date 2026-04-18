@@ -10,15 +10,11 @@ import PulsePage from "@/pages/PulsePage";
 import AgentsPage from "@/pages/AgentsPage";
 import AgentChatPage from "@/pages/AgentChatPage";
 import AuditPage from "@/pages/AuditPage";
-import PricingPage from "@/pages/PricingPage";
 import SettingsPage from "@/pages/SettingsPage";
-import TokenUsagePage from "@/pages/TokenUsagePage";
 import LoginPage from "@/pages/LoginPage";
 import AdminPage from "@/pages/AdminPage";
 import ToolsPage from "@/pages/ToolsPage";
-import ConnectorsPage from "@/pages/ConnectorsPage";
 import BossPage from "@/pages/BossPage";
-import AnalyticsStubPage from "@/pages/AnalyticsStubPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import TasksPage from "@/pages/TasksPage";
 import WorkflowsPage from "@/pages/WorkflowsPage";
@@ -48,14 +44,11 @@ function AppRouter() {
             <Route path="/" component={PulsePage} />
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/boss" component={BossPage} />
-            {/* workflows removed */}
-
             <Route path="/agents" component={AgentsPage} />
             <Route path="/agents/:id/chat" component={AgentChatPage} />
             <Route path="/audit" component={AuditPage} />
             <Route path="/settings">{() => <SettingsPage />}</Route>
             <Route path="/admin" component={AdminPage} />
-            <Route path="/connectors" component={ConnectorsPage} />
             <Route path="/tools" component={ToolsPage} />
             <Route path="/tasks" component={TasksPage} />
             <Route path="/workflows" component={WorkflowsPage} />
@@ -74,7 +67,7 @@ function AppRouter() {
             <Route path="/pricing">{() => <Redirect to="/settings?tab=pricing" />}</Route>
             <Route path="/usage">{() => <Redirect to="/settings?tab=usage" />}</Route>
 
-            <Route path="/analytics" component={AnalyticsStubPage} />
+            <Route path="/analytics">{() => <Redirect to="/dashboard" />}</Route>
             <Route path="/notifications" component={NotificationsPage} />
             <Route component={NotFound} />
           </Switch>
