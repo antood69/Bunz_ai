@@ -284,6 +284,7 @@ export interface BossChatInput {
   userRole?: string; // "owner" | "admin" | "user" — comes from req.user.role
   history?: Array<{ role: "user" | "assistant"; content: string }>;
   imageContents?: Array<{ type: "image_url"; image_url: { url: string } }>;
+  documentContents?: Array<{ type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string }; name?: string }>;
   source?: string; // "boss" | "editor" — where the chat originated
 }
 
@@ -651,10 +652,12 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     }
 
     // ── Call Boss AI to decide: direct answer or dispatch ─────────────────
-    // Build user message content — include images if attached
+    // Build user message content — include images + PDFs if attached
     const imageContents = input.imageContents || [];
-    const userContent: any = imageContents.length > 0
-      ? [{ type: "text", text: message }, ...imageContents]
+    const documentContents = input.documentContents || [];
+    const hasAttachments = imageContents.length > 0 || documentContents.length > 0;
+    const userContent: any = hasAttachments
+      ? [{ type: "text", text: message }, ...documentContents, ...imageContents]
       : message;
 
     // ── Build base message history ──
@@ -819,7 +822,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       } catch (e: any) { console.error("[Activity] Failed to log dispatch:", e.message); }
 
       // Execute departments asynchronously — results flow back via eventBus
-      executeDepartments(parentJobId, conversationId, userId, level, message, plan.departments, abortController.signal, userEmail, humanizeMode)
+      executeDepartments(parentJobId, conversationId, userId, level, message, plan.departments, abortController.signal, userEmail, humanizeMode, input.imageContents, input.documentContents)
         .catch(err => {
           logJob(parentJobId, "failed", { error: err.message });
           logError("department-dispatch", err);
@@ -1461,6 +1464,8 @@ async function executeDepartments(
   signal?: AbortSignal,
   userEmail?: string,
   humanize?: boolean,
+  imageContents?: Array<{ type: "image_url"; image_url: { url: string } }>,
+  documentContents?: Array<{ type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string }; name?: string }>,
 ) {
   const bossModel = INTELLIGENCE_TIERS[level].bossModel;
   const complexity = estimateComplexity(originalMessage);
@@ -1481,11 +1486,22 @@ async function executeDepartments(
 
     let results: DepartmentResult[];
 
+    // Attachments (PDFs + images) should reach the Reader so it can see the actual document
+    // contents. Also useful for Coder (/design screenshots) and Writer (reference materials).
+    const attachmentsFor = (deptId: DepartmentId) => {
+      const wantsAttachments = deptId === "reader" || deptId === "coder" || deptId === "writer";
+      if (!wantsAttachments) return {};
+      return {
+        imageContents: imageContents?.length ? imageContents : undefined,
+        documentContents: documentContents?.length ? documentContents : undefined,
+      };
+    };
+
     if (hasChain) {
       // Phase 1: Run producers (research/reader) in parallel
       const producerResults = await Promise.all(
         producers.map(dept =>
-          executeDepartment(parentJobId, { department: dept.id, task: dept.task }, level, complexity, signal)
+          executeDepartment(parentJobId, { department: dept.id, task: dept.task, ...attachmentsFor(dept.id) }, level, complexity, signal)
             .catch(err => ({
               department: dept.id, finalOutput: `[${dept.id} department error: ${err.message}]`,
               subAgentResults: [], totalTokens: 0, totalDurationMs: 0,
@@ -1505,7 +1521,7 @@ async function executeDepartments(
           const enrichedTask = sharedContext
             ? `${dept.task}\n\nCONTEXT FROM OTHER DEPARTMENTS:\n${sharedContext}`
             : dept.task;
-          return executeDepartment(parentJobId, { department: dept.id, task: enrichedTask }, level, complexity, signal,
+          return executeDepartment(parentJobId, { department: dept.id, task: enrichedTask, ...attachmentsFor(dept.id) }, level, complexity, signal,
             dept.id === "coder" ? github : undefined)
             .catch(err => ({
               department: dept.id, finalOutput: `[${dept.id} department error: ${err.message}]`,
@@ -1519,7 +1535,7 @@ async function executeDepartments(
       // No dependencies — run all departments in parallel (original behavior)
       results = await Promise.all(
         departments.map(dept =>
-          executeDepartment(parentJobId, { department: dept.id, task: dept.task }, level, complexity, signal,
+          executeDepartment(parentJobId, { department: dept.id, task: dept.task, ...attachmentsFor(dept.id) }, level, complexity, signal,
             dept.id === "coder" ? github : undefined)
             .catch(err => ({
               department: dept.id, finalOutput: `[${dept.id} department error: ${err.message}]`,

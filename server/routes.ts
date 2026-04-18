@@ -490,8 +490,14 @@ export async function registerRoutes(
 
       // Build image content for vision models
       let imageContents: Array<{ type: "image_url"; image_url: { url: string } }> = [];
+      // PDF document blocks for Claude native document input
+      let documentContents: Array<{ type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string }; name?: string }> = [];
       // Text file contents to append to the message
       let textFileContents = "";
+
+      // 5,000-word essays ≈ 30K chars. Claude has 200K context — leave room for system prompts,
+      // sub-agent outputs, and history. 150K per file is generous without risking context overflow.
+      const TEXT_FILE_CHAR_CAP = 150_000;
 
       // Direct base64 screenshot (from Bun Bun screen viewer)
       if (imageBase64 && imageBase64.startsWith("data:image/")) {
@@ -507,21 +513,57 @@ export async function registerRoutes(
             const filePath = path.resolve(process.cwd(), "uploads", row.storage_path);
             if (!fs.existsSync(filePath)) continue;
 
-            if (att.mimeType?.startsWith("image/")) {
+            const mime = (row.mime_type || att.mimeType || "").toLowerCase();
+            const name = row.original_name || att.name || "";
+
+            if (mime.startsWith("image/")) {
               // Images: convert to base64 for vision models
               const data = fs.readFileSync(filePath);
               const b64 = `data:${row.mime_type};base64,${data.toString("base64")}`;
               imageContents.push({ type: "image_url", image_url: { url: b64 } });
+            } else if (mime === "application/pdf" || /\.pdf$/i.test(name)) {
+              // PDFs: send natively to Claude as a document content block
+              const data = fs.readFileSync(filePath);
+              documentContents.push({
+                type: "document",
+                source: { type: "base64", media_type: "application/pdf", data: data.toString("base64") },
+                name,
+              });
+            } else if (/\.docx$/i.test(name) || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+              // .docx: unzip, pull word/document.xml, strip XML tags to get plain text
+              try {
+                const JSZip = (await import("jszip")).default;
+                const data = fs.readFileSync(filePath);
+                const zip = await JSZip.loadAsync(data);
+                const docXml = await zip.file("word/document.xml")?.async("string");
+                if (docXml) {
+                  // Preserve paragraph breaks, then strip all tags
+                  const text = docXml
+                    .replace(/<w:p[^>]*>/g, "\n")
+                    .replace(/<w:br[^>]*\/>/g, "\n")
+                    .replace(/<w:tab[^>]*\/>/g, "\t")
+                    .replace(/<[^>]+>/g, "")
+                    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+                    .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+                    .replace(/\n{3,}/g, "\n\n")
+                    .trim();
+                  const trimmed = text.length > TEXT_FILE_CHAR_CAP
+                    ? text.slice(0, TEXT_FILE_CHAR_CAP) + `\n\n[...truncated at ${TEXT_FILE_CHAR_CAP} chars, original size: ${text.length}]`
+                    : text;
+                  textFileContents += `\n\n--- FILE: ${name} ---\n${trimmed}`;
+                }
+              } catch (e: any) {
+                console.error("[Upload] docx extraction failed:", e.message);
+              }
             } else {
-              // Text files: read as UTF-8 and inline into the message
-              const isTextFile = /\.(ts|tsx|js|jsx|json|md|py|html|css|txt|csv|yaml|yml|toml|ini|xml|sh|sql|go|rs|java|cpp|c|h|hpp|rb|php|swift|kt|scala|vue|svelte|env\.example)$/i.test(row.original_name || att.name || "");
+              // Plain text / source code files: read as UTF-8 and inline into the message
+              const isTextFile = /\.(ts|tsx|js|jsx|json|md|py|html|css|txt|csv|yaml|yml|toml|ini|xml|sh|sql|go|rs|java|cpp|c|h|hpp|rb|php|swift|kt|scala|vue|svelte|env\.example|rtf|log)$/i.test(name);
               if (isTextFile) {
                 const content = fs.readFileSync(filePath, "utf-8");
-                // Cap each file at 8000 chars to manage token budget
-                const trimmed = content.length > 8000
-                  ? content.slice(0, 8000) + `\n\n[...truncated at 8000 chars, original size: ${content.length}]`
+                const trimmed = content.length > TEXT_FILE_CHAR_CAP
+                  ? content.slice(0, TEXT_FILE_CHAR_CAP) + `\n\n[...truncated at ${TEXT_FILE_CHAR_CAP} chars, original size: ${content.length}]`
                   : content;
-                textFileContents += `\n\n--- FILE: ${row.original_name || att.name} ---\n${trimmed}`;
+                textFileContents += `\n\n--- FILE: ${name} ---\n${trimmed}`;
               }
             }
           } catch {}
@@ -542,6 +584,7 @@ export async function registerRoutes(
         userRole: req.user?.role,
         history: Array.isArray(history) ? history : [],
         imageContents,
+        documentContents,
         source: req.body.source || "boss",
       });
 

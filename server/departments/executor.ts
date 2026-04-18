@@ -23,6 +23,10 @@ export interface DepartmentTask {
   department: DepartmentId;
   task: string;
   context?: string;
+  /** Image attachments forwarded from the user's upload (Claude vision) */
+  imageContents?: Array<{ type: "image_url"; image_url: { url: string } }>;
+  /** PDF attachments forwarded from the user's upload (Claude native documents) */
+  documentContents?: Array<{ type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string }; name?: string }>;
 }
 
 export interface SubAgentResult {
@@ -175,11 +179,30 @@ async function runStandardDept(
         prompt = task.context ? `${task.task}\n\nContext:\n${task.context}` : task.task;
       }
 
+      // On the first agent only, attach PDFs/images so the Lead sees the source material.
+      // Later agents work off previousOutput — they don't re-read the raw doc (saves tokens).
+      const hasAttachments = !previousOutput && (
+        (task.imageContents?.length || 0) > 0 || (task.documentContents?.length || 0) > 0
+      );
+      const userContent: any = hasAttachments
+        ? [{ type: "text", text: prompt }, ...(task.documentContents || []), ...(task.imageContents || [])]
+        : prompt;
+
+      // Extended thinking: Reader and Writer leads at max tier get a reasoning budget.
+      // Only applies to Claude models (the router ignores the param on other providers).
+      const isClaude = model.startsWith("claude-");
+      const isReasoningDept = task.department === "reader" || task.department === "writer";
+      const isLead = agent.required;
+      const enableThinking = isClaude && isLead && isReasoningDept && level === "max";
+
       const result = await modelRouter.chat({
         model,
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: userContent }],
         systemPrompt: agent.systemPrompt,
         signal,
+        // Give Reader/Writer leads headroom to think through long documents and assignments
+        ...(isReasoningDept && isLead ? { maxTokens: 8000 } : {}),
+        ...(enableThinking ? { thinking: { budgetTokens: 4000 } } : {}),
       });
 
       const durationMs = Date.now() - agentStart;

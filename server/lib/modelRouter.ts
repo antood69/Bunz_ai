@@ -20,7 +20,13 @@ import { decrypt } from "./crypto";
 
 export interface ChatMessage {
   role: "user" | "assistant";
-  content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+  content:
+    | string
+    | Array<
+        | { type: "text"; text: string }
+        | { type: "image_url"; image_url: { url: string } }
+        | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string }; name?: string }
+      >;
 }
 
 /** Extract plain text from a ChatMessage content (handles both string and multimodal) */
@@ -56,6 +62,8 @@ export interface ChatOptions {
   jsonSchema?: { required?: string[]; description?: string };
   /** Tool definitions for native function calling (OpenAI-compatible schema) */
   tools?: ToolDefinition[];
+  /** Enable Anthropic extended thinking (Claude only). Budget in tokens for reasoning. */
+  thinking?: { budgetTokens: number };
 }
 
 /** Native tool definition — matches OpenAI function schema */
@@ -351,6 +359,10 @@ async function callAnthropic(opts: ChatOptions, apiKey?: string): Promise<ChatRe
         }
         return { type: "text", text: `[Image: ${url}]` };
       }
+      if (part.type === "document" && part.source?.data) {
+        // Claude native PDF input — pass the source block straight through
+        return { type: "document", source: part.source };
+      }
       return { type: "text", text: JSON.stringify(part) };
     });
     return { role: m.role, content: parts };
@@ -367,11 +379,17 @@ async function callAnthropic(opts: ChatOptions, apiKey?: string): Promise<ChatRe
       }
     : {};
 
-  const maxTokens = opts.maxTokens || 4096;
+  // Extended thinking: reserve budget for reasoning on top of the response budget.
+  // Anthropic requires max_tokens > thinking.budget_tokens, so add headroom.
+  const thinkingBudget = opts.thinking?.budgetTokens;
+  const baseMaxTokens = opts.maxTokens || 4096;
+  const maxTokens = thinkingBudget ? baseMaxTokens + thinkingBudget : baseMaxTokens;
+  const thinkingParam = thinkingBudget
+    ? { thinking: { type: "enabled" as const, budget_tokens: thinkingBudget } }
+    : {};
 
-  // Anthropic requires streaming for long operations — auto-enable for large max_tokens
-  // This avoids "Streaming is required for operations that may take longer than 10 minutes" errors
-  const mustStream = maxTokens > 8000;
+  // Anthropic requires streaming for long operations and for extended thinking
+  const mustStream = maxTokens > 8000 || !!thinkingBudget;
 
   let response: any;
   if (mustStream) {
@@ -382,7 +400,8 @@ async function callAnthropic(opts: ChatOptions, apiKey?: string): Promise<ChatRe
       system,
       messages: msgs,
       ...toolsParam,
-    });
+      ...thinkingParam,
+    } as any);
     response = await stream.finalMessage();
   } else {
     response = await client.messages.create({
@@ -391,10 +410,11 @@ async function callAnthropic(opts: ChatOptions, apiKey?: string): Promise<ChatRe
       system,
       messages: msgs,
       ...toolsParam,
-    });
+      ...thinkingParam,
+    } as any);
   }
 
-  // Extract text and tool calls from content blocks
+  // Extract text and tool calls from content blocks (skip thinking blocks — they're internal)
   let content = "";
   const toolCalls: ToolCall[] = [];
   for (const block of response.content) {
@@ -402,6 +422,7 @@ async function callAnthropic(opts: ChatOptions, apiKey?: string): Promise<ChatRe
     else if (block.type === "tool_use") {
       toolCalls.push({ id: block.id, name: block.name, arguments: block.input as any });
     }
+    // block.type === "thinking" | "redacted_thinking" — intentionally ignored
   }
 
   return {
