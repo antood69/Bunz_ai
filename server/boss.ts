@@ -293,8 +293,11 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   let buildMode = msg.startsWith("/build");
   if (buildMode) message = message.replace(/^\/build\s*/i, "").trim();
   // Auto: build/launch + business/startup/app/website + context
+  // BUT NOT when user is just asking for a plan, ideas, or brainstorming
   if (!buildMode && !deepResearchMode && !chartMode && !designMode && noSlash) {
-    if (/\b(build|launch|create|start|set up|make|spin up)\b/i.test(msg) &&
+    const justPlanning = /\b(plan|planning|ideas|suggest|brainstorm|list|outline|what to include|what should|what can|what could|recommend)\b/i.test(msg);
+    if (!justPlanning &&
+        /\b(build|launch|create|start|set up|spin up)\b/i.test(msg) &&
         /\b(business|startup|company|saas|app|website|store|shop|product|landing page|platform|service)\b/i.test(msg) &&
         /\b(for|that|which|to sell|selling|about|called|named)\b/i.test(msg)) {
       buildMode = true;
@@ -305,7 +308,9 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   let swarmMode = msg.startsWith("/swarm");
   if (swarmMode) message = message.replace(/^\/swarm\s*/i, "").trim();
   // Auto: 3+ different department types detected in one message
+  // Strip negated phrases first so "not making images" doesn't count as an artist signal
   if (!swarmMode && !deepResearchMode && !chartMode && !designMode && !buildMode && noSlash) {
+    const stripped = msg.replace(/\b(not|don'?t|no|never|without|aren'?t|isn'?t|won'?t|can'?t|shouldn'?t|wouldn'?t|youre not|you'?re not)\s+\w+(\s+\w+)?/gi, "");
     const deptSignals = [
       /\b(research|analyze|investigate|find out|look into|study)\b/i,
       /\b(write|draft|compose|blog|article|copy|content|email|essay)\b/i,
@@ -313,7 +318,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       /\b(image|logo|illustration|visual|art|picture|photo|draw)\b/i,
       /\b(read|review|summarize|document|paper|contract|pdf|book)\b/i,
     ];
-    const deptMatches = deptSignals.filter(p => p.test(msg)).length;
+    const deptMatches = deptSignals.filter(p => p.test(stripped)).length;
     if (deptMatches >= 3) swarmMode = true;
   }
 
