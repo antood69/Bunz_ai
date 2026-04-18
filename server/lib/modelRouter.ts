@@ -367,13 +367,32 @@ async function callAnthropic(opts: ChatOptions, apiKey?: string): Promise<ChatRe
       }
     : {};
 
-  const response = await client.messages.create({
-    model: opts.model,
-    max_tokens: opts.maxTokens || 4096,
-    system,
-    messages: msgs,
-    ...toolsParam,
-  });
+  const maxTokens = opts.maxTokens || 4096;
+
+  // Anthropic requires streaming for long operations — auto-enable for large max_tokens
+  // This avoids "Streaming is required for operations that may take longer than 10 minutes" errors
+  const mustStream = maxTokens > 8000;
+
+  let response: any;
+  if (mustStream) {
+    // Stream the response and collect into the same shape as non-streaming response
+    const stream = await client.messages.stream({
+      model: opts.model,
+      max_tokens: maxTokens,
+      system,
+      messages: msgs,
+      ...toolsParam,
+    });
+    response = await stream.finalMessage();
+  } else {
+    response = await client.messages.create({
+      model: opts.model,
+      max_tokens: maxTokens,
+      system,
+      messages: msgs,
+      ...toolsParam,
+    });
+  }
 
   // Extract text and tool calls from content blocks
   let content = "";

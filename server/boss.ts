@@ -675,7 +675,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
 
     let bossResult = await modelRouter.chat({
       model: useToolModel ? "claude-sonnet-4-6" : bossModel,
-      maxTokens: useToolModel ? 16384 : 4096,
+      maxTokens: useToolModel ? 8000 : 4096, // Anthropic requires streaming above 8K tokens for long operations
       messages: baseMessages,
       systemPrompt: systemPrompt + vaultContext + memoryContext + toolInstructions,
       tools,
@@ -723,7 +723,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
         const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
         bossResult = await modelRouter.chat({
           model: "claude-sonnet-4-6",
-          maxTokens: 32768,
+          maxTokens: 8000, // Anthropic requires streaming above 8K for long operations
           messages: toolMessages,
           systemPrompt: systemPrompt + vaultContext + memoryContext +
             (isFinalRound ? "\n\nThis is your final tool round — write your answer now, do NOT call more tools." : ""),
