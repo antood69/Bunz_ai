@@ -719,7 +719,9 @@ async function loadConversationsFromServer(): Promise<Conversation[]> {
 
 export default function BossPage() {
   const [conversations, setConversations] = useState<Conversation[]>(() => loadConversationsFromLocal());
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("bunz-active-conv") || null; } catch { return null; }
+  });
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -734,6 +736,26 @@ export default function BossPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Persist active conversation ID
+  useEffect(() => {
+    try {
+      if (activeId) sessionStorage.setItem("bunz-active-conv", activeId);
+      else sessionStorage.removeItem("bunz-active-conv");
+    } catch {}
+  }, [activeId]);
+
+  // Restore active conversation messages on mount
+  useEffect(() => {
+    if (activeId && messages.length === 0) {
+      const convs = loadConversationsFromLocal();
+      const conv = convs.find(c => c.id === activeId);
+      if (conv) {
+        setMessages(conv.messages.map(m => ({ ...m, timestamp: new Date(m.timestamp) })));
+        setServerConvId(conv.serverId || null);
+      }
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On mount: fetch conversation history from server and merge with localStorage
   useEffect(() => {
