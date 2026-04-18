@@ -151,11 +151,13 @@ export async function recallMemories(
 
   const memories = await dbAll(sql, ...allParams) as any[];
 
-  // Update access counts
-  for (const mem of memories) {
+  // Batch update access counts in a single query
+  if (memories.length > 0) {
+    const ids = memories.map((m: any) => m.id);
+    const placeholders = ids.map(() => "?").join(",");
     await dbRun(
-      "UPDATE agent_memory SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?",
-      Date.now(), mem.id,
+      `UPDATE agent_memory SET access_count = access_count + 1, last_accessed_at = ? WHERE id IN (${placeholders})`,
+      Date.now(), ...ids,
     );
   }
 

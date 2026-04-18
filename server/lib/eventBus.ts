@@ -26,13 +26,13 @@ class JobEventBus {
       this.jobBuffers.set(jobId, buffer);
     }
     buffer.push({ event, data, ts: Date.now() });
-    if (buffer.length > 300) buffer.shift();
+    if (buffer.length > 200) buffer.shift();
 
     this.emitter.emit(`job:${jobId}`, event, data);
 
-    // Clean up buffer 60s after terminal events
+    // Clean up buffer 15s after terminal events — don't let old jobs linger
     if (event === "complete" || event === "cancelled" || event === "error") {
-      setTimeout(() => this.jobBuffers.delete(jobId), 60_000);
+      setTimeout(() => this.jobBuffers.delete(jobId), 15_000);
     }
   }
 

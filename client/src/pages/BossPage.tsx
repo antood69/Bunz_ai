@@ -855,28 +855,38 @@ export default function BossPage() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  // Auto-scroll
+  // Auto-scroll — debounced so streaming tokens don't cause 1000+ scroll calls
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading, streamState.text, streamState.synthesisText]);
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 150);
+    return () => { if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current); };
+  }, [messages, isLoading, streamState.isComplete, streamState.isSynthesizing]);
 
-  // Sync messages to conversations
+  // Sync messages to conversations — debounced to avoid thrashing localStorage during streaming
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!activeId || messages.length === 0) return;
-    setConversations((prev) => {
-      const updated = prev.map((c) =>
-        c.id === activeId ? { ...c, messages } : c
-      );
-      if (!updated.find((c) => c.id === activeId)) {
-        const title = messages[0]?.content?.slice(0, 50) || "New conversation";
-        const newConv: Conversation = { id: activeId, title, messages, createdAt: new Date().toISOString() };
-        const withNew = [newConv, ...prev];
-        saveConversations(withNew);
-        return withNew;
-      }
-      saveConversations(updated);
-      return updated;
-    });
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      setConversations((prev) => {
+        const updated = prev.map((c) =>
+          c.id === activeId ? { ...c, messages } : c
+        );
+        if (!updated.find((c) => c.id === activeId)) {
+          const title = messages[0]?.content?.slice(0, 50) || "New conversation";
+          const newConv: Conversation = { id: activeId, title, messages, createdAt: new Date().toISOString() };
+          const withNew = [newConv, ...prev];
+          saveConversations(withNew);
+          return withNew;
+        }
+        saveConversations(updated);
+        return updated;
+      });
+    }, 500);
+    return () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current); };
   }, [messages, activeId]);
 
   // Auto-grow textarea
@@ -1020,7 +1030,8 @@ export default function BossPage() {
     setIsLoading(true);
 
     try {
-      const history = messages.map((m) => ({ role: m.role, content: m.content }));
+      // Only send last 10 messages — server has full history via conversationId
+      const history = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
 
       const res = await fetch("/api/boss/chat", {
         method: "POST",

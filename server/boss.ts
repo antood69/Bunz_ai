@@ -469,30 +469,36 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       }
     } catch {}
 
-    // ── RAG: search Obsidian vault for relevant context ────────────────────
-    // ── RAG: context-aware vault search (follows wikilinks for deeper context) ──
+    // ── RAG + Memory: run in parallel to cut latency ──────────────────────
     let vaultContext = "";
-    try {
-      if (message.split(/\s+/).length > 3) { // Skip RAG for very short messages
-        const results = await contextSearch(message, 5);
-        if (results.length > 0) {
-          const noteContents = results.map(r =>
-            `--- ${r.path} [${r.relevance}] ---\n${r.content.slice(0, 1500)}`
-          );
-          vaultContext = `\n\nKNOWLEDGE BASE CONTEXT (${results.length} notes, includes linked references):\n${noteContents.join("\n\n")}\n\nUse this context to provide better answers. Reference specific notes with [[note name]] wikilinks when relevant. Build on previous knowledge rather than starting fresh.`;
-          // RAG context found notes for enrichment
-        }
-      }
-    } catch (e: any) {
-      console.error("[RAG] Context search failed:", e.message);
-    }
-
-    // ── Agent Memory: recall relevant past experiences ──────────────────
     let memoryContext = "";
-    try {
-      const { getMemoryContext } = await import("./memory");
-      memoryContext = await getMemoryContext(userId, message);
-    } catch {}
+    {
+      const vaultPromise = (async () => {
+        try {
+          if (message.split(/\s+/).length > 3) {
+            const results = await contextSearch(message, 5);
+            if (results.length > 0) {
+              const noteContents = results.map(r =>
+                `--- ${r.path} [${r.relevance}] ---\n${r.content.slice(0, 1500)}`
+              );
+              return `\n\nKNOWLEDGE BASE CONTEXT (${results.length} notes, includes linked references):\n${noteContents.join("\n\n")}\n\nUse this context to provide better answers. Reference specific notes with [[note name]] wikilinks when relevant. Build on previous knowledge rather than starting fresh.`;
+            }
+          }
+        } catch (e: any) {
+          console.error("[RAG] Context search failed:", e.message);
+        }
+        return "";
+      })();
+
+      const memoryPromise = (async () => {
+        try {
+          const { getMemoryContext } = await import("./memory");
+          return await getMemoryContext(userId, message);
+        } catch { return ""; }
+      })();
+
+      [vaultContext, memoryContext] = await Promise.all([vaultPromise, memoryPromise]);
+    }
 
     // ── Call Boss AI to decide: direct answer or dispatch ─────────────────
     // Build user message content — include images if attached
@@ -504,7 +510,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     const bossResult = await modelRouter.chat({
       model: bossModel,
       messages: [
-        ...history.slice(-20).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+        ...history.slice(-10).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
         { role: "user" as const, content: userContent },
       ],
       systemPrompt: systemPrompt + vaultContext + memoryContext,

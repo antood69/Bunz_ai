@@ -38,7 +38,7 @@ export interface StreamState {
   agentOutputs: Array<{ agent: string; imageUrl?: string; type?: string }>;
 }
 
-const RENDER_DEBOUNCE_MS = 200;
+const RENDER_DEBOUNCE_MS = 100;
 
 /**
  * React hook that connects to the SSE stream for a given jobId.
