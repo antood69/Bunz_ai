@@ -129,15 +129,27 @@ DISPATCH FORMAT (raw JSON only, no markdown):
 When dispatching, REWRITE vague requests into precise, detailed prompts. Add structure, length, tone, and format requirements the user implied.
 
 FILE READING (owner only):
-You MUST read the actual code before answering questions about Cortal's implementation. When the user asks HOW something works, WHY something behaves a certain way, what a specific feature does, or about any specific code/file/function/route — STOP and output read_file tags FIRST. Do not answer from memory or the architecture summary above — that's a starting point, not ground truth.
+You MUST read the actual code before answering questions about Cortal's implementation. When the user asks HOW something works, WHY something behaves a certain way, what a feature does, or asks you to audit/review/analyze code — STOP and output read_file tags FIRST. Do not answer from memory.
 
-Output tags like this (up to 5 files per response):
+You have 3 rounds of reading, up to 30 files per round, ~30K chars per file. That's enough to audit the entire codebase if needed.
+
+For broad audits, start with these key files:
+<read_file path="PLATFORM.md" />
 <read_file path="server/boss.ts" />
+<read_file path="server/departments/types.ts" />
+<read_file path="server/departments/executor.ts" />
+<read_file path="server/memory.ts" />
+<read_file path="server/pipelines.ts" />
+<read_file path="server/bots.ts" />
 <read_file path="client/src/pages/BossPage.tsx" />
+<read_file path="client/src/pages/PulsePage.tsx" />
+<read_file path="client/src/App.tsx" />
 
-When you output read_file tags, do not write anything else — just the tags. The system will read the files and call you back with the contents, then you write the real answer with specific line references, function names, and code quotes.
+You can also list directories: <read_file path="server" /> or <read_file path="client/src/pages" />
 
-Only skip file reading when the user's question is abstract (e.g. "what should I build next") or already answered by the architecture summary above (e.g. "list your departments").
+When outputting read_file tags, write ONLY the tags (no other text). The system will read the files and call you back with contents. You can request more files in subsequent rounds, or write your final answer.
+
+Skip file reading only for abstract questions (e.g. "what should I build next") or ones already answered by the architecture summary.
 
 ARTIFACTS — STRICT RULES:
 - Only use <artifact> for content the user explicitly asked to be visual/interactive (landing pages, charts, UI mockups)
@@ -610,24 +622,41 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     let bossTokens = bossResult.usage.totalTokens;
     logAI(bossModel, bossResult.latencyMs || 0, bossTokens, "boss_routing");
 
-    // ── Tool-calling loop: if Boss requested files, read them and re-call ──
-    // Only works for owner — non-owners can't trigger file reads this way
+    // ── Multi-round tool-calling loop: Boss can request files across multiple rounds ──
+    // Owner only. Keeps security boundaries (no .env, no path traversal) but allows
+    // deep code audits — up to 30 files per round, 30K chars each, 3 rounds total.
     if (isOwnerUser) {
-      const readTags = bossResult.content.match(/<read_file\s+path=["']([^"']+)["']\s*\/?>/g) || [];
-      if (readTags.length > 0) {
-        const requestedFiles: string[] = [];
+      const MAX_ROUNDS = 3;
+      const MAX_FILES_PER_ROUND = 30;
+      const MAX_CHARS_PER_FILE = 30_000;
+      let allInjectedFiles = ""; // Accumulates across rounds
+
+      for (let round = 0; round < MAX_ROUNDS; round++) {
+        const readTags = bossResult.content.match(/<read_file\s+path=["']([^"']+)["']\s*\/?>/g) || [];
+        if (readTags.length === 0) break; // No more requests → we're done
+
         const fileContents: string[] = [];
-        for (const tag of readTags.slice(0, 5)) { // Max 5 files per request
+        for (const tag of readTags.slice(0, MAX_FILES_PER_ROUND)) {
           const pathMatch = tag.match(/path=["']([^"']+)["']/);
           if (!pathMatch) continue;
           const requestedPath = pathMatch[1];
-          requestedFiles.push(requestedPath);
           try {
             const resolved = path.resolve(process.cwd(), requestedPath);
-            if (resolved.startsWith(process.cwd()) && !resolved.includes(".env") && fs.existsSync(resolved)) {
-              const content = fs.readFileSync(resolved, "utf-8");
-              const trimmed = content.length > 6000 ? content.slice(0, 6000) + `\n\n[...truncated, total size: ${content.length}]` : content;
-              fileContents.push(`--- FILE: ${requestedPath} (${content.length} chars) ---\n${trimmed}`);
+            const base = path.basename(resolved).toLowerCase();
+            const blocked = base === ".env" || base.startsWith(".env.") || base === "credentials.json" || base === "token.json";
+            if (resolved.startsWith(process.cwd()) && !blocked && fs.existsSync(resolved)) {
+              const stat = fs.statSync(resolved);
+              if (stat.isDirectory()) {
+                // Directory — list contents instead
+                const entries = fs.readdirSync(resolved).slice(0, 50);
+                fileContents.push(`--- DIR: ${requestedPath} ---\n${entries.join("\n")}`);
+              } else {
+                const content = fs.readFileSync(resolved, "utf-8");
+                const trimmed = content.length > MAX_CHARS_PER_FILE
+                  ? content.slice(0, MAX_CHARS_PER_FILE) + `\n\n[...truncated, total size: ${content.length}]`
+                  : content;
+                fileContents.push(`--- FILE: ${requestedPath} (${content.length} chars) ---\n${trimmed}`);
+              }
             } else {
               fileContents.push(`--- FILE: ${requestedPath} --- [NOT FOUND OR FORBIDDEN]`);
             }
@@ -636,13 +665,20 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
           }
         }
 
-        // Re-call Boss with the file contents — it can now answer the user's question
+        allInjectedFiles += `\n\n--- ROUND ${round + 1} FILES ---\n${fileContents.join("\n\n")}`;
+
+        // Call Boss again with accumulated file contents
+        const isFinalRound = round === MAX_ROUNDS - 1;
+        const roundInstruction = isFinalRound
+          ? `\n\nThis is your FINAL round — you must write the answer now. Do NOT request more files.`
+          : `\n\nYou may request more files with <read_file> tags if needed (you have ${MAX_ROUNDS - round - 1} rounds left), or write your final answer now.`;
+
         const followupSystem = systemPrompt + vaultContext + memoryContext +
-          `\n\n--- FILES YOU REQUESTED ---\n${fileContents.join("\n\n")}\n--- END FILES ---\n\nNow answer the user's question directly using these file contents. Do NOT output another <read_file> tag — you already have what you need. Do NOT dispatch to departments.`;
+          `\n\n--- FILES READ SO FAR ---${allInjectedFiles}\n--- END FILES ---` + roundInstruction;
 
         const followup = await modelRouter.chat({
           model: "gpt-5.4",
-          maxTokens: 16384,
+          maxTokens: 32768, // Large output for full code audits
           messages: [
             ...history.slice(-4).map(m => ({ role: m.role as "user" | "assistant", content: typeof m.content === "string" ? m.content.slice(0, 500) : m.content })),
             { role: "user" as const, content: userContent },
@@ -651,10 +687,9 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
           signal: abortController.signal,
         });
 
-        // Replace the Boss result with the followup (which has the real answer)
         bossResult.content = followup.content;
         bossTokens += followup.usage.totalTokens;
-        logAI("gpt-5.4", followup.latencyMs || 0, followup.usage.totalTokens, "boss_file_read");
+        logAI("gpt-5.4", followup.latencyMs || 0, followup.usage.totalTokens, `boss_file_read_r${round + 1}`);
       }
     }
 
