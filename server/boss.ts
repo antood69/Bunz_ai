@@ -315,6 +315,12 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       // Run in background — stream progress via eventBus
       (async () => {
         try {
+          // Forward all department events from conversationId to jobId
+          // so the client SSE stream picks them up
+          const forwardUnsub = eventBus.subscribe(convId, (event: string, data: any) => {
+            eventBus.emit(jobId, event, data);
+          });
+
           eventBus.emit(jobId, "progress", {
             workerType: cmd.label.toLowerCase().replace(/\s+/g, "_"),
             status: "running", message: `${cmd.label} starting...`,
@@ -324,6 +330,8 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
             { ...input, conversationId: convId },
             message, level, abortController,
           );
+
+          forwardUnsub();
 
           // Emit the final result
           eventBus.emit(jobId, "complete", {
@@ -932,6 +940,11 @@ async function handleDeepResearch(
 
   try {
     // Step 1: Decompose the research question into sub-queries
+    eventBus.emit(conversationId, "progress", {
+      workerType: "research", subAgent: "Boss Planner", workerIndex: 0,
+      status: "running", message: "Planning research sub-queries...",
+    });
+
     const planResult = await modelRouter.chat({
       model: tier.bossModel,
       messages: [{ role: "user", content: topic }],
@@ -947,9 +960,22 @@ async function handleDeepResearch(
       queries = [topic];
     }
 
+    eventBus.emit(conversationId, "step_complete", {
+      workerType: "research", subAgent: "Boss Planner", workerIndex: 0,
+      status: "complete", output: `Planned ${queries.length} sub-queries`,
+      tokens: planResult.usage.totalTokens,
+    });
+
     // Step 2: Research each sub-query using the Research department
     const findings: string[] = [];
-    for (const query of queries.slice(0, 5)) {
+    for (let qi = 0; qi < Math.min(queries.length, 5); qi++) {
+      const query = queries[qi];
+      eventBus.emit(conversationId, "progress", {
+        workerType: "research", subAgent: `Sub-query ${qi + 1}/${queries.length}`,
+        workerIndex: qi + 1, status: "running",
+        message: `Researching: ${query.slice(0, 80)}...`,
+      });
+
       try {
         const result = await executeDepartment(
           conversationId,
@@ -958,12 +984,28 @@ async function handleDeepResearch(
           estimateComplexity(query),
         );
         findings.push(`### Sub-query: ${query}\n\n${result.finalOutput}`);
+
+        eventBus.emit(conversationId, "step_complete", {
+          workerType: "research", subAgent: `Sub-query ${qi + 1}`,
+          workerIndex: qi + 1, status: "complete",
+          output: result.finalOutput.slice(0, 200),
+          tokens: result.totalTokens,
+        });
       } catch (err: any) {
         findings.push(`### Sub-query: ${query}\n\n*Research failed: ${err.message}*`);
+        eventBus.emit(conversationId, "step_complete", {
+          workerType: "research", subAgent: `Sub-query ${qi + 1}`,
+          workerIndex: qi + 1, status: "error", error: err.message,
+        });
       }
     }
 
     // Step 3: Synthesize into a comprehensive cited report
+    eventBus.emit(conversationId, "progress", {
+      workerType: "writer", subAgent: "Synthesizer",
+      workerIndex: queries.length + 1, status: "running",
+      message: "Synthesizing research into final report...",
+    });
     const synthesisResult = await modelRouter.chat({
       model: tier.models?.writer || "gpt-5.4",
       messages: [{
