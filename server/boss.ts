@@ -167,8 +167,18 @@ function parseDispatch(text: string): { plan: DispatchPlan | null; message: stri
     );
     if (departments.length === 0) return { plan: null, message: text };
 
-    const planningMessage = (jsonStart > 0 ? text.slice(0, jsonStart).trim() : "") ||
-      `Dispatching to ${departments.map((d: any) => d.id).join(", ")}...`;
+    // Extract planning message: text before the JSON, or generate a clean default
+    let planningMessage = "";
+    if (jsonStart > 0) {
+      const beforeJson = text.slice(0, jsonStart).trim();
+      // Only use pre-JSON text if it's NOT itself JSON-like (sometimes models double-output)
+      if (beforeJson && !beforeJson.startsWith("{") && !beforeJson.startsWith("[")) {
+        planningMessage = beforeJson;
+      }
+    }
+    if (!planningMessage) {
+      planningMessage = `Dispatching to ${departments.map((d: any) => d.id).join(", ")}...`;
+    }
 
     return { plan: { departments }, message: planningMessage };
   } catch {

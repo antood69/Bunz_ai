@@ -1104,10 +1104,16 @@ export default function BossPage() {
       );
 
       if (data.isDelegating) {
+        // Clean up reply — never show raw JSON to the user
+        let displayReply = data.reply || "";
+        if (displayReply.trim().startsWith("{") || displayReply.trim().startsWith("[")) {
+          const deptNames = data.departments?.map((d: any) => d.id).join(", ") || "departments";
+          displayReply = `Dispatching to ${deptNames}...`;
+        }
         const planMsg: Message = {
           id: genId(),
           role: "assistant",
-          content: data.reply,
+          content: displayReply,
           timestamp: new Date(),
           jobId: data.jobId,
           agentDispatches: data.departments?.map((d: any) => ({ agent: d.id, task: d.task })),
