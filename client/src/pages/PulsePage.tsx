@@ -13,6 +13,7 @@ import {
   Sparkles, Bot, Zap, GitBranch, AlertTriangle,
   CheckCircle2, Brain, Clock, TrendingUp, MessageSquare,
   ChevronRight, Activity, Eye, Loader2, Send, Coffee,
+  Search, FileText, BarChart3, Layout, CheckSquare, Play, ArrowRight,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -102,6 +103,157 @@ function PulseCard({ item, index }: { item: PulseItem; index: number }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+const TEMPLATE_ICONS: Record<string, typeof Search> = {
+  search: Search, "file-text": FileText, "bar-chart": BarChart3,
+  layout: Layout, "check-square": CheckSquare, "git-branch": GitBranch,
+};
+
+interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  variables: Array<{ key: string; label: string; placeholder?: string }>;
+  steps: Array<{ department: string; label: string; prompt: string }>;
+  use_count: number;
+  avg_tokens: number;
+}
+
+function WorkflowTemplatesSection({ navigate }: { navigate: (path: string) => void }) {
+  const [selected, setSelected] = useState<WorkflowTemplate | null>(null);
+  const [vars, setVars] = useState<Record<string, string>>({});
+  const [running, setRunning] = useState(false);
+
+  const { data: templates = [] } = useQuery<WorkflowTemplate[]>({
+    queryKey: ["/api/workflow-templates"],
+    staleTime: 60000,
+  });
+
+  const run = async () => {
+    if (!selected) return;
+    setRunning(true);
+    try {
+      const r = await fetch(`/api/workflow-templates/${selected.id}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ variables: vars, level: "medium" }),
+      });
+      const data = await r.json();
+      if (data.jobId) {
+        try { sessionStorage.setItem("cortal-active-job", data.jobId); } catch {}
+        try { sessionStorage.setItem("bunz-active-conv", data.conversationId); } catch {}
+      }
+      setSelected(null);
+      setVars({});
+      navigate("/boss");
+    } catch {
+      setRunning(false);
+    }
+  };
+
+  if (templates.length === 0) return null;
+
+  return (
+    <div className="w-full mb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <GitBranch className="w-3.5 h-3.5 text-primary" />
+        <span className="text-xs font-semibold text-foreground">Workflow Templates</span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {templates.slice(0, 6).map(t => {
+          const Icon = TEMPLATE_ICONS[t.icon] || Zap;
+          return (
+            <button
+              key={t.id}
+              onClick={() => { setSelected(t); setVars({}); }}
+              className="flex flex-col gap-1.5 p-3 rounded-xl border border-border/50 bg-card/50 hover:bg-card hover:border-primary/30 transition-all text-left group"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Icon className="w-3 h-3 text-primary" />
+                </div>
+                <span className="text-[11px] font-medium text-foreground truncate">{t.name}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground/70 line-clamp-2 leading-relaxed">{t.description}</p>
+              <div className="flex items-center gap-2 mt-auto">
+                <span className="text-[9px] text-muted-foreground/50">{t.steps.length} steps</span>
+                {t.use_count > 0 && <span className="text-[9px] text-muted-foreground/50">{t.use_count} runs</span>}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Run dialog */}
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => !running && setSelected(null)}>
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md mx-4 p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center">
+                {(() => { const Icon = TEMPLATE_ICONS[selected.icon] || Zap; return <Icon className="w-5 h-5 text-primary" />; })()}
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">{selected.name}</h3>
+                <p className="text-[11px] text-muted-foreground">{selected.steps.length} steps</p>
+              </div>
+            </div>
+
+            {/* Steps preview */}
+            <div className="space-y-1">
+              {selected.steps.map((s, i) => (
+                <div key={i} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="w-4 h-4 rounded-full bg-secondary flex items-center justify-center text-[9px] font-medium flex-shrink-0">{i + 1}</span>
+                  <span className="text-foreground font-medium">{s.label || s.department}</span>
+                  <ArrowRight className="w-2.5 h-2.5 opacity-40" />
+                  <span className="truncate">{s.department}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Variable inputs */}
+            {selected.variables.length > 0 && (
+              <div className="space-y-2.5">
+                {selected.variables.map(v => (
+                  <div key={v.key}>
+                    <label className="text-[11px] font-medium text-foreground mb-1 block">{v.label}</label>
+                    <textarea
+                      value={vars[v.key] || ""}
+                      onChange={e => setVars(prev => ({ ...prev, [v.key]: e.target.value }))}
+                      placeholder={v.placeholder}
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-primary/50 resize-none"
+                      rows={v.key === "notes" ? 5 : 2}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSelected(null)}
+                disabled={running}
+                className="flex-1 px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-secondary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={run}
+                disabled={running || selected.variables.some(v => !vars[v.key]?.trim())}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40 transition-colors"
+              >
+                {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                {running ? "Running..." : "Run"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -212,6 +364,9 @@ export default function PulsePage() {
           ))}
         </div>
       </div>
+
+      {/* Workflow Templates */}
+      <WorkflowTemplatesSection navigate={navigate} />
 
       {/* Pulse cards */}
       {isLoading ? (
