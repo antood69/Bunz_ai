@@ -39,7 +39,7 @@ interface TraceSummary {
     avgDuration: number;
     errorCount: number;
   };
-  byDepartment: Array<{ department: string; count: number; tokens: number; cost: string; avgDuration: number }>;
+  byDepartment: Array<{ department: string; count: number; tokens: number; cost: string; avgDuration: number; errors?: number; successRate?: number }>;
   byModel: Array<{ model: string; count: number; tokens: number; cost: string }>;
   bySource: Array<{ source: string; count: number; tokens: number }>;
   timeline: Array<{ hour: number; count: number; tokens: number; cost: string }>;
@@ -50,6 +50,7 @@ const DEPT_COLORS: Record<string, string> = {
   writer: "text-purple-400 bg-purple-500/10",
   coder: "text-emerald-400 bg-emerald-500/10",
   artist: "text-pink-400 bg-pink-500/10",
+  reader: "text-orange-400 bg-orange-500/10",
   boss: "text-amber-400 bg-amber-500/10",
 };
 
@@ -327,7 +328,7 @@ export default function TracesPage() {
             <FilterSelect label="Source" value={sourceFilter} onChange={setSourceFilter}
               options={["all", "boss", "editor", "pipeline", "bot", "agent"]} />
             <FilterSelect label="Dept" value={deptFilter} onChange={setDeptFilter}
-              options={["all", "research", "writer", "coder", "artist"]} />
+              options={["all", "research", "writer", "coder", "artist", "reader"]} />
             <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter}
               options={["all", "success", "error", "timeout"]} />
 
@@ -411,32 +412,81 @@ function StatsView({ stats }: { stats: TraceSummary | undefined }) {
 
   return (
     <div className="p-6 space-y-6 overflow-y-auto">
-      {/* By Department */}
+      {/* Department Health — success rates + performance */}
       <div className="rounded-xl border border-border/30 bg-card/50 p-4">
-        <h3 className="text-sm font-medium text-foreground mb-3">Usage by Department</h3>
-        <div className="space-y-2">
+        <h3 className="text-sm font-medium text-foreground mb-3">Department Health</h3>
+        <div className="space-y-3">
           {stats.byDepartment.map(d => {
             const maxTokens = Math.max(...stats.byDepartment.map(x => x.tokens || 1));
+            const successRate = d.successRate ?? 100;
+            const errors = d.errors ?? 0;
             return (
-              <div key={d.department} className="flex items-center gap-3">
-                <span className={`text-xs font-medium w-20 px-2 py-0.5 rounded-full text-center ${
-                  DEPT_COLORS[d.department] || "text-gray-400 bg-gray-500/10"
-                }`}>{d.department}</span>
-                <div className="flex-1 bg-secondary/30 rounded-full h-5 relative overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-primary/30"
-                    style={{ width: `${(d.tokens / maxTokens) * 100}%` }}
-                  />
-                  <span className="absolute inset-0 flex items-center px-2 text-[10px] text-foreground/70">
-                    {d.count} calls / {formatTokens(d.tokens)} tokens / {formatCost(d.cost)}
-                  </span>
+              <div key={d.department} className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                    DEPT_COLORS[d.department] || "text-gray-400 bg-gray-500/10"
+                  }`}>{d.department}</span>
+                  <div className="flex items-center gap-3 text-[10px]">
+                    <span className={successRate >= 90 ? "text-emerald-400" : successRate >= 70 ? "text-amber-400" : "text-red-400"}>
+                      {successRate}% success
+                    </span>
+                    {errors > 0 && <span className="text-red-400">{errors} errors</span>}
+                    <span className="text-muted-foreground">{formatDuration(d.avgDuration)} avg</span>
+                    <span className="text-muted-foreground">{formatCost(d.cost)}</span>
+                  </div>
                 </div>
-                <span className="text-xs text-muted-foreground w-16 text-right">{formatDuration(d.avgDuration)}</span>
+                <div className="flex gap-1 h-2">
+                  <div className="bg-primary/30 rounded-full" style={{ width: `${(d.tokens / maxTokens) * 100}%` }} />
+                </div>
+                <div className="text-[9px] text-muted-foreground/60">
+                  {d.count} calls · {formatTokens(d.tokens)} tokens
+                </div>
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Workflow Health Summary */}
+      {stats.totals && (
+        <div className="rounded-xl border border-border/30 bg-card/50 p-4">
+          <h3 className="text-sm font-medium text-foreground mb-3">Overall Health</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="text-center p-3 rounded-lg bg-secondary/20">
+              <p className="text-xs text-muted-foreground">Success Rate</p>
+              <p className={`text-lg font-bold ${
+                stats.totals.totalTraces > 0
+                  ? (((stats.totals.totalTraces - stats.totals.errorCount) / stats.totals.totalTraces) * 100 >= 90 ? "text-emerald-400" : "text-amber-400")
+                  : "text-foreground"
+              }`}>
+                {stats.totals.totalTraces > 0
+                  ? `${(((stats.totals.totalTraces - stats.totals.errorCount) / stats.totals.totalTraces) * 100).toFixed(1)}%`
+                  : "N/A"}
+              </p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-secondary/20">
+              <p className="text-xs text-muted-foreground">Error Rate</p>
+              <p className={`text-lg font-bold ${stats.totals.errorCount > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                {stats.totals.totalTraces > 0
+                  ? `${((stats.totals.errorCount / stats.totals.totalTraces) * 100).toFixed(1)}%`
+                  : "0%"}
+              </p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-secondary/20">
+              <p className="text-xs text-muted-foreground">Avg Latency</p>
+              <p className="text-lg font-bold text-foreground">{formatDuration(stats.totals.avgDuration || 0)}</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-secondary/20">
+              <p className="text-xs text-muted-foreground">Cost / Call</p>
+              <p className="text-lg font-bold text-emerald-400">
+                {stats.totals.totalTraces > 0
+                  ? formatCost(String(parseFloat(stats.totals.totalCost || "0") / stats.totals.totalTraces))
+                  : "$0.00"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* By Model */}
       <div className="rounded-xl border border-border/30 bg-card/50 p-4">
