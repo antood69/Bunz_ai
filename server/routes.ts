@@ -98,29 +98,40 @@ export async function registerRoutes(
   app.use("/api/pulse", createPulseRouter());
 
   // ── Local File System Access (for Editor) ───────────────────────────────
-  // Only available in development — disabled in production to prevent path traversal
-  const LOCAL_FS_ENABLED = process.env.NODE_ENV !== "production";
+  // READ: owner-only in production, anyone in dev
+  // WRITE: dev only (never in production)
+  const IS_PROD = process.env.NODE_ENV === "production";
   const ALLOWED_ROOT = path.resolve(process.cwd());
 
-  /** Validate a file path is within the allowed root directory */
+  /** Validate a file path is within the allowed root and not a secret file */
   function isPathSafe(filePath: string): boolean {
     const resolved = path.resolve(filePath);
-    return resolved.startsWith(ALLOWED_ROOT) && !resolved.includes(".env");
+    if (!resolved.startsWith(ALLOWED_ROOT)) return false;
+    // Block .env files, credentials, tokens, and secrets
+    const base = path.basename(resolved).toLowerCase();
+    if (base === ".env" || base.startsWith(".env.") || base === "credentials.json" || base === "token.json") return false;
+    return true;
+  }
+
+  /** Check if user is the owner account */
+  function isOwner(req: any): boolean {
+    return req.user?.role === "owner";
   }
 
   app.get("/api/local/tree", async (req, res) => {
-    if (!LOCAL_FS_ENABLED) return res.status(403).json({ error: "Local file access disabled in production" });
+    // In production, only owner can browse files
+    if (IS_PROD && !isOwner(req)) return res.status(403).json({ error: "Owner access required" });
     const rootPath = path.resolve((req.query.root as string) || process.cwd());
     if (!isPathSafe(rootPath)) return res.status(403).json({ error: "Path not allowed" });
     if (!fs.existsSync(rootPath)) return res.status(404).json({ error: "Path not found" });
 
-    const ignored = new Set(["node_modules", ".git", "dist", ".tmp", ".next", "__pycache__", ".venv", "venv"]);
+    const ignored = new Set(["node_modules", ".git", "dist", ".tmp", ".next", "__pycache__", ".venv", "venv", "uploads"]);
     const walk = (dir: string, prefix = ""): Array<{ path: string; type: "blob" | "tree" }> => {
       const entries: Array<{ path: string; type: "blob" | "tree" }> = [];
       try {
         const items = fs.readdirSync(dir, { withFileTypes: true });
         for (const item of items) {
-          if (item.name.startsWith(".") && item.name !== ".env.example") continue;
+          if (item.name.startsWith(".")) continue; // Skip all dotfiles in tree
           if (ignored.has(item.name)) continue;
           const rel = prefix ? `${prefix}/${item.name}` : item.name;
           if (item.isDirectory()) {
@@ -137,7 +148,8 @@ export async function registerRoutes(
   });
 
   app.get("/api/local/file", async (req, res) => {
-    if (!LOCAL_FS_ENABLED) return res.status(403).json({ error: "Local file access disabled in production" });
+    // In production, only owner can read files
+    if (IS_PROD && !isOwner(req)) return res.status(403).json({ error: "Owner access required" });
     const filePath = path.resolve(req.query.path as string || "");
     if (!isPathSafe(filePath)) return res.status(403).json({ error: "Path not allowed" });
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: `Not found: ${filePath}` });
@@ -150,7 +162,8 @@ export async function registerRoutes(
   });
 
   app.put("/api/local/file", async (req, res) => {
-    if (!LOCAL_FS_ENABLED) return res.status(403).json({ error: "Local file access disabled in production" });
+    // Write access: NEVER in production, dev only
+    if (IS_PROD) return res.status(403).json({ error: "File writing disabled in production" });
     const { path: rawPath, content } = req.body;
     if (!rawPath || content === undefined) return res.status(400).json({ error: "path and content required" });
     const filePath = path.resolve(rawPath);
