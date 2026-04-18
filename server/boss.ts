@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from "uuid";
 import { modelRouter } from "./ai";
 import { eventBus } from "./lib/eventBus";
 import { storage } from "./storage";
-import { dbAll } from "./lib/db";
+import { dbAll, dbGet } from "./lib/db";
 import { logJob, logAI, logError } from "./lib/logger";
 
 /**
@@ -319,32 +319,33 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   const wordCount = message.split(/\s+/).length;
   const noSlash = !msg.startsWith("/");
 
-  // Check if owner is asking to read files — skip all auto-routing if so
-  // Triggers on: typed paths, file markers, OR audit/review/codebase intent
-  const hasFilePaths = !!(
-    message.match(/(?:server|client|shared|workflows|tools)\/[\w./\-]+\.(?:ts|tsx|js|json|md|py)/i) ||
-    message.match(/(?:PLATFORM|CLAUDE|README|package)\.(?:md|json)/i) ||
-    message.match(/--- FILE: /)
-  );
-  // Intent-based: owner asking about code, audit, architecture → trigger file mode
-  const hasCodeIntent = !!(
-    /\b(audit|review|analyze|inspect|examine)\b.*\b(code|codebase|platform|files|cortal|your own)\b/i.test(message) ||
-    /\b(read|check|look at|open|view)\b.*\b(your|own|code|file|implementation|source)\b/i.test(message) ||
-    /\b(how does|how do|what does|what is|why does|why is|where is)\b.*\b(implement|code|routing|logic|work|handle|process)\b/i.test(message) ||
-    /\bbrutally honest (assessment|audit|review)\b/i.test(message) ||
-    /<read_file/i.test(message)
-  );
-  const isOwnerUser = !!(userEmail && (await storage.getUserByEmail(userEmail))?.role === "owner");
-  const ownerFileMode = (hasFilePaths || hasCodeIntent) && isOwnerUser;
+  // Check if owner is asking about Cortal's own code — skip auto-routing if so
+  // Only owner gets file access; non-owner users shouldn't even compute these regexes
+  let ownerFileMode = false;
+  if (userEmail) {
+    const user = await storage.getUserByEmail(userEmail);
+    if (user?.role === "owner") {
+      // Trigger 1: typed file paths (explicit request)
+      const hasFilePaths = !!(
+        message.match(/(?:server|client|shared|workflows|tools)\/[\w./\-]+\.(?:ts|tsx|js|json|md|py)/i) ||
+        message.match(/(?:PLATFORM|CLAUDE|README|package)\.(?:md|json)/i) ||
+        message.match(/--- FILE: /)
+      );
+      // Trigger 2: unambiguous self-referential code intent
+      // Requires explicit reference to Cortal/platform/codebase — NOT just generic words like "analyze" or "review"
+      const hasCodeIntent = !!(
+        /\b(audit|review|analyze|inspect|examine|debug)\b.{0,40}\b(cortal|codebase|your (own |)(code|files|routing|implementation)|the platform|this app)\b/i.test(message) ||
+        /\b(read|check|open|view)\b.{0,20}\b(your (own |)(code|files?|source)|server\/|client\/src)\b/i.test(message) ||
+        /\bwhat (files|code) (does|do you)\b/i.test(message) ||
+        /\bbrutally honest (assessment|audit|review)\b/i.test(message)
+      );
+      ownerFileMode = hasFilePaths || hasCodeIntent;
+    }
+  }
 
   // /human — humanize output to pass AI detectors (modifier, works with any flow)
   const humanizeMode = msg.startsWith("/human");
   if (humanizeMode) message = message.replace(/^\/human\s*/i, "").trim();
-
-  // If owner is reading files, skip ALL auto-routing — Boss answers directly with file contents
-  if (ownerFileMode) {
-    // Fall through to direct Boss call with file contents injected into system prompt
-  }
 
   // /research — deep multi-source research with citations
   let deepResearchMode = !ownerFileMode && msg.startsWith("/research");
@@ -418,9 +419,10 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   }
 
   const tier = INTELLIGENCE_TIERS[level];
-  // Boss routing is a classification task — always use cheapest model regardless of tier.
-  // The expensive model is only needed for the actual department work, not for deciding WHERE to route.
-  const bossModel = "gpt-5.4-mini";
+  // Entry tier uses mini (cheap routing). Medium/Max use tier's full model since
+  // Boss also generates the direct answer when not dispatching — mini produces
+  // worse answers and sometimes malformed dispatch JSON.
+  const bossModel = level === "entry" ? "gpt-5.4-mini" : tier.bossModel;
   const abortController = new AbortController();
 
   // ── Long-running command handler (returns immediately, streams via SSE) ──
@@ -636,8 +638,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       const projectPromise = (async () => {
         if (!conversationId) return "";
         try {
-          const { dbGet: dbGetLocal } = await import("./lib/db");
-          const brief = await dbGetLocal(
+          const brief = await dbGet(
             "SELECT objective, context, constraints, stakeholders, deliverables, decisions FROM project_briefs WHERE conversation_id = ? AND user_id = ?",
             conversationId, userId
           ) as any;
