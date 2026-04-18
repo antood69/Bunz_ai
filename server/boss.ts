@@ -44,6 +44,54 @@ async function getOwnerObsidianConnector(): Promise<any | null> {
   } catch { return null; }
 }
 
+// ── Native Tool Definitions ──────────────────────────────────────────────
+
+const READ_FILE_TOOL = {
+  name: "read_file",
+  description: "Read a file from the Cortal project. Use this to understand the platform's actual code before answering questions about it. You can also pass a directory path to list its contents. Blocked files: .env, credentials.json, token.json.",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      path: {
+        type: "string",
+        description: "Relative path from project root, e.g. 'server/boss.ts', 'client/src/pages/BossPage.tsx', 'PLATFORM.md'. Can also be a directory like 'server' or 'client/src/pages' to list contents.",
+      },
+    },
+    required: ["path"],
+  },
+};
+
+/** Execute a read_file tool call — returns file content or directory listing */
+async function executeReadFile(requestedPath: string): Promise<string> {
+  if (!requestedPath) return "Error: path is required";
+  const MAX_CHARS = 30_000;
+  try {
+    const resolved = path.resolve(process.cwd(), requestedPath);
+    const base = path.basename(resolved).toLowerCase();
+    const blocked = base === ".env" || base.startsWith(".env.") || base === "credentials.json" || base === "token.json";
+    if (!resolved.startsWith(process.cwd())) return `Error: path outside project root`;
+    if (blocked) return `Error: file is blocked for security`;
+    if (!fs.existsSync(resolved)) return `Error: file not found: ${requestedPath}`;
+
+    const stat = fs.statSync(resolved);
+    if (stat.isDirectory()) {
+      const entries = fs.readdirSync(resolved, { withFileTypes: true })
+        .filter(e => !e.name.startsWith(".") && e.name !== "node_modules" && e.name !== "dist")
+        .slice(0, 100)
+        .map(e => `${e.isDirectory() ? "📁" : "📄"} ${e.name}`);
+      return `Directory listing for ${requestedPath}:\n${entries.join("\n")}`;
+    }
+
+    const content = fs.readFileSync(resolved, "utf-8");
+    if (content.length > MAX_CHARS) {
+      return content.slice(0, MAX_CHARS) + `\n\n[File truncated at ${MAX_CHARS} chars. Total size: ${content.length}]`;
+    }
+    return content;
+  } catch (e: any) {
+    return `Error reading ${requestedPath}: ${e.message}`;
+  }
+}
+
 /** Resolve GitHub context for coder tasks — extracts repo from message or falls back to user's default */
 async function resolveGithubContext(userId: number, message: string): Promise<{ token: string; repo: string } | undefined> {
   try {
@@ -146,27 +194,13 @@ DISPATCH FORMAT (raw JSON only, no markdown):
 When dispatching, REWRITE vague requests into precise, detailed prompts. Add structure, length, tone, and format requirements the user implied.
 
 FILE READING (owner only):
-You MUST read the actual code before answering questions about Cortal's implementation. When the user asks HOW something works, WHY something behaves a certain way, what a feature does, or asks you to audit/review/analyze code — STOP and output read_file tags FIRST. Do not answer from memory.
+You have the read_file tool available to read Cortal's actual code. Use it whenever the user asks about implementation, architecture, behavior, or asks you to audit/review/analyze the platform. Do not answer code questions from memory — always read the relevant files first.
 
-You have 3 rounds of reading, up to 30 files per round, ~30K chars per file. That's enough to audit the entire codebase if needed.
+Key starting points for audits: PLATFORM.md, server/boss.ts, server/departments/types.ts, server/departments/executor.ts, server/memory.ts, server/pipelines.ts, server/bots.ts, client/src/pages/BossPage.tsx, client/src/App.tsx.
 
-For broad audits, start with these key files:
-<read_file path="PLATFORM.md" />
-<read_file path="server/boss.ts" />
-<read_file path="server/departments/types.ts" />
-<read_file path="server/departments/executor.ts" />
-<read_file path="server/memory.ts" />
-<read_file path="server/pipelines.ts" />
-<read_file path="server/bots.ts" />
-<read_file path="client/src/pages/BossPage.tsx" />
-<read_file path="client/src/pages/PulsePage.tsx" />
-<read_file path="client/src/App.tsx" />
+You can pass a directory path (like "server" or "client/src/pages") to list its contents first. Read broadly, then answer with specific file paths, function names, and line references.
 
-You can also list directories: <read_file path="server" /> or <read_file path="client/src/pages" />
-
-When outputting read_file tags, write ONLY the tags (no other text). The system will read the files and call you back with contents. You can request more files in subsequent rounds, or write your final answer.
-
-Skip file reading only for abstract questions (e.g. "what should I build next") or ones already answered by the architecture summary.
+Skip reading only for abstract questions or ones fully covered by the architecture summary above.
 
 ARTIFACTS — STRICT RULES:
 - Only use <artifact> for content the user explicitly asked to be visual/interactive (landing pages, charts, UI mockups)
@@ -632,89 +666,76 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       ? [{ type: "text", text: message }, ...imageContents]
       : message;
 
-    const bossResult = await modelRouter.chat({
-      model: (hasInjectedFiles || ownerFileMode) ? "gpt-5.4" : bossModel, // Stronger model for file analysis + tool calling
-      maxTokens: (hasInjectedFiles || ownerFileMode) ? 16384 : 4096,
-      messages: [
-        // Only last 4 messages for routing context — Boss just needs recent context, not full history
-        ...history.slice(-4).map(m => ({ role: m.role as "user" | "assistant", content: typeof m.content === "string" ? m.content.slice(0, 500) : m.content })),
-        { role: "user" as const, content: userContent },
-      ],
+    // ── Build base message history ──
+    const baseMessages: any[] = [
+      ...history.slice(-4).map(m => ({ role: m.role as "user" | "assistant", content: typeof m.content === "string" ? m.content.slice(0, 500) : m.content })),
+      { role: "user", content: userContent },
+    ];
+
+    // ── Native tool-use for owner file reading ──
+    // Uses OpenAI function calling — model decides when to read files
+    const tools = ownerFileMode ? [READ_FILE_TOOL] : undefined;
+    const useToolModel = (hasInjectedFiles || ownerFileMode);
+
+    let bossResult = await modelRouter.chat({
+      model: useToolModel ? "gpt-5.4" : bossModel,
+      maxTokens: useToolModel ? 16384 : 4096,
+      messages: baseMessages,
       systemPrompt: systemPrompt + vaultContext + memoryContext,
+      tools,
       signal: abortController.signal,
     });
 
     let bossTokens = bossResult.usage.totalTokens;
-    logAI(bossModel, bossResult.latencyMs || 0, bossTokens, "boss_routing");
+    logAI(useToolModel ? "gpt-5.4" : bossModel, bossResult.latencyMs || 0, bossTokens, "boss_routing");
 
-    // ── Multi-round tool-calling loop: Boss can request files across multiple rounds ──
-    // Owner only. Keeps security boundaries (no .env, no path traversal) but allows
-    // deep code audits — up to 30 files per round, 30K chars each, 3 rounds total.
-    if (isOwnerUser) {
-      const MAX_ROUNDS = 3;
-      const MAX_FILES_PER_ROUND = 30;
-      const MAX_CHARS_PER_FILE = 30_000;
-      let allInjectedFiles = ""; // Accumulates across rounds
+    // Native tool-use loop: if model requested tools, execute them and call again
+    if (ownerFileMode && bossResult.toolCalls && bossResult.toolCalls.length > 0) {
+      const MAX_TOOL_ROUNDS = 5;
+      const toolMessages: any[] = [...baseMessages];
 
-      for (let round = 0; round < MAX_ROUNDS; round++) {
-        const readTags = bossResult.content.match(/<read_file\s+path=["']([^"']+)["']\s*\/?>/g) || [];
-        if (readTags.length === 0) break; // No more requests → we're done
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        if (!bossResult.toolCalls || bossResult.toolCalls.length === 0) break;
 
-        const fileContents: string[] = [];
-        for (const tag of readTags.slice(0, MAX_FILES_PER_ROUND)) {
-          const pathMatch = tag.match(/path=["']([^"']+)["']/);
-          if (!pathMatch) continue;
-          const requestedPath = pathMatch[1];
-          try {
-            const resolved = path.resolve(process.cwd(), requestedPath);
-            const base = path.basename(resolved).toLowerCase();
-            const blocked = base === ".env" || base.startsWith(".env.") || base === "credentials.json" || base === "token.json";
-            if (resolved.startsWith(process.cwd()) && !blocked && fs.existsSync(resolved)) {
-              const stat = fs.statSync(resolved);
-              if (stat.isDirectory()) {
-                // Directory — list contents instead
-                const entries = fs.readdirSync(resolved).slice(0, 50);
-                fileContents.push(`--- DIR: ${requestedPath} ---\n${entries.join("\n")}`);
-              } else {
-                const content = fs.readFileSync(resolved, "utf-8");
-                const trimmed = content.length > MAX_CHARS_PER_FILE
-                  ? content.slice(0, MAX_CHARS_PER_FILE) + `\n\n[...truncated, total size: ${content.length}]`
-                  : content;
-                fileContents.push(`--- FILE: ${requestedPath} (${content.length} chars) ---\n${trimmed}`);
-              }
-            } else {
-              fileContents.push(`--- FILE: ${requestedPath} --- [NOT FOUND OR FORBIDDEN]`);
-            }
-          } catch (e: any) {
-            fileContents.push(`--- FILE: ${requestedPath} --- [ERROR: ${e.message}]`);
-          }
-        }
-
-        allInjectedFiles += `\n\n--- ROUND ${round + 1} FILES ---\n${fileContents.join("\n\n")}`;
-
-        // Call Boss again with accumulated file contents
-        const isFinalRound = round === MAX_ROUNDS - 1;
-        const roundInstruction = isFinalRound
-          ? `\n\nThis is your FINAL round — you must write the answer now. Do NOT request more files.`
-          : `\n\nYou may request more files with <read_file> tags if needed (you have ${MAX_ROUNDS - round - 1} rounds left), or write your final answer now.`;
-
-        const followupSystem = systemPrompt + vaultContext + memoryContext +
-          `\n\n--- FILES READ SO FAR ---${allInjectedFiles}\n--- END FILES ---` + roundInstruction;
-
-        const followup = await modelRouter.chat({
-          model: "gpt-5.4",
-          maxTokens: 32768, // Large output for full code audits
-          messages: [
-            ...history.slice(-4).map(m => ({ role: m.role as "user" | "assistant", content: typeof m.content === "string" ? m.content.slice(0, 500) : m.content })),
-            { role: "user" as const, content: userContent },
-          ],
-          systemPrompt: followupSystem,
-          signal: abortController.signal,
+        // Append the assistant's tool call to message history
+        toolMessages.push({
+          role: "assistant",
+          content: bossResult.content || null,
+          tool_calls: bossResult.toolCalls.map(tc => ({
+            id: tc.id,
+            type: "function",
+            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+          })),
         });
 
-        bossResult.content = followup.content;
-        bossTokens += followup.usage.totalTokens;
-        logAI("gpt-5.4", followup.latencyMs || 0, followup.usage.totalTokens, `boss_file_read_r${round + 1}`);
+        // Execute each tool call
+        for (const call of bossResult.toolCalls) {
+          let result = "";
+          if (call.name === "read_file") {
+            result = await executeReadFile(call.arguments.path || "");
+          } else {
+            result = `Unknown tool: ${call.name}`;
+          }
+          toolMessages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: result,
+          });
+        }
+
+        // Call model again with tool results
+        const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
+        bossResult = await modelRouter.chat({
+          model: "gpt-5.4",
+          maxTokens: 32768,
+          messages: toolMessages,
+          systemPrompt: systemPrompt + vaultContext + memoryContext +
+            (isFinalRound ? "\n\nThis is your final tool round — write your answer now, do NOT call more tools." : ""),
+          tools: isFinalRound ? undefined : [READ_FILE_TOOL],
+          signal: abortController.signal,
+        });
+        bossTokens += bossResult.usage.totalTokens;
+        logAI("gpt-5.4", bossResult.latencyMs || 0, bossResult.usage.totalTokens, `boss_tool_r${round + 1}`);
       }
     }
 

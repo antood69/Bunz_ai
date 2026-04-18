@@ -54,6 +54,26 @@ export interface ChatOptions {
   jsonMode?: boolean;
   /** JSON schema for validation — if set, output is parsed and validated against required fields */
   jsonSchema?: { required?: string[]; description?: string };
+  /** Tool definitions for native function calling (OpenAI-compatible schema) */
+  tools?: ToolDefinition[];
+}
+
+/** Native tool definition — matches OpenAI function schema */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, any>;
+    required?: string[];
+  };
+}
+
+/** A tool call returned by the model */
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, any>;
 }
 
 export interface ChatResult {
@@ -66,6 +86,8 @@ export interface ChatResult {
   jsonValid?: boolean;
   /** Latency in milliseconds for the AI call */
   latencyMs?: number;
+  /** Tool calls the model wants to make (native function calling) */
+  toolCalls?: ToolCall[];
   /** For image generation models — contains the base64 data URL or image URL */
   imageUrl?: string;
   /** Response type: "text" (default) or "image" */
@@ -348,18 +370,52 @@ async function callOpenAI(opts: ChatOptions, apiKey?: string): Promise<ChatResul
     ? { max_completion_tokens: tokens }
     : { max_tokens: tokens };
 
+  // Convert our ChatMessage array to OpenAI's format — preserving any raw tool_calls/tool fields
+  const rawMessages: any[] = [
+    { role: "system", content: system },
+    ...opts.messages.map((m: any) => {
+      // Pass through raw tool-use messages as-is (for multi-turn tool calling)
+      if (m.tool_calls || m.tool_call_id || m.role === "tool") return m;
+      return { role: m.role, content: m.content };
+    }),
+  ];
+
+  // Build tools param if native tool-use requested
+  const toolsParam = opts.tools && opts.tools.length > 0
+    ? {
+        tools: opts.tools.map(t => ({
+          type: "function" as const,
+          function: { name: t.name, description: t.description, parameters: t.parameters },
+        })),
+      }
+    : {};
+
   const response = await client.chat.completions.create({
     model: opts.model,
     ...tokenParam,
-    ...(opts.jsonMode ? { response_format: { type: "json_object" as const } } : {}),
-    messages: [
-      { role: "system", content: system },
-      ...opts.messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content as any })),
-    ],
+    ...(opts.jsonMode && !opts.tools ? { response_format: { type: "json_object" as const } } : {}),
+    ...toolsParam,
+    messages: rawMessages,
   });
 
+  const choice = response.choices[0];
+  const msg = choice?.message;
+
+  // Parse tool calls if the model chose to call tools
+  let toolCalls: ToolCall[] | undefined;
+  if (msg?.tool_calls && msg.tool_calls.length > 0) {
+    toolCalls = msg.tool_calls
+      .filter((tc: any) => tc.type === "function")
+      .map((tc: any) => {
+        let args: Record<string, any> = {};
+        try { args = JSON.parse(tc.function.arguments || "{}"); } catch {}
+        return { id: tc.id, name: tc.function.name, arguments: args };
+      });
+  }
+
   return {
-    content: response.choices[0]?.message?.content ?? "[No response]",
+    content: msg?.content ?? "",
+    toolCalls,
     usage: {
       promptTokens: response.usage?.prompt_tokens ?? 0,
       completionTokens: response.usage?.completion_tokens ?? 0,
