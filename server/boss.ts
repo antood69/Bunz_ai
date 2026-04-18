@@ -269,14 +269,22 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   const noSlash = !msg.startsWith("/");
 
   // Check if owner is asking to read files — skip all auto-routing if so
-  // Matches: typed paths (server/boss.ts), root files (PLATFORM.md), or injected file markers (--- FILE: ... ---)
+  // Triggers on: typed paths, file markers, OR audit/review/codebase intent
   const hasFilePaths = !!(
     message.match(/(?:server|client|shared|workflows|tools)\/[\w./\-]+\.(?:ts|tsx|js|json|md|py)/i) ||
     message.match(/(?:PLATFORM|CLAUDE|README|package)\.(?:md|json)/i) ||
     message.match(/--- FILE: /)
   );
+  // Intent-based: owner asking about code, audit, architecture → trigger file mode
+  const hasCodeIntent = !!(
+    /\b(audit|review|analyze|inspect|examine)\b.*\b(code|codebase|platform|files|cortal|your own)\b/i.test(message) ||
+    /\b(read|check|look at|open|view)\b.*\b(your|own|code|file|implementation|source)\b/i.test(message) ||
+    /\b(how does|how do|what does|what is|why does|why is|where is)\b.*\b(implement|code|routing|logic|work|handle|process)\b/i.test(message) ||
+    /\bbrutally honest (assessment|audit|review)\b/i.test(message) ||
+    /<read_file/i.test(message)
+  );
   const isOwnerUser = !!(userEmail && (await storage.getUserByEmail(userEmail))?.role === "owner");
-  const ownerFileMode = hasFilePaths && isOwnerUser;
+  const ownerFileMode = (hasFilePaths || hasCodeIntent) && isOwnerUser;
 
   // /human — humanize output to pass AI detectors (modifier, works with any flow)
   const humanizeMode = msg.startsWith("/human");
@@ -608,8 +616,8 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       : message;
 
     const bossResult = await modelRouter.chat({
-      model: hasInjectedFiles ? "gpt-5.4" : bossModel, // Use stronger model for file analysis
-      maxTokens: hasInjectedFiles ? 16384 : 4096, // More output space for code review
+      model: (hasInjectedFiles || ownerFileMode) ? "gpt-5.4" : bossModel, // Stronger model for file analysis + tool calling
+      maxTokens: (hasInjectedFiles || ownerFileMode) ? 16384 : 4096,
       messages: [
         // Only last 4 messages for routing context — Boss just needs recent context, not full history
         ...history.slice(-4).map(m => ({ role: m.role as "user" | "assistant", content: typeof m.content === "string" ? m.content.slice(0, 500) : m.content })),
