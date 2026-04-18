@@ -468,6 +468,32 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       }
     } catch {}
 
+    // ── Owner file reading: inject file contents when owner asks to read code ──
+    // Detects file paths in the message and loads them for the AI to analyze
+    if (input.userEmail && (await storage.getUserByEmail(input.userEmail))?.role === "owner") {
+      const filePatterns = message.match(/(?:^|\s)((?:server|client|shared|workflows|tools)\/[\w./\-]+\.(?:ts|tsx|js|json|md|py|css|html))/gi);
+      const standaloneFiles = message.match(/(?:^|\s)((?:PLATFORM|CLAUDE|README|package)\.(?:md|json))/gi);
+      const allFiles = [...(filePatterns || []), ...(standaloneFiles || [])].map(f => f.trim());
+
+      if (allFiles.length > 0) {
+        const fileContents: string[] = [];
+        for (const filePath of allFiles.slice(0, 10)) { // Max 10 files
+          try {
+            const resolved = path.resolve(process.cwd(), filePath);
+            if (resolved.startsWith(process.cwd()) && !resolved.includes(".env") && fs.existsSync(resolved)) {
+              const content = fs.readFileSync(resolved, "utf-8");
+              // Cap each file to 3000 chars to manage token budget
+              const trimmed = content.length > 3000 ? content.slice(0, 3000) + "\n\n[...truncated]" : content;
+              fileContents.push(`--- FILE: ${filePath} ---\n${trimmed}`);
+            }
+          } catch {}
+        }
+        if (fileContents.length > 0) {
+          systemPrompt += `\n\n--- PROJECT FILES (owner requested) ---\n${fileContents.join("\n\n")}\n--- END FILES ---`;
+        }
+      }
+    }
+
     // ── RAG + Memory: only inject when message warrants it ─────────────────
     // Skip context injection for greetings, short questions, and simple commands
     // This saves 8,000-10,000 tokens per request when context isn't needed
