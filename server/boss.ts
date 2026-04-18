@@ -128,6 +128,12 @@ DISPATCH FORMAT (raw JSON only, no markdown):
 
 When dispatching, REWRITE vague requests into precise, detailed prompts. Add structure, length, tone, and format requirements the user implied.
 
+FILE READING (owner only):
+You can read any project file to answer questions about Cortal's code, architecture, or behavior. To read a file, output a single tag in your response:
+<read_file path="server/boss.ts" />
+<read_file path="client/src/pages/BossPage.tsx" />
+You can include multiple tags in one response (max 5). The system will read them and call you back with the contents so you can give a grounded answer. Use this when the user asks about specific code, bugs, architecture, or how something works. Don't guess — read the code.
+
 ARTIFACTS — STRICT RULES:
 - Only use <artifact> for content the user explicitly asked to be visual/interactive (landing pages, charts, UI mockups)
 - NEVER generate HTML artifacts for reports, analysis, reviews, or text content — use markdown instead
@@ -596,8 +602,56 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       signal: abortController.signal,
     });
 
-    const bossTokens = bossResult.usage.totalTokens;
+    let bossTokens = bossResult.usage.totalTokens;
     logAI(bossModel, bossResult.latencyMs || 0, bossTokens, "boss_routing");
+
+    // ── Tool-calling loop: if Boss requested files, read them and re-call ──
+    // Only works for owner — non-owners can't trigger file reads this way
+    if (isOwnerUser) {
+      const readTags = bossResult.content.match(/<read_file\s+path=["']([^"']+)["']\s*\/?>/g) || [];
+      if (readTags.length > 0) {
+        const requestedFiles: string[] = [];
+        const fileContents: string[] = [];
+        for (const tag of readTags.slice(0, 5)) { // Max 5 files per request
+          const pathMatch = tag.match(/path=["']([^"']+)["']/);
+          if (!pathMatch) continue;
+          const requestedPath = pathMatch[1];
+          requestedFiles.push(requestedPath);
+          try {
+            const resolved = path.resolve(process.cwd(), requestedPath);
+            if (resolved.startsWith(process.cwd()) && !resolved.includes(".env") && fs.existsSync(resolved)) {
+              const content = fs.readFileSync(resolved, "utf-8");
+              const trimmed = content.length > 6000 ? content.slice(0, 6000) + `\n\n[...truncated, total size: ${content.length}]` : content;
+              fileContents.push(`--- FILE: ${requestedPath} (${content.length} chars) ---\n${trimmed}`);
+            } else {
+              fileContents.push(`--- FILE: ${requestedPath} --- [NOT FOUND OR FORBIDDEN]`);
+            }
+          } catch (e: any) {
+            fileContents.push(`--- FILE: ${requestedPath} --- [ERROR: ${e.message}]`);
+          }
+        }
+
+        // Re-call Boss with the file contents — it can now answer the user's question
+        const followupSystem = systemPrompt + vaultContext + memoryContext +
+          `\n\n--- FILES YOU REQUESTED ---\n${fileContents.join("\n\n")}\n--- END FILES ---\n\nNow answer the user's question directly using these file contents. Do NOT output another <read_file> tag — you already have what you need. Do NOT dispatch to departments.`;
+
+        const followup = await modelRouter.chat({
+          model: "gpt-5.4",
+          maxTokens: 16384,
+          messages: [
+            ...history.slice(-4).map(m => ({ role: m.role as "user" | "assistant", content: typeof m.content === "string" ? m.content.slice(0, 500) : m.content })),
+            { role: "user" as const, content: userContent },
+          ],
+          systemPrompt: followupSystem,
+          signal: abortController.signal,
+        });
+
+        // Replace the Boss result with the followup (which has the real answer)
+        bossResult.content = followup.content;
+        bossTokens += followup.usage.totalTokens;
+        logAI("gpt-5.4", followup.latencyMs || 0, followup.usage.totalTokens, "boss_file_read");
+      }
+    }
 
     // Record Boss token usage
     await storage.recordTokenUsage({
