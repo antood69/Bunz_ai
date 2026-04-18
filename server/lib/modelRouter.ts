@@ -52,12 +52,18 @@ export interface ChatOptions {
   maxTokens?: number;
   /** Force JSON output — adds response_format: json_object for supported providers */
   jsonMode?: boolean;
+  /** JSON schema for validation — if set, output is parsed and validated against required fields */
+  jsonSchema?: { required?: string[]; description?: string };
 }
 
 export interface ChatResult {
   content: string;
   usage: Usage;
   fallbackUsed?: string; // If a fallback model was used, its name
+  /** Parsed JSON output when jsonMode is enabled and response is valid JSON */
+  json?: any;
+  /** Whether JSON validation passed (null if jsonMode not used) */
+  jsonValid?: boolean;
   /** For image generation models — contains the base64 data URL or image URL */
   imageUrl?: string;
   /** Response type: "text" (default) or "image" */
@@ -597,6 +603,31 @@ export const modelRouter = {
 
         if (i > 0) {
           result.fallbackUsed = currentModel;
+        }
+
+        // JSON validation when jsonMode is enabled
+        if (opts.jsonMode) {
+          try {
+            // Strip markdown code fences if model wrapped JSON in them
+            let raw = result.content.trim();
+            if (raw.startsWith("```")) raw = raw.replace(/^```\w*\n?/, "").replace(/\n?```$/, "").trim();
+            const parsed = JSON.parse(raw);
+            result.json = parsed;
+            result.jsonValid = true;
+
+            // Schema validation — check required fields
+            if (opts.jsonSchema?.required) {
+              const missing = opts.jsonSchema.required.filter(f => !(f in parsed));
+              if (missing.length > 0) {
+                result.jsonValid = false;
+                console.warn(`[modelRouter] JSON missing required fields: ${missing.join(", ")}`);
+              }
+            }
+          } catch (parseErr) {
+            result.json = null;
+            result.jsonValid = false;
+            console.warn(`[modelRouter] JSON mode enabled but response is not valid JSON: ${result.content.slice(0, 100)}`);
+          }
         }
 
         return result;
