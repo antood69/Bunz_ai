@@ -627,7 +627,7 @@ export async function runAgentChat(
   signal?: AbortSignal
 ): Promise<{ reply: string; inputTokens: number; outputTokens: number; totalTokens: number; type?: "text" | "image"; imageUrl?: string }> {
   const msgs: ChatMessage[] = [
-    ...history.slice(-20),
+    ...history.slice(-8),
     { role: "user", content: userMessage },
   ];
 
@@ -677,7 +677,7 @@ export async function runAgentChatWithUserKey(
   if (!encryptedApiKey) return runAgentChat(model, systemPrompt, history, userMessage, signal);
 
   const msgs: ChatMessage[] = [
-    ...history.slice(-20),
+    ...history.slice(-8),
     { role: "user", content: userMessage },
   ];
 

@@ -149,10 +149,15 @@ async function runStandardDept(
 
     const agentStart = Date.now();
     try {
-      // First agent gets the task; subsequent agents get previous output as context
+      // First agent gets the task; subsequent agents get a TRIMMED version of previous output
+      // to prevent token cascade (output grows quadratically across agents)
       let prompt: string;
       if (previousOutput) {
-        prompt = `ORIGINAL TASK:\n${task.task}\n\nPREVIOUS OUTPUT:\n${previousOutput}\n\nYour job: Review, refine, or extend the above according to your role.`;
+        // Cap previous output to 1500 chars to prevent token explosion across sub-agents
+        const trimmedPrev = previousOutput.length > 1500
+          ? previousOutput.slice(0, 1500) + "\n\n[...output trimmed for efficiency — full version available in final synthesis]"
+          : previousOutput;
+        prompt = `ORIGINAL TASK:\n${task.task}\n\nPREVIOUS OUTPUT:\n${trimmedPrev}\n\nYour job: Review, refine, or extend the above according to your role.`;
       } else {
         prompt = task.context ? `${task.task}\n\nContext:\n${task.context}` : task.task;
       }

@@ -451,13 +451,13 @@ Be ruthlessly skeptical. Your job is to protect the user.`,
   },
 };
 
-// Inject workflow instructions into each department's sub-agents
+// Inject workflow instructions into LEAD agent only (not all sub-agents)
+// This saves ~1,000 tokens per support agent call since instructions are large
 for (const [deptId, dept] of Object.entries(DEPARTMENTS)) {
   const instructions = DEPT_INSTRUCTIONS[deptId] || "";
   if (instructions) {
-    for (const agent of dept.subAgents) {
-      agent.systemPrompt += instructions;
-    }
+    const lead = dept.subAgents.find(a => a.required);
+    if (lead) lead.systemPrompt += instructions;
   }
 }
 

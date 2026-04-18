@@ -1030,8 +1030,8 @@ export default function BossPage() {
     setIsLoading(true);
 
     try {
-      // Only send last 10 messages — server has full history via conversationId
-      const history = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
+      // Only send last 4 messages — Boss routing just needs recent context
+      const history = messages.slice(-4).map((m) => ({ role: m.role, content: m.content }));
 
       const res = await fetch("/api/boss/chat", {
         method: "POST",

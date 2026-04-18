@@ -105,52 +105,27 @@ import { autoLinkNote, contextSearch } from "./lib/vaultBrain";
 
 // ── Boss System Prompt ──────────────────────────────────────────────────────
 
-const BOSS_SYSTEM_PROMPT = `You are The Boss, the central AI orchestrator for Cortal. You receive user requests and either answer directly or delegate to specialist departments.
+const BOSS_SYSTEM_PROMPT = `You are The Boss, Cortal's AI orchestrator. Answer directly or delegate to departments.
 
-DEPARTMENTS:
-- research: Web research, data gathering, analysis, fact-finding, comparisons
-- coder: Programming, debugging, code review, GitHub operations, file access
-- artist: Image generation, visual content, design, illustrations
-- writer: Content creation, copywriting, documentation, emails, articles
-- reader: Document analysis, reading comprehension, summarization, critical review. Use when the user provides a document, PDF, article, contract, book chapter, or large text to read, analyze, summarize, or answer questions about. The reader department splits the document between multiple sub-agents, reviews for accuracy, and has a disputer that challenges findings. Can work with other departments — e.g. reader analyzes a paper, then writer creates an essay about it.
-- autonomous: Complex multi-step projects that need research + writing + coding + reading combined. Use when the task has 3+ distinct phases (e.g. "read this paper, research the topic further, and write a report")
+DEPARTMENTS: research, coder, artist, writer, reader, autonomous
+- research: web research, analysis, comparisons
+- coder: programming, debugging, code review
+- artist: image generation, visual design
+- writer: content, copywriting, docs, emails
+- reader: document analysis, summarization, critical review (splits docs across sub-agents with disputer)
+- autonomous: complex 3+ phase projects combining multiple departments
 
-DECISION RULES:
-1. Simple questions, greetings, quick facts → answer directly (NO dispatch)
-2. Tasks requiring specialist work → dispatch to the right department(s)
-3. Multi-part requests → dispatch to MULTIPLE departments
+RULES:
+1. Simple questions/greetings → answer directly
+2. Specialist work → dispatch
+3. Multi-part → dispatch to MULTIPLE departments
 
-WHEN DISPATCHING, ALWAYS write a brief 1-sentence planning message first, then output ONLY the raw JSON object (no markdown, no code fences, no backticks):
-{
-{
-  "action": "dispatch",
-  "departments": [
-    {"id": "research", "task": "Detailed, precise task description for the research team"},
-    {"id": "writer", "task": "Detailed, precise task description for the writing team"}
-  ]
-}
-\`\`\`
-}
-CRITICAL — PROMPT REFINEMENT:
-When writing the "task" for each department, DO NOT just copy the user's message. REWRITE it into a precise, detailed, AI-optimized prompt. Add specifics the user implied but didn't state. Example:
+DISPATCH FORMAT (raw JSON, no markdown fences):
+{"action":"dispatch","departments":[{"id":"research","task":"detailed task"},{"id":"writer","task":"detailed task"}]}
 
-User says: "write me a blog about ai"
-BAD task: "write a blog about ai"
-GOOD task: "Write a 1200-word blog post about current AI trends in 2026. Structure: intro paragraph, 5-7 sections with h2 headers covering major developments (LLMs, agents, open source, enterprise adoption, regulation), conclusion with forward-looking statement. Tone: professional but accessible. Include specific company names and product references where relevant."
+IMPORTANT: Rewrite vague user requests into precise, detailed prompts for each department. Don't copy — enhance.
 
-Always enhance vague requests into detailed, actionable prompts.
-
-ARTIFACTS:
-ARTIFACTS — USE SPARINGLY:
-Only use <artifact> tags for content that NEEDS to be visually rendered:
-YES artifacts: landing pages, interactive HTML, charts/graphs, SVG diagrams, UI mockups, code demos, styled documents meant to be exported
-NO artifacts: research reports, summaries, analysis, answers to questions, essays, emails, any text-based response
-
-When you DO use artifacts:
-<artifact type="html" title="My Page">...full HTML with styling...</artifact>
-<artifact type="svg" title="Diagram">...svg content...</artifact>
-
-Default to plain markdown text. Only reach for artifacts when the user explicitly wants something visual or interactive.` + bossInstructions;
+ARTIFACTS: Only for visual/interactive content (HTML pages, charts, SVG). Use plain markdown for text responses.` + bossInstructions;
 
 // ── Parse Boss dispatch decision ────────────────────────────────────────────
 
@@ -329,7 +304,9 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   }
 
   const tier = INTELLIGENCE_TIERS[level];
-  const bossModel = tier.bossModel;
+  // Boss routing is a classification task — always use cheapest model regardless of tier.
+  // The expensive model is only needed for the actual department work, not for deciding WHERE to route.
+  const bossModel = "gpt-5.4-mini";
   const abortController = new AbortController();
 
   // ── Long-running command handler (returns immediately, streams via SSE) ──
@@ -471,24 +448,27 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       const connected = connectors.filter((c: any) => c.status === "connected");
       if (connected.length > 0) {
         const serviceList = connected.map((c: any) => `- ${c.name} (${c.provider})`).join("\n");
-        systemPrompt += `\n\nCONNECTED SERVICES (available for department tasks):\n${serviceList}\nWhen a user's request involves data from these services, mention it in the department task description so the department knows to pull from the connected source.`;
+        systemPrompt += `\n\nCONNECTED SERVICES:\n${serviceList}`;
       }
     } catch {}
 
-    // ── RAG + Memory: run in parallel to cut latency ──────────────────────
+    // ── RAG + Memory: only inject when message warrants it ─────────────────
+    // Skip context injection for greetings, short questions, and simple commands
+    // This saves 8,000-10,000 tokens per request when context isn't needed
     let vaultContext = "";
     let memoryContext = "";
+    const wordCount = message.split(/\s+/).length;
+    const isSubstantive = wordCount > 5 && !/^(hi|hello|hey|thanks|ok|sure|yes|no|bye|good)\b/i.test(message.trim());
     {
       const vaultPromise = (async () => {
+        if (!isSubstantive) return "";
         try {
-          if (message.split(/\s+/).length > 3) {
-            const results = await contextSearch(message, 5);
-            if (results.length > 0) {
-              const noteContents = results.map(r =>
-                `--- ${r.path} [${r.relevance}] ---\n${r.content.slice(0, 1500)}`
-              );
-              return `\n\nKNOWLEDGE BASE CONTEXT (${results.length} notes, includes linked references):\n${noteContents.join("\n\n")}\n\nUse this context to provide better answers. Reference specific notes with [[note name]] wikilinks when relevant. Build on previous knowledge rather than starting fresh.`;
-            }
+          const results = await contextSearch(message, 3); // 3 notes max (was 5)
+          if (results.length > 0) {
+            const noteContents = results.map(r =>
+              `--- ${r.path} ---\n${r.content.slice(0, 800)}` // 800 chars max (was 1500)
+            );
+            return `\n\nKNOWLEDGE BASE (${results.length} notes):\n${noteContents.join("\n\n")}`;
           }
         } catch (e: any) {
           console.error("[RAG] Context search failed:", e.message);
@@ -497,6 +477,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
       })();
 
       const memoryPromise = (async () => {
+        if (!isSubstantive) return "";
         try {
           const { getMemoryContext } = await import("./memory");
           return await getMemoryContext(userId, message);
@@ -516,7 +497,8 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     const bossResult = await modelRouter.chat({
       model: bossModel,
       messages: [
-        ...history.slice(-10).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+        // Only last 4 messages for routing context — Boss just needs recent context, not full history
+        ...history.slice(-4).map(m => ({ role: m.role as "user" | "assistant", content: typeof m.content === "string" ? m.content.slice(0, 500) : m.content })),
         { role: "user" as const, content: userContent },
       ],
       systemPrompt: systemPrompt + vaultContext + memoryContext,
@@ -647,10 +629,13 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
     activeAbortControllers.delete(conversationId);
 
     // Extract memories from this interaction (async, non-blocking)
-    try {
-      const { extractMemories } = await import("./memory");
-      extractMemories(userId, "boss", message, finalContent, input.source || "boss", conversationId).catch(() => {});
-    } catch {}
+    // Skip for trivial responses — saves ~1,500 tokens per short exchange
+    if (finalContent.length > 200 && message.split(/\s+/).length > 5) {
+      try {
+        const { extractMemories } = await import("./memory");
+        extractMemories(userId, "boss", message, finalContent, input.source || "boss", conversationId).catch(() => {});
+      } catch {}
+    }
 
     return {
       conversationId, reply: finalContent,

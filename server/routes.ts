@@ -354,7 +354,7 @@ export async function registerRoutes(
       const { reply, inputTokens, outputTokens, totalTokens } = await runAgentChat(
         agent?.model || "claude-sonnet",
         agent?.systemPrompt,
-        history.slice(-20).map((m: any) => ({ role: m.role as "user" | "assistant", content: m.content })),
+        history.slice(-8).map((m: any) => ({ role: m.role as "user" | "assistant", content: m.content })),
         content
       );
       await storage.updateAgent(agentId, { status: "idle" });

@@ -101,7 +101,7 @@ export function createCloneRouter() {
       const result = await modelRouter.chat({
         model: "gpt-5.4",
         messages: [
-          ...history.slice(-20).map((m: any) => ({ role: m.role, content: m.content })),
+          ...history.slice(-6).map((m: any) => ({ role: m.role, content: m.content })),
           { role: "user" as const, content: message },
         ],
         systemPrompt: profile.system_prompt,
