@@ -539,6 +539,7 @@ export async function registerRoutes(
         level: intelligenceLevel,
         userId,
         userEmail: req.user?.email,
+        userRole: req.user?.role,
         history: Array.isArray(history) ? history : [],
         imageContents,
         source: req.body.source || "boss",

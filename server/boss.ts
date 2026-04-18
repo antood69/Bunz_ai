@@ -290,6 +290,7 @@ export interface BossChatInput {
   level?: IntelligenceLevel;
   userId: number;
   userEmail?: string;
+  userRole?: string; // "owner" | "admin" | "user" — comes from req.user.role
   history?: Array<{ role: "user" | "assistant"; content: string }>;
   imageContents?: Array<{ type: "image_url"; image_url: { url: string } }>;
   source?: string; // "boss" | "editor" — where the chat originated
@@ -308,8 +309,9 @@ export interface BossChatResult {
 }
 
 export async function handleBossChat(input: BossChatInput): Promise<BossChatResult> {
-  let { message, userId, userEmail, history = [] } = input;
+  let { message, userId, userEmail, userRole, history = [] } = input;
   const level: IntelligenceLevel = input.level || "medium";
+  const isOwnerUser = userRole === "owner";
 
   // ── Command Detection + Auto-Routing ─────────────────────────────────
   // Slash commands are explicit overrides. Auto-detection handles everything
@@ -320,27 +322,24 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   const noSlash = !msg.startsWith("/");
 
   // Check if owner is asking about Cortal's own code — skip auto-routing if so
-  // Only owner gets file access; non-owner users shouldn't even compute these regexes
+  // Uses req.user.role (already loaded by auth middleware) — no extra DB lookup
   let ownerFileMode = false;
-  if (userEmail) {
-    const user = await storage.getUserByEmail(userEmail);
-    if (user?.role === "owner") {
-      // Trigger 1: typed file paths (explicit request)
-      const hasFilePaths = !!(
-        message.match(/(?:server|client|shared|workflows|tools)\/[\w./\-]+\.(?:ts|tsx|js|json|md|py)/i) ||
-        message.match(/(?:PLATFORM|CLAUDE|README|package)\.(?:md|json)/i) ||
-        message.match(/--- FILE: /)
-      );
-      // Trigger 2: unambiguous self-referential code intent
-      // Requires explicit reference to Cortal/platform/codebase — NOT just generic words like "analyze" or "review"
-      const hasCodeIntent = !!(
-        /\b(audit|review|analyze|inspect|examine|debug)\b.{0,40}\b(cortal|codebase|your (own |)(code|files|routing|implementation)|the platform|this app)\b/i.test(message) ||
-        /\b(read|check|open|view)\b.{0,20}\b(your (own |)(code|files?|source)|server\/|client\/src)\b/i.test(message) ||
-        /\bwhat (files|code) (does|do you)\b/i.test(message) ||
-        /\bbrutally honest (assessment|audit|review)\b/i.test(message)
-      );
-      ownerFileMode = hasFilePaths || hasCodeIntent;
-    }
+  if (isOwnerUser) {
+    // Trigger 1: typed file paths (explicit request)
+    const hasFilePaths = !!(
+      message.match(/(?:server|client|shared|workflows|tools)\/[\w./\-]+\.(?:ts|tsx|js|json|md|py)/i) ||
+      message.match(/(?:PLATFORM|CLAUDE|README|package)\.(?:md|json)/i) ||
+      message.match(/--- FILE: /)
+    );
+    // Trigger 2: unambiguous self-referential code intent
+    const hasCodeIntent = !!(
+      /\b(audit|review|analyze|inspect|examine|debug)\b.{0,40}\b(cortal|codebase|your (own |)(code|files|routing|implementation)|the platform|this app)\b/i.test(message) ||
+      /\b(read|check|open|view|see|show|access)\b.{0,40}\b(your (own |)(code|files?|source|internal)|internal files|server\/|client\/src)\b/i.test(message) ||
+      /\bwhat (files|code) (does|do you)\b/i.test(message) ||
+      /\bwhat (are|am i|youre) (made|built|being) (off|of|from)\b/i.test(message) ||
+      /\bbrutally honest (assessment|audit|review)\b/i.test(message)
+    );
+    ownerFileMode = hasFilePaths || hasCodeIntent;
   }
 
   // /human — humanize output to pass AI detectors (modifier, works with any flow)
