@@ -482,7 +482,6 @@ function MessageBubble({
     : new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   const showDelegationUI = msg.isDelegating && streamState;
-  const isAgentDispatch = msg.agentDispatches && msg.agentDispatches.length > 0;
 
   return (
     <div className="space-y-2">
@@ -1047,11 +1046,6 @@ export default function BossPage() {
       setConversations((prev) =>
         prev.map((c) => c.id === convId ? { ...c, serverId: data.conversationId } : c)
       );
-
-      // Prepend tier info if auto routing was used
-      const tierPrefix = data.tierInfo
-        ? `*[Auto: ${data.tierInfo.label} tier — ${data.tierInfo.reason}]*\n\n`
-        : "";
 
       if (data.isDelegating) {
         const planMsg: Message = {

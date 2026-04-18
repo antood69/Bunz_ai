@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Bunz — Global tokens (non-theme) */
+/* Cortal — Global tokens (non-theme) */
 :root {
   --opaque-button-border-intensity: 9;
   --font-sans: 'Inter', 'DM Sans', system-ui, sans-serif;

@@ -1,8 +1,8 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, GitBranch, Bot, Zap, Settings, LogOut, ShieldAlert,
-  MessageSquare, PanelLeftClose, PanelLeftOpen, ListChecks, Code, Store,
-  Wallet, Puzzle, Wifi, WifiOff, Monitor, Activity, Layers, Menu,
+  MessageSquare, PanelLeftClose, PanelLeftOpen, Code, Store,
+  Wallet, Puzzle, Wifi, Monitor, Activity, Layers, Sparkles,
 } from "lucide-react";
 import TokenCounter from "./TokenCounter";
 import NotificationBell from "./NotificationBell";
@@ -15,7 +15,6 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSyncStatus } from "@/hooks/useSync";
 import { useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
 
 // Primary nav — clean, focused
 const navItems = [
@@ -37,7 +36,7 @@ const secondaryNavItems = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-function BunzLogo() {
+function CortalLogo() {
   return (
     <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-500/20"
       style={{ animation: "breathe 4s ease-in-out infinite" }}>
@@ -74,13 +73,6 @@ export default function AppLayout({ children, allowPublic = false }: { children:
       return next;
     });
   };
-
-  // Mods disabled for now
-  // const { data: installedMods = [] } = useQuery<{ slug: string; name: string; icon: string; route: string }[]>({
-  //   queryKey: ["/api/workshop/installed"],
-  //   enabled: isAuthenticated,
-  //   staleTime: 60000,
-  // });
 
   useEffect(() => {
     if (!allowPublic && !isLoading && !isAuthenticated) {
@@ -119,7 +111,7 @@ export default function AppLayout({ children, allowPublic = false }: { children:
         {/* Logo area */}
         <div className={`flex items-center h-14 ${sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"}`}>
           <div className={`flex items-center gap-3 ${sidebarCollapsed ? "justify-center" : ""}`}>
-            <BunzLogo />
+            <CortalLogo />
             {!sidebarCollapsed && (
               <span className="font-semibold text-[15px] tracking-tight text-foreground">Cortal</span>
             )}
@@ -302,7 +294,7 @@ export default function AppLayout({ children, allowPublic = false }: { children:
           >
             <div className="w-8" />
             <div className="flex items-center gap-2.5">
-              <BunzLogo />
+              <CortalLogo />
               <span className="font-semibold text-[15px] tracking-tight text-foreground">Cortal</span>
             </div>
             <div className="flex items-center">

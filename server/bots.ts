@@ -368,7 +368,7 @@ export function createBotRouter() {
       const connectors = await storage.getConnectorsByUser(userId);
       const connected = connectors.filter((c: any) => c.status === "connected").map((c: any) => c.provider);
 
-      const systemPrompt = `You are the Bot Architect for Bunz. You help users design autonomous bots — persistent agents that run continuously, make decisions, and take actions.
+      const systemPrompt = `You are the Bot Architect for Cortal. You help users design autonomous bots — persistent agents that run continuously, make decisions, and take actions.
 
 CONNECTED SERVICES: ${connected.length > 0 ? connected.join(", ") : "none"}
 AVAILABLE DEPARTMENTS: research, coder, writer, artist

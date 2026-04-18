@@ -6,11 +6,11 @@
  * makes proactive suggestions, and learns your patterns.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
-  Sparkles, ArrowRight, Bot, Zap, GitBranch, AlertTriangle,
+  Sparkles, Bot, Zap, GitBranch, AlertTriangle,
   CheckCircle2, Brain, Clock, TrendingUp, MessageSquare,
   ChevronRight, Activity, Eye, Loader2, Send, Coffee,
 } from "lucide-react";
@@ -110,7 +110,6 @@ export default function PulsePage() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const [quickInput, setQuickInput] = useState("");
-  const [aiThinking, setAiThinking] = useState(false);
   const displayName = user?.displayName || user?.email?.split("@")[0] || "there";
 
   // Fetch pulse data from server

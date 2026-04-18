@@ -475,7 +475,7 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
             `--- ${r.path} [${r.relevance}] ---\n${r.content.slice(0, 1500)}`
           );
           vaultContext = `\n\nKNOWLEDGE BASE CONTEXT (${results.length} notes, includes linked references):\n${noteContents.join("\n\n")}\n\nUse this context to provide better answers. Reference specific notes with [[note name]] wikilinks when relevant. Build on previous knowledge rather than starting fresh.`;
-          console.log(`[RAG] Context search found ${results.length} notes (${results.filter(r => r.relevance === "linked reference").length} via links)`);
+          // RAG context found notes for enrichment
         }
       }
     } catch (e: any) {
@@ -1401,7 +1401,8 @@ PRESENTATION RULES:
           // Auto-reflection: run every 5 tasks to find patterns
           try {
             const { runReflection } = await import("./lib/vaultBrain.js");
-            const taskCount = await storage.getDepartmentStats(userId).reduce((sum, d) => sum + d.total, 0);
+            const deptStats = await storage.getDepartmentStats(userId);
+            const taskCount = deptStats.reduce((sum: number, d: any) => sum + d.total, 0);
             if (taskCount > 0 && taskCount % 5 === 0) {
               runReflection().catch(() => {});
             }

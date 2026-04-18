@@ -53,12 +53,6 @@ const DEPT_COLORS: Record<string, string> = {
   boss: "text-amber-400 bg-amber-500/10",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  success: "text-emerald-400",
-  error: "text-red-400",
-  timeout: "text-amber-400",
-};
-
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;

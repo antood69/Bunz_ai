@@ -6,7 +6,6 @@ import {
   Pencil, X, Save, Clock, Activity, Zap, Send, ArrowLeft,
   MessageSquare, Shield, Brain, Sparkles, TrendingUp,
   Mail, Code, PenTool, BarChart3, Users, Eye,
-  ChevronDown, ChevronRight, Coins, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

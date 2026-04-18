@@ -139,7 +139,7 @@ if (existing) {
   // Create welcome notification
   sqlite
     .prepare(
-      "INSERT INTO notifications (user_id, type, title, message, read, created_at) VALUES (?, 'welcome', 'Welcome to Bunz!', 'Your admin account has been created.', 0, ?)"
+      "INSERT INTO notifications (user_id, type, title, message, read, created_at) VALUES (?, 'welcome', 'Welcome to Cortal!', 'Your admin account has been created.', 0, ?)"
     )
     .run(userId, now);
 

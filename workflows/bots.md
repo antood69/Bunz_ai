@@ -1,4 +1,4 @@
-# Bunz Bot Framework — Architecture
+# Cortal Bot Framework — Architecture
 
 Bots are persistent, autonomous agents that differ from workflows in key ways:
 

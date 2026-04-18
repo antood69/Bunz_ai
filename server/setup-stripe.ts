@@ -9,9 +9,9 @@ import "dotenv/config";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-03-25.dahlia" });
 
 const PLANS = [
-  { id: "starter", name: "Bunz Starter", monthly: 1200, annual: 900 },
-  { id: "pro",     name: "Bunz Pro",     monthly: 3900, annual: 2900 },
-  { id: "agency",  name: "Bunz Agency",  monthly: 9900, annual: 7900 },
+  { id: "starter", name: "Cortal Starter", monthly: 1200, annual: 900 },
+  { id: "pro",     name: "Cortal Pro",     monthly: 3900, annual: 2900 },
+  { id: "agency",  name: "Cortal Agency",  monthly: 9900, annual: 7900 },
 ] as const;
 
 async function main() {

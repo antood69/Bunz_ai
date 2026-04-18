@@ -842,7 +842,7 @@ export async function initDatabase() {
       ('account-stacking', 'Account Stacking', 'Multi-account equity tracking and prop firm management', 'Manage multiple trading accounts with copy trading, equity tracking, and automated execution across prop firms and brokers.', 'Trading', 'Layers', 0, '1.0.0', 67, 4.1, 1, '/stacks'),
       ('app-generator', 'App Generator', 'Claude Code-style IDE with AI chat, live preview, and ZIP export', 'Full-stack app generator with AI chat, code editor, live preview, and one-click ZIP export. Build React, Node, and Python apps with AI assistance.', 'Development', 'Cpu', 0, '1.0.0', 312, 4.9, 1, '/app-generator'),
       ('prop-trading', 'Prop Trading', 'Professional trading with live charts, firm presets, and risk management', 'Professional prop trading dashboard with live charts, firm preset configurations, risk management tools, and real-time P&L tracking.', 'Trading', 'Trophy', 0, '1.0.0', 156, 4.5, 1, '/prop-trading'),
-      ('white-label', 'White Label', 'Rebrand Bunz as your own platform for clients', 'Create your own branded AI platform. Customize logos, colors, domains, and features. Perfect for agencies and consultants who want to offer AI services under their own brand.', 'Productivity', 'Building2', 0, '1.0.0', 34, 4.0, 1, '/white-label');
+      ('white-label', 'White Label', 'Rebrand Cortal as your own platform for clients', 'Create your own branded AI platform. Customize logos, colors, domains, and features. Perfect for agencies and consultants who want to offer AI services under their own brand.', 'Productivity', 'Building2', 0, '1.0.0', 34, 4.0, 1, '/white-label');
     `);
   } catch (_) {}
 
@@ -1160,7 +1160,7 @@ export async function initDatabase() {
   try {
     const seedAccounts = [
       { email: "reederb46@gmail.com", password: "0192837465Br!", displayName: "Reed", role: "owner" },
-      { email: "test@bunz.io", password: "TestBunz123!", displayName: "Test Admin", role: "admin" },
+      { email: "test@cortal.io", password: "TestCortal123!", displayName: "Test Admin", role: "admin" },
     ];
     for (const acct of seedAccounts) {
       const existing = await dbGet("SELECT id FROM users WHERE email = ?", acct.email);
@@ -1777,8 +1777,8 @@ export class DatabaseStorage implements IStorage {
       .where(eq(tokenUsage.userId, userId))
       .all();
     // Filter by since date in JS
-    const filtered = rows.filter(r => r.createdAt >= since);
-    const total = filtered.reduce((sum, r) => sum + r.totalTokens, 0);
+    const filtered = rows.filter((r: any) => r.createdAt >= since);
+    const total = filtered.reduce((sum: number, r: any) => sum + r.totalTokens, 0);
     const byModel: Record<string, number> = {};
     for (const r of filtered) {
       byModel[r.model] = (byModel[r.model] || 0) + r.totalTokens;

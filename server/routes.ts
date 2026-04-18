@@ -318,7 +318,7 @@ export async function registerRoutes(
       const { reply, inputTokens, outputTokens, totalTokens } = await runAgentChat(
         agent?.model || "claude-sonnet",
         agent?.systemPrompt,
-        history.slice(-20).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+        history.slice(-20).map((m: any) => ({ role: m.role as "user" | "assistant", content: m.content })),
         content
       );
       await storage.updateAgent(agentId, { status: "idle" });
@@ -386,14 +386,14 @@ export async function registerRoutes(
     const allReviews = await storage.getAuditReviews();
     res.json({
       totalWorkflows: allWorkflows.length,
-      activeWorkflows: allWorkflows.filter(w => w.status === "active").length,
+      activeWorkflows: allWorkflows.filter((w: any) => w.status === "active").length,
       totalAgents: allAgents.length,
-      workingAgents: allAgents.filter(a => a.status === "working").length,
+      workingAgents: allAgents.filter((a: any) => a.status === "working").length,
       totalJobs: allJobs.length,
-      completedJobs: allJobs.filter(j => j.status === "completed").length,
-      failedJobs: allJobs.filter(j => j.status === "failed").length,
+      completedJobs: allJobs.filter((j: any) => j.status === "completed").length,
+      failedJobs: allJobs.filter((j: any) => j.status === "failed").length,
       totalReviews: allReviews.length,
-      passedReviews: allReviews.filter(r => r.verdict === "pass").length,
+      passedReviews: allReviews.filter((r: any) => r.verdict === "pass").length,
     });
   });
 
@@ -746,7 +746,7 @@ export async function registerRoutes(
         line_items: [{
           price_data: {
             currency: "usd",
-            product_data: { name: `Bunz — ${pack.label}` },
+            product_data: { name: `Cortal — ${pack.label}` },
             unit_amount: pack.price,
           },
           quantity: 1,
@@ -830,7 +830,7 @@ export async function registerRoutes(
     try {
       const conversations = await storage.getConversationsByUser(userId);
       const pipelines = await storage.getPipelinesByUser(userId);
-      const bots = await storage.getBots(userId);
+      const bots = await storage.getBotsByUser(userId);
       const connectors = await storage.getConnectorsByUser(userId);
       const prefs = await storage.getUserPreferences(userId);
       const plan = await storage.getUserPlan(userId);

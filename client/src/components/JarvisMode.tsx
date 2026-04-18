@@ -170,7 +170,7 @@ export default function JarvisMode() {
       }
       track.onended = () => { setScreenStream(null); setScreenName(""); };
     } catch (err: any) {
-      console.log("[BunBun] Screen capture cancelled:", err.message);
+      // Screen capture was cancelled by the user
     }
   };
 

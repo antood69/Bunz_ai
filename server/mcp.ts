@@ -18,9 +18,9 @@ import { executeDepartment } from "./departments/executor";
 import { estimateComplexity } from "./departments/types";
 import { recallMemories } from "./memory";
 
-// ── MCP Server: Expose Bunz tools ───────────────────────────────────────
+// ── MCP Server: Expose Cortal tools ───────────────────────────────────────
 
-const BUNZ_TOOLS = [
+const CORTAL_TOOLS = [
   {
     name: "cortal_research",
     description: "Deep research and analysis on any topic. Returns comprehensive findings with sources.",
@@ -158,14 +158,14 @@ export function createMcpRouter() {
   router.post("/server/tools/list", (_req: Request, res: Response) => {
     res.json({
       jsonrpc: "2.0",
-      result: { tools: BUNZ_TOOLS },
+      result: { tools: CORTAL_TOOLS },
       id: 1,
     });
   });
 
   // Also support GET for discovery
   router.get("/server/tools", (_req: Request, res: Response) => {
-    res.json({ tools: BUNZ_TOOLS });
+    res.json({ tools: CORTAL_TOOLS });
   });
 
   // Tool execution
@@ -297,12 +297,12 @@ export function createMcpRouter() {
     }
   });
 
-  // Get all available tools (Bunz + external MCP servers)
+  // Get all available tools (Cortal + external MCP servers)
   router.get("/tools", async (req: Request, res: Response) => {
     const userId = req.user?.id || 1;
 
     // Cortal native tools
-    const allTools: any[] = BUNZ_TOOLS.map(t => ({
+    const allTools: any[] = CORTAL_TOOLS.map(t => ({
       ...t, source: "cortal", serverId: null,
     }));
 

@@ -11,7 +11,7 @@ import type { Request, Response } from "express";
 import { eventBus } from "./lib/eventBus";
 
 export function handleSSEStream(req: Request, res: Response) {
-  const { jobId } = req.params;
+  const jobId = req.params.jobId as string;
   if (!jobId) {
     return res.status(400).json({ error: "jobId required" });
   }

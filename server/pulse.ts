@@ -171,7 +171,7 @@ export function createPulseRouter() {
       items.push({
         id: id(), type: "insight", icon: "sparkles",
         title: "Your AI is always learning",
-        content: `Every conversation, every workflow, every decision is making your AI smarter. ${memCount > 0 ? `You have ${memCount} memories stored — your AI remembers your preferences and patterns.` : "Start using Bunz to build your personal AI memory."}`,
+        content: `Every conversation, every workflow, every decision is making your AI smarter. ${memCount > 0 ? `You have ${memCount} memories stored — your AI remembers your preferences and patterns.` : "Start using Cortal to build your personal AI memory."}`,
       });
 
       res.json({

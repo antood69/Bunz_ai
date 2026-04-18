@@ -444,7 +444,7 @@ export function createPipelineRouter() {
       .map((c: any) => `${c.provider} (${c.name})`)
       .join(", ");
 
-    const systemPrompt = `You are a workflow architect for Bunz — an AI orchestration platform.
+    const systemPrompt = `You are a workflow architect for Cortal — an AI orchestration platform.
 
 Available departments (AI workers): research, coder, writer, artist
 Available connectors: ${connectedList || "none connected"}

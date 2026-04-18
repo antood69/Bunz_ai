@@ -74,7 +74,7 @@ router.get("/repos/:owner/:repo/contents/*path", requireGitHub, async (req: Requ
     const fullName = `${req.params.owner}/${req.params.repo}`;
     const path = req.params.path || "";
     const ref = req.query.ref as string | undefined;
-    const files = await gh.listFiles((req as any).githubToken, fullName, path, ref);
+    const files = await gh.listFiles((req as any).githubToken, fullName, path as string, ref);
     res.json(files);
   } catch (err: any) {
     console.error("[GitHub] listFiles error:", err.message);
@@ -88,7 +88,7 @@ router.get("/repos/:owner/:repo/file/*path", requireGitHub, async (req: Request,
     const fullName = `${req.params.owner}/${req.params.repo}`;
     const path = req.params.path || "";
     const ref = req.query.ref as string | undefined;
-    const file = await gh.readFile((req as any).githubToken, fullName, path, ref);
+    const file = await gh.readFile((req as any).githubToken, fullName, path as string, ref);
     res.json(file);
   } catch (err: any) {
     console.error("[GitHub] readFile error:", err.message);
@@ -105,7 +105,7 @@ router.put("/repos/:owner/:repo/file/*path", requireGitHub, async (req: Request,
     if (!content || !message) {
       return res.status(400).json({ error: "content and message are required" });
     }
-    const result = await gh.writeFile((req as any).githubToken, fullName, path, content, message, branch, sha);
+    const result = await gh.writeFile((req as any).githubToken, fullName, path as string, content, message, branch, sha);
     res.json(result);
   } catch (err: any) {
     console.error("[GitHub] writeFile error:", err.message);

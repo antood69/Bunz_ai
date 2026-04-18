@@ -55,13 +55,11 @@ export async function executeDepartment(
   github?: { token: string; repo: string },
   traceContext?: { userId?: number; source?: string; sourceId?: string; sourceName?: string; parentTraceId?: string },
 ): Promise<DepartmentResult> {
-  const dept = DEPARTMENTS[task.department];
   const activeAgents = getActiveSubAgents(task.department, complexity);
-  const startTime = Date.now();
 
   // Start trace for this department execution
   const userId = traceContext?.userId || 1;
-  const { traceId, finish } = startTrace({
+  const { finish } = startTrace({
     userId,
     source: (traceContext?.source || "boss") as any,
     sourceId: traceContext?.sourceId || parentJobId,

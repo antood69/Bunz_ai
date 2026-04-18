@@ -19,4 +19,5 @@ export { executeDepartment } from "../departments/executor";
 export type { DepartmentTask, DepartmentResult, SubAgentResult } from "../departments/executor";
 
 // Legacy compat — some files may still reference AgentType
-export type AgentType = DepartmentId;
+import type { DepartmentId as _DepartmentId } from "../departments/types";
+export type AgentType = _DepartmentId;

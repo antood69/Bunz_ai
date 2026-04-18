@@ -11,7 +11,7 @@ export const ART_DEFAULT_MODEL = "gpt-image-1";
 export const ART_FALLBACK_MODEL = "openai/gpt-image-1";
 export const ART_TIMEOUT_MS = 120_000;
 
-export const ART_SYSTEM_PROMPT = `You are the Art agent for Bunz. You create images based on user descriptions. Enhance prompts for better results — add details about style, lighting, composition. Always aim for high-quality, professional output.`;
+export const ART_SYSTEM_PROMPT = `You are the Art agent for Cortal. You create images based on user descriptions. Enhance prompts for better results — add details about style, lighting, composition. Always aim for high-quality, professional output.`;
 
 export interface ArtInput {
   task: string;

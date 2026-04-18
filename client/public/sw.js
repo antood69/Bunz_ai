@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bunz-v1';
+const CACHE_NAME = 'cortal-v1';
 const STATIC_ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', (event) => {

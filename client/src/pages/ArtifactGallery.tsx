@@ -2,10 +2,9 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  Layers, Star, Trash2, Eye, Code, Image, FileText,
-  Search, Filter, Download, ExternalLink, Heart
+  Layers, Star, Trash2, Code, Image, FileText,
+  Search, Download, Heart
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
 interface ArtifactItem {

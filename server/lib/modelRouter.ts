@@ -68,7 +68,7 @@ export interface StreamChunk {
 }
 
 const SYSTEM_DEFAULT =
-  "You are a focused AI agent inside Bunz, an AI orchestration platform. Be concise, action-oriented, and helpful.";
+  "You are a focused AI agent inside Cortal, an AI orchestration platform. Be concise, action-oriented, and helpful.";
 
 // ── Parameter Detection ──────────────────────────────────────────────────────
 
@@ -131,8 +131,8 @@ function openrouterClient(apiKey?: string): OpenAI {
     apiKey: apiKey || process.env.OPENROUTER_API_KEY,
     baseURL: "https://openrouter.ai/api/v1",
     defaultHeaders: {
-      "HTTP-Referer": "https://bunz.io",
-      "X-Title": "Bunz",
+      "HTTP-Referer": "https://cortal.io",
+      "X-Title": "Cortal",
     },
   });
 }

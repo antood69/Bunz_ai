@@ -25,7 +25,7 @@ export const CODER_FALLBACK_MODEL = "gpt-5.4";
 export const CODER_TIMEOUT_MS = 120_000; // 2 min for tool-use loops
 export const MAX_TOOL_ROUNDS = 15;       // prevent infinite loops
 
-export const CODER_SYSTEM_PROMPT = `You are the Coder agent for Bunz. You specialize in programming and technical tasks.
+export const CODER_SYSTEM_PROMPT = `You are the Coder agent for Cortal. You specialize in programming and technical tasks.
 
 Rules:
 - Always wrap code in appropriate markdown code blocks with language tags
@@ -33,7 +33,7 @@ Rules:
 - Include brief explanations of your approach
 - If debugging, explain the root cause and fix`;
 
-export const CODER_SYSTEM_PROMPT_WITH_TOOLS = `You are the Coder agent for Bunz — an AI coding agent with REAL access to GitHub repositories.
+export const CODER_SYSTEM_PROMPT_WITH_TOOLS = `You are the Coder agent for Cortal — an AI coding agent with REAL access to GitHub repositories.
 
 You can browse files, read code, write changes, create branches, commit, and open pull requests. You are not a chatbot pretending to code — you actually modify real repositories.
 
@@ -379,10 +379,10 @@ async function runCoderWithTools(input: CoderInput): Promise<AgentOutput> {
 
     // Execute all tool calls
     for (const toolCall of assistantMessage.tool_calls) {
-      const fnName = toolCall.function.name;
+      const fnName = (toolCall as any).function.name;
       let args: any;
       try {
-        args = JSON.parse(toolCall.function.arguments);
+        args = JSON.parse((toolCall as any).function.arguments);
       } catch {
         args = {};
       }

@@ -249,7 +249,7 @@ export function createAuthRouter(): Router {
     await storage.createNotification({
       userId: user.id,
       type: "welcome",
-      title: "Welcome to Bunz!",
+      title: "Welcome to Cortal!",
       message: "Your account has been created. Check your email to verify your address.",
     });
 
@@ -553,7 +553,7 @@ export function createAuthRouter(): Router {
         await storage.createNotification({
           userId: user.id,
           type: "welcome",
-          title: "Welcome to Bunz!",
+          title: "Welcome to Cortal!",
           message: "Your account has been created via GitHub. You're all set.",
         });
       } else {
@@ -661,7 +661,7 @@ export function createAuthRouter(): Router {
         await storage.createNotification({
           userId: user.id,
           type: "welcome",
-          title: "Welcome to Bunz!",
+          title: "Welcome to Cortal!",
           message: "Your account has been created via Google. You're all set.",
         });
       } else {
@@ -707,7 +707,7 @@ export function createOwnerRouter(): Router {
   // List all users
   router.get("/users", async (_req: Request, res: Response) => {
     const users = await storage.getAllUsers();
-    res.json(users.map(u => ({
+    res.json(users.map((u: any) => ({
       id: u.id,
       username: u.username,
       email: u.email,
