@@ -241,15 +241,28 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
   const wordCount = message.split(/\s+/).length;
   const noSlash = !msg.startsWith("/");
 
+  // Check if owner is asking to read files — skip all auto-routing if so
+  const hasFilePaths = !!(
+    message.match(/(?:server|client|shared|workflows|tools)\/[\w./\-]+\.(?:ts|tsx|js|json|md|py)/i) ||
+    message.match(/(?:PLATFORM|CLAUDE|README|package)\.(?:md|json)/i)
+  );
+  const isOwnerUser = !!(userEmail && (await storage.getUserByEmail(userEmail))?.role === "owner");
+  const ownerFileMode = hasFilePaths && isOwnerUser;
+
   // /human — humanize output to pass AI detectors (modifier, works with any flow)
   const humanizeMode = msg.startsWith("/human");
   if (humanizeMode) message = message.replace(/^\/human\s*/i, "").trim();
 
+  // If owner is reading files, skip ALL auto-routing — Boss answers directly with file contents
+  if (ownerFileMode) {
+    // Fall through to direct Boss call with file contents injected into system prompt
+  }
+
   // /research — deep multi-source research with citations
-  let deepResearchMode = msg.startsWith("/research");
+  let deepResearchMode = !ownerFileMode && msg.startsWith("/research");
   if (deepResearchMode) message = message.replace(/^\/research\s*/i, "").trim();
   // Auto: 2+ research signals, or 1 signal + long message
-  if (!deepResearchMode && noSlash) {
+  if (!deepResearchMode && noSlash && !ownerFileMode) {
     const signals = [
       /\b(research|investigate|analyze|study|examine|explore|deep dive|comprehensive|thorough)\b/i,
       /\b(compare|comparison|pros and cons|advantages|disadvantages|vs\.?|versus)\b/i,
@@ -470,26 +483,31 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
 
     // ── Owner file reading: inject file contents when owner asks to read code ──
     // Detects file paths in the message and loads them for the AI to analyze
-    if (input.userEmail && (await storage.getUserByEmail(input.userEmail))?.role === "owner") {
-      const filePatterns = message.match(/(?:^|\s)((?:server|client|shared|workflows|tools)\/[\w./\-]+\.(?:ts|tsx|js|json|md|py|css|html))/gi);
+    // When files are loaded, the Boss MUST answer directly (not dispatch) since
+    // the file contents are in the Boss context, not available to departments
+    let hasInjectedFiles = false;
+    if (ownerFileMode) {
+      const filePatterns = message.match(/(?:^|\s)((?:server|client|shared|workflows|tools)\/[\w./\-]+\.(?:ts|tsx|js|jsx|json|md|py|css|html))/gi);
       const standaloneFiles = message.match(/(?:^|\s)((?:PLATFORM|CLAUDE|README|package)\.(?:md|json))/gi);
       const allFiles = [...(filePatterns || []), ...(standaloneFiles || [])].map(f => f.trim());
 
       if (allFiles.length > 0) {
         const fileContents: string[] = [];
-        for (const filePath of allFiles.slice(0, 10)) { // Max 10 files
+        for (const fp of allFiles.slice(0, 10)) {
           try {
-            const resolved = path.resolve(process.cwd(), filePath);
+            const resolved = path.resolve(process.cwd(), fp);
             if (resolved.startsWith(process.cwd()) && !resolved.includes(".env") && fs.existsSync(resolved)) {
               const content = fs.readFileSync(resolved, "utf-8");
-              // Cap each file to 3000 chars to manage token budget
-              const trimmed = content.length > 3000 ? content.slice(0, 3000) + "\n\n[...truncated]" : content;
-              fileContents.push(`--- FILE: ${filePath} ---\n${trimmed}`);
+              const trimmed = content.length > 6000 ? content.slice(0, 6000) + "\n\n[...truncated at 6000 chars]" : content;
+              fileContents.push(`--- FILE: ${fp} (${content.length} chars) ---\n${trimmed}`);
+            } else {
+              fileContents.push(`--- FILE: ${fp} --- [NOT FOUND]`);
             }
           } catch {}
         }
         if (fileContents.length > 0) {
-          systemPrompt += `\n\n--- PROJECT FILES (owner requested) ---\n${fileContents.join("\n\n")}\n--- END FILES ---`;
+          hasInjectedFiles = true;
+          systemPrompt += `\n\n--- PROJECT FILES (owner requested) ---\n${fileContents.join("\n\n")}\n--- END FILES ---\n\nIMPORTANT: The user asked you to read and analyze these files. Answer DIRECTLY using the file contents above. Do NOT dispatch to departments — the files are only visible to you, not to department agents.`;
         }
       }
     }
