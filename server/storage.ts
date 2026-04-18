@@ -1156,6 +1156,42 @@ export async function initDatabase() {
     await dbExec("CREATE INDEX IF NOT EXISTS idx_traces_parent ON agent_traces(parent_trace_id)");
   } catch (_) {}
 
+  // ── Project Briefs ──
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS project_briefs (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        objective TEXT DEFAULT '',
+        context TEXT DEFAULT '',
+        constraints TEXT DEFAULT '',
+        stakeholders TEXT DEFAULT '',
+        deliverables TEXT DEFAULT '',
+        decisions TEXT DEFAULT '',
+        pinned_refs TEXT DEFAULT '[]',
+        version INTEGER DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+    await dbExec("CREATE INDEX IF NOT EXISTS idx_briefs_conv ON project_briefs(conversation_id)");
+  } catch (_) {}
+
+  // ── Brief Version History ──
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS brief_versions (
+        id TEXT PRIMARY KEY,
+        brief_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        snapshot TEXT NOT NULL,
+        change_summary TEXT,
+        created_at INTEGER NOT NULL
+      )
+    `);
+  } catch (_) {}
+
   // ── Task Templates ──
   try {
     await dbExec(`

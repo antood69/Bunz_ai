@@ -566,6 +566,68 @@ export async function registerRoutes(
     res.json({ status: job.status, output: job.output, tokenCount: job.token_count });
   });
 
+  // === PROJECT BRIEFS — persistent working context per conversation ===
+  app.get("/api/briefs/:conversationId", asyncHandler(async (req, res) => {
+    const userId = req.user?.id || 1;
+    const brief = await dbGet(
+      "SELECT * FROM project_briefs WHERE conversation_id = ? AND user_id = ?",
+      req.params.conversationId, userId
+    );
+    res.json(brief || null);
+  }));
+
+  app.put("/api/briefs/:conversationId", asyncHandler(async (req, res) => {
+    const userId = req.user?.id || 1;
+    const convId = req.params.conversationId;
+    const { objective, context, constraints, stakeholders, deliverables, decisions, pinned_refs } = req.body;
+
+    const existing = await dbGet("SELECT * FROM project_briefs WHERE conversation_id = ? AND user_id = ?", convId, userId) as any;
+
+    if (existing) {
+      // Save version snapshot before update
+      const versionId = uuidv4();
+      await dbRun(
+        "INSERT INTO brief_versions (id, brief_id, version, snapshot, change_summary, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        versionId, existing.id, existing.version,
+        JSON.stringify({ objective: existing.objective, context: existing.context, constraints: existing.constraints, stakeholders: existing.stakeholders, deliverables: existing.deliverables, decisions: existing.decisions }),
+        req.body.change_summary || "Updated",
+        Date.now()
+      );
+
+      await dbRun(
+        `UPDATE project_briefs SET objective=?, context=?, constraints=?, stakeholders=?, deliverables=?, decisions=?, pinned_refs=?, version=version+1, updated_at=? WHERE id=?`,
+        objective ?? existing.objective, context ?? existing.context, constraints ?? existing.constraints,
+        stakeholders ?? existing.stakeholders, deliverables ?? existing.deliverables, decisions ?? existing.decisions,
+        pinned_refs ? JSON.stringify(pinned_refs) : existing.pinned_refs,
+        Date.now(), existing.id
+      );
+      const updated = await dbGet("SELECT * FROM project_briefs WHERE id = ?", existing.id);
+      res.json(updated);
+    } else {
+      const id = uuidv4();
+      await dbRun(
+        `INSERT INTO project_briefs (id, conversation_id, user_id, objective, context, constraints, stakeholders, deliverables, decisions, pinned_refs, version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+        id, convId, userId,
+        objective || "", context || "", constraints || "", stakeholders || "", deliverables || "", decisions || "",
+        JSON.stringify(pinned_refs || []),
+        Date.now(), Date.now()
+      );
+      const created = await dbGet("SELECT * FROM project_briefs WHERE id = ?", id);
+      res.json(created);
+    }
+  }));
+
+  app.get("/api/briefs/:conversationId/versions", asyncHandler(async (req, res) => {
+    const brief = await dbGet("SELECT id FROM project_briefs WHERE conversation_id = ?", req.params.conversationId) as any;
+    if (!brief) return res.json([]);
+    const versions = await dbAll(
+      "SELECT * FROM brief_versions WHERE brief_id = ? ORDER BY version DESC LIMIT 20",
+      brief.id
+    );
+    res.json(versions);
+  }));
+
   // === TASK TEMPLATES — reusable saved prompts ===
   app.get("/api/task-templates", asyncHandler(async (req, res) => {
     const userId = req.user?.id || 1;

@@ -8,6 +8,7 @@ import {
 import IntelligencePicker, { type IntelligenceLevel } from "@/components/IntelligencePicker";
 import { useAgentStream, type WorkerStatus } from "@/hooks/useAgentStream";
 import Artifact from "@/components/Artifact";
+import ProjectBrief from "@/components/ProjectBrief";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -734,6 +735,7 @@ export default function BossPage() {
   });
   const [serverConvId, setServerConvId] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<{ id: string; name: string; url: string; thumbnailUrl: string | null; mimeType: string }[]>([]);
+  const [briefOpen, setBriefOpen] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1487,6 +1489,14 @@ export default function BossPage() {
                   {ttsEnabled ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
                   {ttsEnabled ? "Voice on" : "Voice off"}
                 </button>
+                <button
+                  onClick={() => setBriefOpen(!briefOpen)}
+                  className={`flex items-center gap-1 text-[11px] transition-colors ${briefOpen ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                  title="Project Brief"
+                >
+                  <FileText className="w-3 h-3" />
+                  Brief
+                </button>
                 <IntelligencePicker value={selectedLevel} onChange={setSelectedLevel} compact />
                 {charCount > 0 && (
                   <p className={`text-[11px] ${charCount > 2000 ? "text-destructive" : "text-muted-foreground"}`}>
@@ -1498,6 +1508,14 @@ export default function BossPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Project Brief Panel (right sidebar) ── */}
+      {briefOpen && (
+        <ProjectBrief
+          conversationId={serverConvId}
+          onClose={() => setBriefOpen(false)}
+        />
+      )}
     </div>
   );
 }

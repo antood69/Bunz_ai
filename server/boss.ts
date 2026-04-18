@@ -497,16 +497,25 @@ export async function handleBossChat(input: BossChatInput): Promise<BossChatResu
         } catch { return ""; }
       })();
 
-      // Project context — pinned notes for this specific conversation
+      // Project brief — structured working context for this conversation
       const projectPromise = (async () => {
         if (!conversationId) return "";
         try {
-          const rows = await dbAll(
-            "SELECT content FROM agent_memory WHERE user_id = ? AND category = 'project_context' AND source_id = ? ORDER BY created_at DESC LIMIT 5",
-            userId, conversationId
-          ) as any[];
-          if (rows.length === 0) return "";
-          return `\n\n--- PROJECT CONTEXT (pinned for this conversation) ---\n${rows.map((r: any) => r.content).join("\n")}\n--- END PROJECT CONTEXT ---\n`;
+          const { dbGet: dbGetLocal } = await import("./lib/db");
+          const brief = await dbGetLocal(
+            "SELECT objective, context, constraints, stakeholders, deliverables, decisions FROM project_briefs WHERE conversation_id = ? AND user_id = ?",
+            conversationId, userId
+          ) as any;
+          if (!brief) return "";
+          const parts: string[] = [];
+          if (brief.objective) parts.push(`Objective: ${brief.objective}`);
+          if (brief.context) parts.push(`Context: ${brief.context}`);
+          if (brief.constraints) parts.push(`Constraints: ${brief.constraints}`);
+          if (brief.stakeholders) parts.push(`Stakeholders: ${brief.stakeholders}`);
+          if (brief.deliverables) parts.push(`Deliverables: ${brief.deliverables}`);
+          if (brief.decisions) parts.push(`Decisions: ${brief.decisions}`);
+          if (parts.length === 0) return "";
+          return `\n\n--- PROJECT BRIEF ---\n${parts.join("\n")}\n--- END BRIEF ---\n`;
         } catch { return ""; }
       })();
 
